@@ -205,29 +205,39 @@ class HomeScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     return SafeArea(
       child: SingleChildScrollView(
-        padding: const EdgeInsets.fromLTRB(24, 16, 24, 120),
+        padding: const EdgeInsets.fromLTRB(32, 0, 32, 150),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Row(
-              children: [
-                IconButton(
-                  onPressed: () => Navigator.of(context).push(
-                    MaterialPageRoute(builder: (_) => const AccountScreen()),
+            SizedBox(
+              height: 48,
+              child: Row(
+                children: [
+                  IconButton(
+                    onPressed: () => Navigator.of(context).push(
+                      MaterialPageRoute(builder: (_) => const AccountScreen()),
+                    ),
+                    icon: const Icon(Icons.menu, size: 32),
                   ),
-                  icon: const Icon(Icons.menu, size: 32),
-                ),
-                Expanded(
-                  child: Center(
-                    child: Text('PACER', style: PacerText.fugazBrand),
+                  Expanded(
+                    child: Center(
+                      child: Text(
+                        'PACER',
+                        style: PacerText.fugazBrand.copyWith(
+                          color: Colors.black,
+                        ),
+                      ),
+                    ),
                   ),
-                ),
-                const InitialAvatar('RP', size: 42),
-              ],
+                  const InitialAvatar('RP', size: 42),
+                ],
+              ),
             ),
             const SizedBox(height: 16),
+            const SectionHeader(title: 'Streak'),
+            const SizedBox(height: 8),
             const Center(child: StreakCard()),
-            const SizedBox(height: 20),
+            const SizedBox(height: 8),
             GestureDetector(
               onTap: onSeeHistory,
               child: const Row(
@@ -241,9 +251,9 @@ class HomeScreen extends StatelessWidget {
                 ],
               ),
             ),
-            const SizedBox(height: 12),
+            const SizedBox(height: 8),
             const RunSessionCard(),
-            const SizedBox(height: 12),
+            const SizedBox(height: 16),
             const RunSessionCard(
               title: 'Sunday Morning Run',
               date: '14/7/2024',
@@ -252,19 +262,20 @@ class HomeScreen extends StatelessWidget {
               distance: '15,00 Km',
               limePill: true,
             ),
-            const SizedBox(height: 20),
+            const SizedBox(height: 32),
             SectionHeader(title: 'Pacer Teams', onSeeAll: onSeeTeams),
-            const SizedBox(height: 12),
+            const SizedBox(height: 20),
             SizedBox(
-              height: 140,
+              height: 133,
               child: ListView(
                 scrollDirection: Axis.horizontal,
+                padding: EdgeInsets.zero,
                 children: const [
                   TeamCard(
                     name: 'JakBar Pacer',
                     location: 'Jakarta Barat, Indonesia',
                   ),
-                  SizedBox(width: 12),
+                  SizedBox(width: 19),
                   TeamCard(
                     name: 'Tangerang Runners',
                     location: 'Tangerang, Indonesia',
@@ -294,9 +305,6 @@ class _MainShellState extends State<MainShell> {
   void _goHistory() =>
       Navigator.of(context)
           .push(MaterialPageRoute(builder: (_) => const HistoryScreen()));
-  void _goAccount() =>
-      Navigator.of(context)
-          .push(MaterialPageRoute(builder: (_) => const AccountScreen()));
   void _goSetup() => Navigator.of(context).push(
     MaterialPageRoute(
       builder: (_) => RunSetupScreen(
@@ -323,7 +331,7 @@ class _MainShellState extends State<MainShell> {
           Positioned(
             left: 0,
             right: 0,
-            bottom: 12,
+            bottom: 54,
             child: Center(
               child: BottomNavPill(
                 index: _index,

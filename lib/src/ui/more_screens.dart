@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:google_fonts/google_fonts.dart';
 
 import 'app_theme.dart';
 import 'widgets.dart';
@@ -54,98 +55,231 @@ class LoginScreen extends StatelessWidget {
 }
 
 /// Figma "Pilih Olahraga" pre-run setup.
-class RunSetupScreen extends StatelessWidget {
+class RunSetupScreen extends StatefulWidget {
   final VoidCallback onStart;
   const RunSetupScreen({super.key, required this.onStart});
 
   @override
+  State<RunSetupScreen> createState() => _RunSetupScreenState();
+}
+
+class _RunSetupScreenState extends State<RunSetupScreen> {
+  int _goal = 0;
+
+  @override
   Widget build(BuildContext context) {
-    return SafeArea(
-      child: SingleChildScrollView(
-        padding: const EdgeInsets.symmetric(horizontal: 24),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const SizedBox(height: 16),
-            const Text(
-              'Pilih Olahraga',
-              style: TextStyle(
-                fontWeight: FontWeight.w700,
-                fontSize: 24,
-                color: Color(0xFF181C22),
+    return Scaffold(
+      body: SafeArea(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.fromLTRB(22, 65, 22, 24),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Container(
+                width: 48,
+                height: 48,
+                decoration: const BoxDecoration(
+                  color: Colors.white,
+                  shape: BoxShape.circle,
+                  boxShadow: [
+                    BoxShadow(
+                      color: Color(0x0D000000),
+                      blurRadius: 2,
+                      offset: Offset(0, 1),
+                    ),
+                  ],
+                ),
+                child: const BackButton(color: PacerColors.ink),
               ),
-            ),
-            const SizedBox(height: 12),
-            Container(
-              padding: const EdgeInsets.all(16),
-              decoration: BoxDecoration(
-                border: Border.all(width: 2, color: Colors.black),
-                borderRadius: BorderRadius.circular(12),
+              const SizedBox(height: 16),
+              SizedBox(
+                width: 350,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Pilih Olahraga',
+                      style: GoogleFonts.spaceGrotesk(
+                        fontWeight: FontWeight.w700,
+                        fontSize: 24,
+                        height: 32 / 24,
+                        color: const Color(0xFF181C22),
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Text(
+                      'Pilih aktivitas untuk mencatat metrik sesi Anda.',
+                      style: GoogleFonts.hankenGrotesk(
+                        fontSize: 14,
+                        height: 20 / 14,
+                        color: const Color(0xFF444749),
+                      ),
+                    ),
+                  ],
+                ),
               ),
-              child: const Row(
-                children: [
-                  SizedBox(
-                    width: 44,
-                    height: 44,
-                    child: Icon(Icons.directions_run, size: 28),
-                  ),
-                  SizedBox(width: 12),
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Lari Luar',
-                        style: TextStyle(
-                          fontWeight: FontWeight.w600,
-                          fontSize: 16,
+              const SizedBox(height: 24),
+              Container(
+                width: 350,
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  border: Border.all(width: 2, color: Colors.black),
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Row(
+                      children: [
+                        Container(
+                          width: 44,
+                          height: 44,
+                          decoration: BoxDecoration(
+                            color: Colors.black,
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: const Icon(
+                            Icons.directions_run,
+                            size: 21,
+                            color: Colors.white,
+                          ),
                         ),
+                        const SizedBox(width: 12),
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              'Lari Luar',
+                              style: GoogleFonts.spaceGrotesk(
+                                fontWeight: FontWeight.w600,
+                                fontSize: 16,
+                                height: 24 / 16,
+                                color: const Color(0xFF181C22),
+                              ),
+                            ),
+                            Text(
+                              'GPS, jarak & tempo',
+                              style: GoogleFonts.hankenGrotesk(
+                                fontSize: 12,
+                                height: 16 / 12,
+                                color: const Color(0xFF444749),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                    Container(
+                      width: 24,
+                      height: 24,
+                      decoration: const BoxDecoration(
+                        color: Colors.black,
+                        shape: BoxShape.circle,
                       ),
-                      Text(
-                        'GPS, jarak & tempo',
-                        style: TextStyle(fontSize: 12, color: Colors.black54),
+                      child: const Icon(
+                        Icons.check,
+                        size: 11,
+                        color: Colors.white,
                       ),
-                    ],
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 24),
+              Container(
+                width: 350,
+                padding: const EdgeInsets.only(top: 16),
+                decoration: const BoxDecoration(
+                  border: Border(top: BorderSide(color: Color(0xFFE5E8F1))),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Text(
+                          'SASARAN SESI',
+                          style: GoogleFonts.spaceGrotesk(
+                            fontWeight: FontWeight.w700,
+                            fontSize: 12,
+                            height: 16 / 12,
+                            color: const Color(0xFF444749),
+                          ),
+                        ),
+                        const Spacer(),
+                        Text(
+                          '5.0 km',
+                          style: GoogleFonts.hankenGrotesk(
+                            fontSize: 12,
+                            color: const Color(0xFF444749),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    Wrap(
+                      spacing: 4,
+                      children: [
+                        for (final g in const [
+                          'Bebas',
+                          '3 km',
+                          '5 km',
+                          '30 mnt',
+                        ])
+                          GestureDetector(
+                            onTap: () => setState(
+                              () => _goal = [
+                                'Bebas',
+                                '3 km',
+                                '5 km',
+                                '30 mnt',
+                              ].indexOf(g),
+                            ),
+                            child: GoalChip(
+                              label: g,
+                              selected:
+                                  _goal ==
+                                  [
+                                    'Bebas',
+                                    '3 km',
+                                    '5 km',
+                                    '30 mnt',
+                                  ].indexOf(g),
+                            ),
+                          ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 24),
+              SizedBox(
+                width: 350,
+                height: 52,
+                child: ElevatedButton(
+                  onPressed: widget.onStart,
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.black,
+                    foregroundColor: Colors.white,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    elevation: 1,
                   ),
-                ],
-              ),
-            ),
-            const SizedBox(height: 16),
-            const Text(
-              'SASARAN SESI',
-              style: TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.w600,
-                color: Colors.black54,
-              ),
-            ),
-            const SizedBox(height: 8),
-            const Wrap(
-              spacing: 8,
-              children: [
-                Chip(label: Text('Bebas')),
-                Chip(label: Text('3 km')),
-                Chip(label: Text('5 km')),
-                Chip(label: Text('30 mnt')),
-              ],
-            ),
-            const SizedBox(height: 20),
-            SizedBox(
-              width: 350,
-              height: 48,
-              child: ElevatedButton(
-                onPressed: onStart,
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.black,
-                  foregroundColor: Colors.white,
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
+                  child: Text(
+                    'Mulai Lari',
+                    style: GoogleFonts.spaceGrotesk(
+                      fontWeight: FontWeight.w600,
+                      fontSize: 16,
+                      height: 24 / 16,
+                    ),
                   ),
                 ),
-                child: const Text('Mulai Lari'),
               ),
-            ),
-            const SizedBox(height: 24),
-          ],
+              const SizedBox(height: 24),
+            ],
+          ),
         ),
       ),
     );
@@ -167,212 +301,298 @@ class _RunTrackerScreenState extends State<RunTrackerScreen> {
   @override
   Widget build(BuildContext context) {
     if (_finished) return const RunFinishScreen();
-    return SafeArea(
-      child: SingleChildScrollView(
-        child: Column(
-          children: [
-            const SizedBox(height: 8),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 24),
-              child: Row(
-                children: [
-                  const Icon(Icons.satellite_alt_outlined, size: 16),
-                  const SizedBox(width: 6),
-                  const Text('GPS', style: TextStyle(fontSize: 12)),
-                  const Spacer(),
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 16,
-                      vertical: 10,
-                    ),
-                    decoration: BoxDecoration(
-                      color: PacerColors.gpsPill,
-                      borderRadius: BorderRadius.circular(30),
-                    ),
-                    child: const Text('GPS'),
-                  ),
-                ],
+    return Scaffold(
+      body: Stack(
+        children: [
+          Positioned.fill(
+            child: Container(
+              decoration: const BoxDecoration(
+                gradient: LinearGradient(
+                  colors: [Color(0xFFF1F5F9), Color(0xFFE2E8F0)],
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
+                ),
               ),
+              child: CustomPaint(painter: _RouteGridPainter()),
             ),
-            const SizedBox(height: 8),
-            const MapPlaceholder(height: 220),
-            const SizedBox(height: 8),
-            Text('00,00', style: PacerText.giantNum(78)),
-            const Text(
-              'Distance (Km)',
-              style: TextStyle(fontWeight: FontWeight.w300, fontSize: 15),
-            ),
-            Container(
-              width: 83,
-              height: 10,
-              decoration: BoxDecoration(
-                color: PacerColors.slate200,
-                borderRadius: BorderRadius.circular(5),
-              ),
-            ),
-            const SizedBox(height: 12),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 24),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  _miniStat('Avg Pace', "0'00''"),
-                  _miniStat('Duration', '00.00'),
-                  _miniStat('Calories', '0 kcal'),
-                ],
-              ),
-            ),
-            const SizedBox(height: 16),
-            if (!_running && !_finished)
-              CircleAction(
-                label: 'START',
-                bg: PacerColors.lime,
-                fg: PacerColors.ink,
-                onTap: () => setState(() => _running = true),
-              )
-            else if (_running)
-              CircleAction(
-                label: 'PAUSE',
-                bg: PacerColors.lime,
-                fg: PacerColors.ink,
-                onTap: () => setState(() => _running = false),
-              )
-            else
-              Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  CircleAction(
-                    label: 'LANJUT',
-                    bg: Colors.white,
-                    fg: PacerColors.ink,
-                    onTap: () => setState(() => _running = true),
-                  ),
-                  const SizedBox(width: 16),
-                  CircleAction(
-                    label: 'FINISH',
-                    bg: PacerColors.ink,
-                    fg: PacerColors.lime,
-                    onTap: () => setState(() => _finished = true),
-                  ),
-                ],
-              ),
-            const SizedBox(height: 120),
-          ],
-        ),
-      ),
-    );
-  }
-
-  Widget _miniStat(String label, String value) {
-    return Column(
-      children: [
-        Text(value, style: PacerText.statValue),
-        Text(
-          label,
-          style: const TextStyle(
-            fontWeight: FontWeight.w300,
-            fontSize: 15,
-            color: Color(0x99000000),
           ),
-        ),
-      ],
+          SafeArea(
+            child: Stack(
+              children: [
+                const Positioned(right: 32, top: 85 - 44, child: GpsPill()),
+                Positioned(
+                  left: 160,
+                  top: 102 - 44,
+                  child: Container(
+                    width: 83,
+                    height: 10,
+                    decoration: BoxDecoration(
+                      color: PacerColors.ink.withValues(alpha: 0.15),
+                      borderRadius: BorderRadius.circular(5),
+                    ),
+                  ),
+                ),
+                Positioned(
+                  left: 79,
+                  top: 210 - 44,
+                  child: Text('00,00', style: PacerText.giantNum(78)),
+                ),
+                const Positioned(
+                  left: 149,
+                  top: 320 - 44,
+                  child: Text(
+                    'Distance (Km)',
+                    style: TextStyle(
+                      fontWeight: FontWeight.w300,
+                      fontSize: 15,
+                      color: Color(0x99000000),
+                    ),
+                  ),
+                ),
+                Positioned(
+                  left: 38,
+                  top: 589 - 44,
+                  child: const SizedBox(
+                    width: 317,
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      children: [
+                        TrackerStatColumn(
+                          avatarSize: 20,
+                          initials: 'A',
+                          value: "0'00''",
+                          label: 'Avg Pace',
+                        ),
+                        Spacer(),
+                        TrackerStatColumn(
+                          avatarSize: 25,
+                          initials: 'B',
+                          value: '00.00',
+                          label: 'Duration',
+                        ),
+                        Spacer(),
+                        TrackerStatColumn(
+                          avatarSize: 30,
+                          initials: 'C',
+                          value: '0 kcal',
+                          label: 'Calories',
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+                Positioned(
+                  left: 32,
+                  right: 32,
+                  top: 690 - 44,
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      const MapCircleButton(),
+                      if (!_running)
+                        CircleAction(
+                          label: 'PAUSE',
+                          bg: PacerColors.lime,
+                          fg: PacerColors.ink,
+                          onTap: () => setState(() => _running = true),
+                        )
+                      else
+                        CircleAction(
+                          label: 'CONTINUE',
+                          bg: Colors.white,
+                          fg: PacerColors.ink,
+                          labelSize: 14,
+                          onTap: () => setState(() => _running = false),
+                        ),
+                      if (_running)
+                        CircleAction(
+                          label: 'FINISH',
+                          bg: PacerColors.ink,
+                          fg: PacerColors.lime,
+                          onTap: () => setState(() => _finished = true),
+                        )
+                      else
+                        const SizedBox(width: 98),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ],
+      ),
     );
   }
 }
 
+class _RouteGridPainter extends CustomPainter {
+  @override
+  void paint(Canvas canvas, Size size) {
+    final line = Paint()
+      ..color = const Color(0xFFCBD5E1)
+      ..strokeWidth = 1;
+    for (double x = 0; x < size.width; x += 32) {
+      canvas.drawLine(Offset(x, 0), Offset(x, size.height), line);
+    }
+    for (double y = 0; y < size.height; y += 32) {
+      canvas.drawLine(Offset(0, y), Offset(size.width, y), line);
+    }
+    final route = Paint()
+      ..color = PacerColors.lime
+      ..strokeWidth = 5
+      ..style = PaintingStyle.stroke
+      ..strokeJoin = StrokeJoin.round
+      ..strokeCap = StrokeCap.round;
+    final path = Path()
+      ..moveTo(size.width * 0.3, size.height * 0.25)
+      ..quadraticBezierTo(
+        size.width * 0.6,
+        size.height * 0.3,
+        size.width * 0.55,
+        size.height * 0.45,
+      )
+      ..quadraticBezierTo(
+        size.width * 0.5,
+        size.height * 0.6,
+        size.width * 0.7,
+        size.height * 0.62,
+      );
+    canvas.drawPath(path, route);
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
+}
+
 /// Figma RUNNING FINISH: lime 329x92 summary + four 329x75 metric cards.
 class RunFinishScreen extends StatelessWidget {
-  const RunFinishScreen({super.key});
+  final String title;
+  final bool isHistoryDetail;
+  const RunFinishScreen({
+    super.key,
+    this.title = 'Running',
+    this.isHistoryDetail = false,
+  });
 
   @override
   Widget build(BuildContext context) {
-    return SafeArea(
-      child: SingleChildScrollView(
-        padding: const EdgeInsets.symmetric(horizontal: 24),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const SizedBox(height: 16),
-            Row(
-              children: [
-                const Text('Running', style: TextStyle(fontSize: 24)),
-                const Spacer(),
-                IconButton(
-                  onPressed: () {},
-                  icon: const Icon(Icons.edit, size: 20),
+    const metrics = [
+      ('Step Length', 'Distance between steps', '1,00', 'ft'),
+      ('Calories', 'Total energy burned', '854', 'kcal'),
+      ('Cadence', 'Steps per minute', '212', 'spm'),
+      ('Elevation Gain', 'Total height that you climb', '100', 'ft'),
+    ];
+    return Scaffold(
+      body: Stack(
+        children: [
+          Positioned.fill(
+            child: Container(
+              decoration: const BoxDecoration(
+                gradient: LinearGradient(
+                  colors: [Color(0xFFF1F5F9), Color(0xFFE2E8F0)],
+                  begin: Alignment.topCenter,
+                  end: Alignment.bottomCenter,
                 ),
-              ],
-            ),
-            const SizedBox(height: 8),
-            Container(
-              width: 329,
-              padding: const EdgeInsets.symmetric(vertical: 16),
-              decoration: BoxDecoration(
-                color: PacerColors.lime,
-                borderRadius: BorderRadius.circular(30),
               ),
-              child: const Row(
-                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+              child: CustomPaint(painter: _RouteGridPainter()),
+            ),
+          ),
+          SafeArea(
+            child: SingleChildScrollView(
+              padding: const EdgeInsets.fromLTRB(32, 0, 32, 120),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text('Distance\n3,00 Km'),
-                  Text('Duration\n15.00'),
-                  Text('Avg Pace\n5\'00\'\''),
+                  const SizedBox(height: 85 - 44),
+                  Row(
+                    children: [
+                      const Icon(Icons.menu, size: 32, color: PacerColors.ink),
+                      const Spacer(),
+                      Container(
+                        width: 20,
+                        height: 20,
+                        alignment: Alignment.center,
+                        child: const Icon(
+                          Icons.edit,
+                          size: 20,
+                          color: PacerColors.ink,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 15),
+                  Text(
+                    title,
+                    style: const TextStyle(
+                      fontSize: 24,
+                      color: PacerColors.ink,
+                    ),
+                  ),
+                  const SizedBox(height: 24),
+                  Container(
+                    width: 329,
+                    height: 1,
+                    color: const Color(0x40000000),
+                  ),
+                  if (isHistoryDetail) ...[
+                    const SizedBox(height: 28),
+                    Container(
+                      width: 161,
+                      height: 158,
+                      alignment: Alignment.center,
+                      decoration: BoxDecoration(
+                        border: Border.all(color: PacerColors.lime, width: 5),
+                        borderRadius: BorderRadius.circular(20),
+                      ),
+                      child: Container(
+                        width: 20,
+                        height: 20,
+                        decoration: const BoxDecoration(
+                          color: PacerColors.ink,
+                          shape: BoxShape.circle,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 28),
+                  ] else
+                    const SizedBox(height: 216),
+                  SummaryLimeCard(
+                    distance: isHistoryDetail ? '3,00 Km' : '0,00 Km',
+                    duration: isHistoryDetail ? '15.00' : '00.00',
+                    pace: isHistoryDetail ? "5'00''" : "0'00''",
+                  ),
+                  const SizedBox(height: 18),
+                  for (final m in metrics)
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 9),
+                      child: MetricCard(
+                        title: m.$1,
+                        sub: m.$2,
+                        value: isHistoryDetail ? m.$3 : null,
+                        unit: isHistoryDetail ? m.$4 : null,
+                      ),
+                    ),
+                  if (isHistoryDetail) ...[
+                    const SizedBox(height: 9),
+                    LimeActionBar(
+                      'selesai',
+                      onPressed: () => Navigator.of(context).pop(),
+                    ),
+                  ] else ...[
+                    const SizedBox(height: 12),
+                    Center(
+                      child: LimeActionBar(
+                        'selesai',
+                        onPressed: () => Navigator.of(context).pop(),
+                      ),
+                    ),
+                  ],
+                  const SizedBox(height: 24),
                 ],
               ),
             ),
-            const SizedBox(height: 12),
-            for (final m in const [
-              ('Step Length', 'Distance between steps', '0,85 m'),
-              ('Elevation Gain', 'Total height that you climb', '+18 m'),
-              ('Cadence', 'Steps per minute', '100 spm'),
-              ('Calories', 'Total energy burned', '854 kcal'),
-            ])
-              Container(
-                width: 329,
-                margin: const EdgeInsets.only(bottom: 8),
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: const Color(0xFFFDFDFD),
-                  borderRadius: BorderRadius.circular(30),
-                  boxShadow: const [
-                    BoxShadow(
-                      color: Color(0x40000000),
-                      blurRadius: 4,
-                      offset: Offset(0, 2),
-                    ),
-                  ],
-                ),
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(m.$1, style: const TextStyle(fontSize: 15)),
-                          Text(
-                            m.$2,
-                            style: const TextStyle(
-                              fontWeight: FontWeight.w300,
-                              fontSize: 12,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                    Text(m.$3, style: PacerText.statValue),
-                  ],
-                ),
-              ),
-            const SizedBox(height: 12),
-            Center(
-              child: LimeActionBar(
-                'selesai',
-                onPressed: () => Navigator.of(context).pop(),
-              ),
-            ),
-            const SizedBox(height: 120),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
@@ -731,23 +951,53 @@ class HistoryScreen extends StatelessWidget {
               ],
             ),
             const SizedBox(height: 12),
-            const RunSessionCard(title: 'Monday : 07.30'),
-            const SizedBox(height: 12),
-            const RunSessionCard(
-              title: 'Monday : 07.30',
-              date: '8/7/2024',
-              time: '28.40',
-              pace: "6'10''",
-              distance: '5,00 Km',
-              limePill: true,
+            GestureDetector(
+              onTap: () => Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (_) => const RunFinishScreen(
+                    title: 'Monday Morning Run',
+                    isHistoryDetail: true,
+                  ),
+                ),
+              ),
+              child: const RunSessionCard(title: 'Monday : 07.30'),
             ),
             const SizedBox(height: 12),
-            const RunSessionCard(
-              title: 'Monday : 07.30',
-              date: '1/7/2024',
-              time: '1.00.00',
-              pace: "4'00''",
-              distance: '15,00 Km',
+            GestureDetector(
+              onTap: () => Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (_) => const RunFinishScreen(
+                    title: 'Monday Morning Run',
+                    isHistoryDetail: true,
+                  ),
+                ),
+              ),
+              child: const RunSessionCard(
+                title: 'Monday : 07.30',
+                date: '8/7/2024',
+                time: '28.40',
+                pace: "6'10''",
+                distance: '5,00 Km',
+                limePill: true,
+              ),
+            ),
+            const SizedBox(height: 12),
+            GestureDetector(
+              onTap: () => Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (_) => const RunFinishScreen(
+                    title: 'Monday Morning Run',
+                    isHistoryDetail: true,
+                  ),
+                ),
+              ),
+              child: const RunSessionCard(
+                title: 'Monday : 07.30',
+                date: '1/7/2024',
+                time: '1.00.00',
+                pace: "4'00''",
+                distance: '15,00 Km',
+              ),
             ),
           ],
         ),

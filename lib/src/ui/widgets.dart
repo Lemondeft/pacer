@@ -127,7 +127,7 @@ class RunSessionCard extends StatelessWidget {
   Widget build(BuildContext context) {
     return Container(
       width: 329,
-      padding: const EdgeInsets.fromLTRB(20, 16, 20, 14),
+      height: 166,
       decoration: BoxDecoration(
         color: PacerColors.runCardBg,
         borderRadius: BorderRadius.circular(10),
@@ -139,73 +139,60 @@ class RunSessionCard extends StatelessWidget {
           ),
         ],
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisSize: MainAxisSize.min,
+      child: Stack(
         children: [
-          Row(
-            children: [
-              Container(
-                width: 34,
-                height: 34,
-                decoration: const BoxDecoration(
-                  color: PacerColors.lime,
-                  shape: BoxShape.circle,
-                ),
-                child: const Icon(
-                  Icons.directions_run,
-                  size: 20,
-                  color: PacerColors.ink,
-                ),
-              ),
-              const SizedBox(width: 8),
-              Text(date, style: PacerText.cardDate),
-            ],
+          const Positioned(
+            left: 20,
+            top: 23,
+            child: Icon(Icons.directions_run, size: 34, color: PacerColors.ink),
           ),
-          const SizedBox(height: 10),
-          Text(title, style: PacerText.cardTitle),
-          const SizedBox(height: 6),
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: [
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    children: [
-                      Text(time, style: PacerText.cardTime),
-                      const SizedBox(width: 16),
-                      Text(pace, style: PacerText.cardPace),
-                    ],
-                  ),
-                  const SizedBox(height: 6),
-                  Row(
-                    children: [
-                      Text('Time', style: PacerText.cardSub),
-                      const SizedBox(width: 28),
-                      Text('Pace', style: PacerText.cardSub),
-                    ],
-                  ),
-                ],
+          Positioned(
+            left: 62,
+            top: 32,
+            child: Text(date, style: PacerText.cardDate),
+          ),
+          Positioned(
+            left: 20,
+            top: 73,
+            child: Text(title, style: PacerText.cardTitle),
+          ),
+          Positioned(
+            left: 20,
+            top: 98,
+            child: Text(time, style: PacerText.cardTime),
+          ),
+          Positioned(
+            left: 73,
+            top: 98,
+            child: Text(pace, style: PacerText.cardPace),
+          ),
+          Positioned(
+            left: 22,
+            top: 123,
+            child: Text('Time', style: PacerText.cardSub),
+          ),
+          Positioned(
+            left: 76,
+            top: 123,
+            child: Text('Pace', style: PacerText.cardSub),
+          ),
+          Positioned(
+            left: 182,
+            top: 65,
+            child: Text(distance, style: PacerText.cardDistance),
+          ),
+          Positioned(
+            left: 169,
+            top: 102,
+            child: Container(
+              width: 156,
+              height: 12.5,
+              decoration: BoxDecoration(
+                color: (limePill ? PacerColors.lime : PacerColors.primary)
+                    .withValues(alpha: 0.8),
+                borderRadius: BorderRadius.circular(2),
               ),
-              const Spacer(),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.end,
-                children: [
-                  Text(distance, style: PacerText.cardDistance),
-                  const SizedBox(height: 4),
-                  Container(
-                    width: 100,
-                    height: 8,
-                    decoration: BoxDecoration(
-                      color: (limePill ? PacerColors.lime : PacerColors.primary)
-                          .withValues(alpha: 0.8),
-                      borderRadius: BorderRadius.circular(2),
-                    ),
-                  ),
-                ],
-              ),
-            ],
+            ),
           ),
         ],
       ),
@@ -231,7 +218,7 @@ class TeamCard extends StatelessWidget {
     return Container(
       width: width,
       height: 133,
-      padding: const EdgeInsets.all(14),
+      padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(10),
         gradient: const LinearGradient(
@@ -249,7 +236,7 @@ class TeamCard extends StatelessWidget {
           Row(
             children: [
               const Icon(Icons.location_on, size: 19, color: Colors.white),
-              const SizedBox(width: 4),
+              const SizedBox(width: 8),
               Expanded(child: Text(location, style: PacerText.teamLoc)),
             ],
           ),
@@ -353,82 +340,201 @@ class InitialAvatar extends StatelessWidget {
   }
 }
 
-/// Purple streak hero card (home).
+/// Purple streak hero card 321x228 r12 (HOME audit).
 class StreakCard extends StatelessWidget {
   final double width;
   final double height;
-  const StreakCard({super.key, this.width = 329, this.height = 228});
+  const StreakCard({super.key, this.width = 321, this.height = 228});
 
   @override
   Widget build(BuildContext context) {
+    const dayLabels = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
     return Container(
       width: width,
       height: height,
-      padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
         color: PacerColors.streakBg,
         borderRadius: BorderRadius.circular(12),
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x0D000000),
+            blurRadius: 2,
+            offset: Offset(0, 1),
+          ),
+        ],
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+      child: Stack(
         children: [
-          Row(
-            children: [
-              Text(
-                'ACTIVE STREAK',
-                style: PacerText.mono.copyWith(color: Colors.white),
+          Positioned(
+            left: 0,
+            top: 0,
+            child: Container(
+              width: 144,
+              height: 144,
+              decoration: BoxDecoration(
+                color: const Color(0x1ADFE900),
+                borderRadius: BorderRadius.circular(999),
               ),
-              const SizedBox(width: 8),
-              Container(
-                width: 8,
-                height: 8,
-                decoration: const BoxDecoration(
-                  color: PacerColors.neon,
-                  shape: BoxShape.circle,
-                ),
-              ),
-            ],
+            ),
           ),
-          const SizedBox(height: 8),
-          Row(
-            crossAxisAlignment: CrossAxisAlignment.end,
-            children: [
-              Text(
-                '24',
-                style: PacerText.giantNum(56)
-                    .copyWith(color: PacerColors.streakNum),
+          Positioned(
+            left: 0,
+            top: 8,
+            child: Container(
+              width: 128,
+              height: 128,
+              decoration: BoxDecoration(
+                color: const Color(0x1A10FFA0),
+                borderRadius: BorderRadius.circular(999),
               ),
-              const SizedBox(width: 8),
-              Padding(
-                padding: const EdgeInsets.only(bottom: 10),
-                child: Text(
-                  'DAYS STREAK',
-                  style: TextStyle(
-                    color: PacerColors.streakLabel,
-                    fontSize: 18,
-                    fontWeight: FontWeight.w500,
+            ),
+          ),
+          Positioned(
+            left: 96,
+            top: 20,
+            child: Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+              decoration: BoxDecoration(
+                color: const Color(0x99343538),
+                borderRadius: BorderRadius.circular(999),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Container(
+                    width: 8,
+                    height: 8,
+                    decoration: const BoxDecoration(
+                      color: PacerColors.primary,
+                      shape: BoxShape.circle,
+                    ),
                   ),
-                ),
+                  const SizedBox(width: 4),
+                  Text(
+                    'ACTIVE STREAK',
+                    style: PacerText.mono.copyWith(color: PacerColors.primary),
+                  ),
+                ],
               ),
-            ],
+            ),
           ),
-          const Text(
-            'Personal Record • Best since Nov 2024',
-            style: TextStyle(color: Colors.white70, fontSize: 12),
-          ),
-          const Spacer(),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: List.generate(
-              7,
-              (i) => Container(
-                width: 32,
-                height: 32,
-                decoration: BoxDecoration(
-                  color: i < 5 ? PacerColors.neon : Colors.transparent,
-                  shape: BoxShape.circle,
-                  border: Border.all(color: PacerColors.neon),
-                ),
+          Positioned(
+            left: 20,
+            top: 50,
+            child: SizedBox(
+              width: 281,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              crossAxisAlignment: CrossAxisAlignment.end,
+                              children: [
+                                Text(
+                                  '24',
+                                  style: PacerText.giantNum(56)
+                                      .copyWith(color: PacerColors.streakNum),
+                                ),
+                                const SizedBox(width: 4),
+                                const Padding(
+                                  padding: EdgeInsets.only(bottom: 8),
+                                  child: Text(
+                                    'DAYS STREAK',
+                                    style: TextStyle(
+                                      fontSize: 18,
+                                      fontWeight: FontWeight.w700,
+                                      color: PacerColors.streakLabel,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 2),
+                            const Row(
+                              children: [
+                                Icon(
+                                  Icons.local_fire_department,
+                                  size: 11,
+                                  color: Color(0xFFDFE900),
+                                ),
+                                SizedBox(width: 4),
+                                Text(
+                                  'Personal Record • Best since Nov 2024',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    color: Color(0xFF090A09),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
+                        ),
+                      ),
+                      Container(
+                        width: 55,
+                        height: 56,
+                        decoration: BoxDecoration(
+                          color: const Color(0xCC292A2D),
+                          borderRadius: BorderRadius.circular(999),
+                        ),
+                        child: const Icon(
+                          Icons.local_fire_department,
+                          size: 36,
+                          color: Colors.deepOrange,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 10),
+                  Row(
+                    children: List.generate(7, (i) {
+                      final last = i == 6;
+                      return Expanded(
+                        child: Column(
+                          children: [
+                            Text(
+                              dayLabels[i],
+                              style: TextStyle(
+                                fontSize: 11,
+                                fontWeight: last
+                                    ? FontWeight.bold
+                                    : FontWeight.w500,
+                                color: last
+                                    ? PacerColors.neon
+                                    : const Color(0xFF090A09),
+                              ),
+                            ),
+                            const SizedBox(height: 2),
+                            Container(
+                              width: 32,
+                              height: 32,
+                              decoration: BoxDecoration(
+                                color: PacerColors.neon,
+                                shape: BoxShape.circle,
+                                boxShadow: [
+                                  BoxShadow(
+                                    color: const Color(0x5910FFA0),
+                                    blurRadius: last ? 14 : 12,
+                                  ),
+                                ],
+                              ),
+                              child: const Icon(
+                                Icons.check,
+                                size: 12,
+                                color: Color(0xFF007144),
+                              ),
+                            ),
+                          ],
+                        ),
+                      );
+                    }),
+                  ),
+                ],
               ),
             ),
           ),
@@ -453,10 +559,10 @@ class BottomNavPill extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     const icons = [
-      Icons.home_outlined,
-      Icons.route_outlined,
-      Icons.groups_outlined,
+      Icons.emoji_events_outlined,
       Icons.leaderboard_outlined,
+      Icons.groups_outlined,
+      Icons.local_fire_department_outlined,
     ];
     return ClipRRect(
       borderRadius: BorderRadius.circular(50),
@@ -464,7 +570,7 @@ class BottomNavPill extends StatelessWidget {
         filter: ImageFilter.blur(sigmaX: 2, sigmaY: 2),
         child: Container(
           width: 377,
-          height: 80,
+          height: 80.7,
           decoration: BoxDecoration(
             color: PacerColors.bottomBar,
             borderRadius: BorderRadius.circular(50),
@@ -473,11 +579,16 @@ class BottomNavPill extends StatelessWidget {
             mainAxisAlignment: MainAxisAlignment.spaceEvenly,
             children: [
               for (var i = 0; i < 2; i++)
-                IconButton(
-                  onPressed: () => onTap(i),
-                  icon: Icon(
-                    icons[i],
-                    color: index == i ? PacerColors.lime : Colors.white,
+                SizedBox(
+                  width: 50,
+                  height: 49,
+                  child: IconButton(
+                    onPressed: () => onTap(i),
+                    icon: Icon(
+                      icons[i],
+                      size: 30,
+                      color: index == i ? PacerColors.lime : Colors.white,
+                    ),
                   ),
                 ),
               GestureDetector(
@@ -492,16 +603,24 @@ class BottomNavPill extends StatelessWidget {
                   alignment: Alignment.center,
                   child: Text(
                     'START',
-                    style: PacerText.cardTitle.copyWith(color: Colors.white),
+                    style: PacerText.fugazBrand.copyWith(
+                      fontSize: 20,
+                      color: Colors.black,
+                    ),
                   ),
                 ),
               ),
               for (var i = 2; i < 4; i++)
-                IconButton(
-                  onPressed: () => onTap(i),
-                  icon: Icon(
-                    icons[i],
-                    color: index == i ? PacerColors.lime : Colors.white,
+                SizedBox(
+                  width: 50,
+                  height: 49,
+                  child: IconButton(
+                    onPressed: () => onTap(i),
+                    icon: Icon(
+                      icons[i],
+                      size: 30,
+                      color: index == i ? PacerColors.lime : Colors.white,
+                    ),
                   ),
                 ),
             ],
@@ -512,17 +631,19 @@ class BottomNavPill extends StatelessWidget {
   }
 }
 
-/// 98x98 circular run action.
+/// 98x98 circular run action (tracker audit).
 class CircleAction extends StatelessWidget {
   final String label;
   final Color bg;
   final Color fg;
+  final double labelSize;
   final VoidCallback? onTap;
   const CircleAction({
     super.key,
     required this.label,
     required this.bg,
     required this.fg,
+    this.labelSize = 20,
     this.onTap,
   });
 
@@ -544,7 +665,271 @@ class CircleAction extends StatelessWidget {
         alignment: Alignment.center,
         child: Text(
           label,
-          style: PacerText.cardTitle.copyWith(color: fg, fontSize: 20),
+          textAlign: TextAlign.center,
+          style: PacerText.fugazBrand.copyWith(color: fg, fontSize: labelSize),
+        ),
+      ),
+    );
+  }
+}
+
+/// 98x98 circular mini-map button (tracker slot 1).
+class MapCircleButton extends StatelessWidget {
+  final VoidCallback? onTap;
+  const MapCircleButton({super.key, this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        width: 98,
+        height: 98,
+        decoration: const BoxDecoration(
+          shape: BoxShape.circle,
+          gradient: LinearGradient(
+            colors: [Color(0xFFE2E8F0), Color(0xFFF8FAFC)],
+          ),
+          border: Border.fromBorderSide(BorderSide.none),
+        ),
+        alignment: Alignment.center,
+        child: const Icon(Icons.map_outlined, size: 36, color: PacerColors.ink),
+      ),
+    );
+  }
+}
+
+/// Tracker stat column: bottom-aligned avatar + value + label.
+class TrackerStatColumn extends StatelessWidget {
+  final double avatarSize;
+  final String initials;
+  final String value;
+  final String label;
+  const TrackerStatColumn({
+    super.key,
+    required this.avatarSize,
+    required this.initials,
+    required this.value,
+    required this.label,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        InitialAvatar(initials, size: avatarSize),
+        const SizedBox(height: 6),
+        Text(value, style: PacerText.statValue),
+        Text(
+          label,
+          style: const TextStyle(
+            fontWeight: FontWeight.w300,
+            fontSize: 15,
+            color: Color(0x99000000),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+/// GPS pill 91x43 r30 #E5F0C5.
+class GpsPill extends StatelessWidget {
+  const GpsPill({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 91,
+      height: 43,
+      decoration: BoxDecoration(
+        color: PacerColors.gpsPill,
+        borderRadius: BorderRadius.circular(30),
+      ),
+      child: const Row(
+        children: [
+          SizedBox(width: 16),
+          Icon(Icons.wifi, size: 20, color: Colors.black),
+          SizedBox(width: 9),
+          Text('GPS', style: TextStyle(fontSize: 16, color: Colors.black)),
+        ],
+      ),
+    );
+  }
+}
+
+/// Lime summary card 329x92 r30 (finish screen).
+class SummaryLimeCard extends StatelessWidget {
+  final String distance;
+  final String duration;
+  final String pace;
+  const SummaryLimeCard({
+    super.key,
+    this.distance = '0,00 Km',
+    this.duration = '00.00',
+    this.pace = "0'00''",
+  });
+
+  Widget _col(String value, String label) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(value, style: PacerText.statValue),
+        const SizedBox(height: 14),
+        Text(
+          label,
+          style: const TextStyle(
+            fontWeight: FontWeight.w300,
+            fontSize: 15,
+            color: Color(0x99000000),
+          ),
+        ),
+      ],
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 329,
+      height: 92,
+      padding: const EdgeInsets.fromLTRB(30, 18, 30, 0),
+      decoration: BoxDecoration(
+        color: PacerColors.lime,
+        borderRadius: BorderRadius.circular(30),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          _col(distance, 'Distance'),
+          Container(
+            width: 1,
+            height: 30,
+            margin: const EdgeInsets.only(left: 19, top: 13),
+            color: const Color(0x40000000),
+          ),
+          Padding(
+            padding: const EdgeInsets.only(left: 15),
+            child: _col(duration, 'Duration'),
+          ),
+          Container(
+            width: 1,
+            height: 30,
+            margin: const EdgeInsets.only(left: 15, top: 13),
+            color: const Color(0x40000000),
+          ),
+          Padding(
+            padding: const EdgeInsets.only(left: 15),
+            child: _col(pace, 'Avg Pace'),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Metric card 329x75 r30 #FDFDFD (finish screen).
+class MetricCard extends StatelessWidget {
+  final String title;
+  final String sub;
+  final String? value;
+  final String? unit;
+  const MetricCard({
+    super.key,
+    required this.title,
+    required this.sub,
+    this.value,
+    this.unit,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 329,
+      height: 75,
+      padding: const EdgeInsets.fromLTRB(30, 16, 30, 0),
+      decoration: BoxDecoration(
+        color: const Color(0xFFFDFDFD),
+        borderRadius: BorderRadius.circular(30),
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x40000000),
+            blurRadius: 4,
+            offset: Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  style: const TextStyle(fontSize: 15, color: PacerColors.ink),
+                ),
+                const SizedBox(height: 7),
+                Text(
+                  sub,
+                  style: const TextStyle(
+                    fontWeight: FontWeight.w300,
+                    fontSize: 12,
+                    color: Color(0x99000000),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          if (value != null)
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                Text(value!, style: PacerText.statValue),
+                Text(
+                  unit ?? '',
+                  style: const TextStyle(
+                    fontWeight: FontWeight.w300,
+                    fontSize: 12,
+                    color: Color(0x99000000),
+                  ),
+                ),
+              ],
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Session-goal chip h32 r8 (setup screen).
+class GoalChip extends StatelessWidget {
+  final String label;
+  final bool selected;
+  const GoalChip({super.key, required this.label, this.selected = false});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      height: 32,
+      padding: const EdgeInsets.symmetric(horizontal: 23),
+      alignment: Alignment.center,
+      decoration: BoxDecoration(
+        color: selected ? Colors.black : Colors.white,
+        borderRadius: BorderRadius.circular(8),
+        border: Border.all(
+          color: selected ? Colors.black : const Color(0xFFC4C7C8),
+        ),
+      ),
+      child: Text(
+        label,
+        style: TextStyle(
+          fontSize: 12,
+          fontWeight: FontWeight.w600,
+          color: selected ? Colors.white : const Color(0xFF181C22),
         ),
       ),
     );
