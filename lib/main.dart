@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
+import 'package:pacer/src/ui/app_strings.dart';
 import 'package:pacer/src/ui/app_theme.dart';
 import 'package:pacer/src/ui/more_screens.dart';
 import 'package:pacer/src/ui/screens.dart';
@@ -25,11 +26,17 @@ class PacerApp extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return MaterialApp(
-      title: 'Pacer',
-      debugShowCheckedModeBanner: false,
-      theme: PacerTheme.light(),
-      home: const _Root(),
+    // Rebuild the whole tree when the language toggles so every S.* string
+    // re-resolves without per-screen listeners.
+    return ValueListenableBuilder<Lang>(
+      valueListenable: langNotifier,
+      builder: (context, _, _) => MaterialApp(
+        title: 'Pacer',
+        debugShowCheckedModeBanner: false,
+        theme: PacerTheme.light(),
+        themeMode: ThemeMode.light,
+        home: const _Root(),
+      ),
     );
   }
 }
@@ -42,11 +49,17 @@ class _Root extends StatefulWidget {
 }
 
 class _RootState extends State<_Root> {
-  String _route = 'getStarted';
+  String _route = 'loading';
 
   @override
   Widget build(BuildContext context) {
     switch (_route) {
+      case 'loading':
+        return LoadingScreen(
+          onDone: () {
+            if (mounted) setState(() => _route = 'getStarted');
+          },
+        );
       case 'create':
         return CreateAccountScreen(
           onSubmitted: () => setState(() => _route = 'main'),

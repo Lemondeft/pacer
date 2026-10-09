@@ -1,8 +1,57 @@
 import 'package:flutter/material.dart';
 
+import 'app_strings.dart';
 import 'app_theme.dart';
 import 'more_screens.dart';
 import 'widgets.dart';
+
+/// Figma LOADING SCREEN: the one PacerLogo + blue progress rectangle 218x18 r2.
+class LoadingScreen extends StatelessWidget {
+  final VoidCallback onDone;
+  const LoadingScreen({super.key, required this.onDone});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: Colors.white,
+      body: SafeArea(
+        child: Center(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const PacerLogo(width: 160, fontSize: 44),
+              const SizedBox(height: 24),
+              TweenAnimationBuilder<double>(
+                tween: Tween(begin: 0, end: 1),
+                duration: const Duration(milliseconds: 1200),
+                onEnd: onDone,
+                builder: (context, value, _) {
+                  return Container(
+                    width: 218,
+                    height: 18,
+                    decoration: BoxDecoration(
+                      color: PacerColors.slate200,
+                      borderRadius: BorderRadius.circular(2),
+                    ),
+                    alignment: Alignment.centerLeft,
+                    child: Container(
+                      width: 218 * value,
+                      height: 18,
+                      decoration: BoxDecoration(
+                        color: PacerColors.primary,
+                        borderRadius: BorderRadius.circular(2),
+                      ),
+                    ),
+                  );
+                },
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
 
 /// Figma GET STARTED: "Pacer, siap membantu!" + Sign In filled 357x69 + Log In outlined.
 class GetStartedScreen extends StatelessWidget {
@@ -23,28 +72,14 @@ class GetStartedScreen extends StatelessWidget {
             padding: const EdgeInsets.symmetric(horizontal: 18),
             child: Column(
               children: [
-                Container(
-                  width: 198,
-                  height: 108,
-                  decoration: BoxDecoration(
-                    gradient: const LinearGradient(
-                      colors: [PacerColors.primary, PacerColors.lime],
-                    ),
-                    borderRadius: BorderRadius.circular(16),
-                  ),
-                  alignment: Alignment.center,
-                  child: Text(
-                    'PACER',
-                    style: PacerText.fugazBrand.copyWith(
-                      fontSize: 40,
-                      color: Colors.white,
-                    ),
-                  ),
-                ),
+                const PacerLogo(width: 198, fontSize: 40),
                 const SizedBox(height: 24),
-                const Text(
-                  'Pacer, siap membantu!',
-                  style: TextStyle(fontWeight: FontWeight.w600, fontSize: 24),
+                Text(
+                  S.appTagline,
+                  style: const TextStyle(
+                    fontWeight: FontWeight.w600,
+                    fontSize: 24,
+                  ),
                   textAlign: TextAlign.center,
                 ),
                 const SizedBox(height: 32),
@@ -58,7 +93,7 @@ class GetStartedScreen extends StatelessWidget {
                         borderRadius: BorderRadius.circular(5),
                       ),
                     ),
-                    child: const Text('Sign In'),
+                    child: Text(S.signIn),
                   ),
                 ),
                 const SizedBox(height: 16),
@@ -76,7 +111,7 @@ class GetStartedScreen extends StatelessWidget {
                         borderRadius: BorderRadius.circular(5),
                       ),
                     ),
-                    child: const Text('Log In'),
+                    child: Text(S.logIn),
                   ),
                 ),
               ],
@@ -117,24 +152,24 @@ class _CreateAccountScreenState extends State<CreateAccountScreen> {
               const SizedBox(height: 12),
               const PageHeader(),
               const SizedBox(height: 16),
-              Text('Create an account', style: PacerText.authTitle),
+              Text(S.createAccount, style: PacerText.authTitle),
               const SizedBox(height: 28),
-              const AuthField(hint: 'Username', icon: Icons.person_outline),
+              AuthField(hint: S.username, icon: Icons.person_outline),
               const SizedBox(height: 16),
-              const AuthField(
-                hint: 'Email',
+              AuthField(
+                hint: S.email,
                 icon: Icons.mail_outline,
                 keyboardType: TextInputType.emailAddress,
               ),
               const SizedBox(height: 16),
-              const AuthField(
-                hint: 'Password',
+              AuthField(
+                hint: S.password,
                 icon: Icons.lock_outline,
                 obscure: true,
               ),
               const SizedBox(height: 16),
-              const AuthField(
-                hint: 'Konfirmasi Password',
+              AuthField(
+                hint: S.confirmPassword,
                 icon: Icons.lock_outline,
                 obscure: true,
               ),
@@ -151,7 +186,7 @@ class _CreateAccountScreenState extends State<CreateAccountScreen> {
               const SizedBox(height: 28),
               Center(
                 child: PrimaryButton(
-                  label: 'Sign In',
+                  label: S.signIn,
                   onPressed: () {
                     setState(() => _error = null);
                     widget.onSubmitted();
@@ -166,8 +201,11 @@ class _CreateAccountScreenState extends State<CreateAccountScreen> {
                 ),
               ),
               const SizedBox(height: 16),
-              const Center(
-                child: Text('or sign up with', style: TextStyle(fontSize: 15)),
+              Center(
+                child: Text(
+                  S.orSignUpWith,
+                  style: const TextStyle(fontSize: 15),
+                ),
               ),
               const SizedBox(height: 12),
               Center(
@@ -215,39 +253,44 @@ class HomeScreen extends StatelessWidget {
                 children: [
                   IconButton(
                     onPressed: () => Navigator.of(context).push(
-                      MaterialPageRoute(builder: (_) => const AccountScreen()),
+                      MaterialPageRoute(builder: (_) => const FiturScreen()),
                     ),
                     icon: const Icon(Icons.menu, size: 32),
                   ),
                   Expanded(
                     child: Center(
-                      child: Text(
-                        'PACER',
-                        style: PacerText.fugazBrand.copyWith(
-                          color: Colors.black,
-                        ),
-                      ),
+                      // One consistent logo across the app.
+                      child: PacerLogo(width: 84, fontSize: 18),
                     ),
                   ),
-                  const InitialAvatar('RP', size: 42),
+                  // Logged-in user's initials (Figma spec). Tap → Account.
+                  GestureDetector(
+                    onTap: () => Navigator.of(context).push(
+                      MaterialPageRoute(builder: (_) => const AccountScreen()),
+                    ),
+                    child: const InitialAvatar('RP', size: 42),
+                  ),
                 ],
               ),
             ),
             const SizedBox(height: 16),
-            const SectionHeader(title: 'Streak'),
+            SectionHeader(title: S.streaks),
             const SizedBox(height: 8),
             const Center(child: StreakCard()),
             const SizedBox(height: 8),
             GestureDetector(
               onTap: onSeeHistory,
-              child: const Row(
+              child: Row(
                 mainAxisSize: MainAxisSize.min,
                 children: [
                   Text(
-                    'History',
-                    style: TextStyle(fontWeight: FontWeight.w500, fontSize: 20),
+                    S.history,
+                    style: const TextStyle(
+                      fontWeight: FontWeight.w500,
+                      fontSize: 20,
+                    ),
                   ),
-                  Icon(Icons.chevron_right, size: 20),
+                  const Icon(Icons.chevron_right, size: 20),
                 ],
               ),
             ),
@@ -263,7 +306,7 @@ class HomeScreen extends StatelessWidget {
               limePill: true,
             ),
             const SizedBox(height: 32),
-            SectionHeader(title: 'Pacer Teams', onSeeAll: onSeeTeams),
+            SectionHeader(title: S.pacerTeams, onSeeAll: onSeeTeams),
             const SizedBox(height: 20),
             SizedBox(
               height: 133,
@@ -320,7 +363,9 @@ class _MainShellState extends State<MainShell> {
   Widget build(BuildContext context) {
     final pages = [
       HomeScreen(onSeeTeams: () => _onPillTap(2), onSeeHistory: _goHistory),
-      const RunTrackerScreen(),
+      // Tracker gets the full screen: nav pill hidden (it covered PAUSE),
+      // back button returns to Home instead.
+      RunTrackerScreen(onBack: () => _onPillTap(0)),
       const TeamsScreen(),
       const LeaderboardScreen(),
     ];
@@ -328,18 +373,19 @@ class _MainShellState extends State<MainShell> {
       body: Stack(
         children: [
           pages[_index],
-          Positioned(
-            left: 0,
-            right: 0,
-            bottom: 54,
-            child: Center(
-              child: BottomNavPill(
-                index: _index,
-                onTap: _onPillTap,
-                onStart: _goSetup,
+          if (_index != 1)
+            Positioned(
+              left: 0,
+              right: 0,
+              bottom: 54,
+              child: Center(
+                child: BottomNavPill(
+                  index: _index,
+                  onTap: _onPillTap,
+                  onStart: _goSetup,
+                ),
               ),
             ),
-          ),
         ],
       ),
     );

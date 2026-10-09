@@ -3,6 +3,38 @@ import 'dart:ui';
 import 'package:flutter/material.dart';
 
 import 'app_theme.dart';
+import 'app_strings.dart';
+
+/// The ONE app logo: rounded gradient tile + PACER wordmark (Fugaz One).
+/// Used on Loading, GetStarted, and the Home header at different sizes.
+class PacerLogo extends StatelessWidget {
+  final double width;
+  final double fontSize;
+  const PacerLogo({super.key, this.width = 198, this.fontSize = 40});
+
+  @override
+  Widget build(BuildContext context) {
+    final height = width * 108 / 198;
+    return Container(
+      width: width,
+      height: height,
+      decoration: BoxDecoration(
+        gradient: const LinearGradient(
+          colors: [PacerColors.primary, PacerColors.lime],
+        ),
+        borderRadius: BorderRadius.circular(16),
+      ),
+      alignment: Alignment.center,
+      child: Text(
+        'PACER',
+        style: PacerText.fugazBrand.copyWith(
+          fontSize: fontSize,
+          color: Colors.white,
+        ),
+      ),
+    );
+  }
+}
 
 /// Blue primary CTA 315x50 r5. Subtle shadow per dump (no heavy drop).
 class PrimaryButton extends StatelessWidget {
@@ -169,12 +201,12 @@ class RunSessionCard extends StatelessWidget {
           Positioned(
             left: 22,
             top: 123,
-            child: Text('Time', style: PacerText.cardSub),
+            child: Text(S.time, style: PacerText.cardSub),
           ),
           Positioned(
             left: 76,
             top: 123,
-            child: Text('Pace', style: PacerText.cardSub),
+            child: Text(S.pace, style: PacerText.cardSub),
           ),
           Positioned(
             left: 182,
@@ -263,9 +295,9 @@ class SectionHeader extends StatelessWidget {
         ),
         TextButton(
           onPressed: onSeeAll,
-          child: const Text(
-            'See all',
-            style: TextStyle(color: PacerColors.ink, fontSize: 15),
+          child: Text(
+            S.seeAll,
+            style: const TextStyle(color: PacerColors.ink, fontSize: 15),
           ),
         ),
       ],
@@ -411,7 +443,7 @@ class StreakCard extends StatelessWidget {
                   ),
                   const SizedBox(width: 4),
                   Text(
-                    'ACTIVE STREAK',
+                    S.activeStreak,
                     style: PacerText.mono.copyWith(color: PacerColors.primary),
                   ),
                 ],
@@ -441,11 +473,11 @@ class StreakCard extends StatelessWidget {
                                       .copyWith(color: PacerColors.streakNum),
                                 ),
                                 const SizedBox(width: 4),
-                                const Padding(
+                                Padding(
                                   padding: EdgeInsets.only(bottom: 8),
                                   child: Text(
-                                    'DAYS STREAK',
-                                    style: TextStyle(
+                                    S.daysStreak,
+                                    style: const TextStyle(
                                       fontSize: 18,
                                       fontWeight: FontWeight.w700,
                                       color: PacerColors.streakLabel,
@@ -455,22 +487,27 @@ class StreakCard extends StatelessWidget {
                               ],
                             ),
                             const SizedBox(height: 2),
-                            const Row(
-                              children: [
-                                Icon(
-                                  Icons.local_fire_department,
-                                  size: 11,
-                                  color: Color(0xFFDFE900),
-                                ),
-                                SizedBox(width: 4),
-                                Text(
-                                  'Personal Record • Best since Nov 2024',
-                                  style: TextStyle(
-                                    fontSize: 12,
-                                    color: Color(0xFF090A09),
+                            FittedBox(
+                              fit: BoxFit.scaleDown,
+                              alignment: Alignment.centerLeft,
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Icon(
+                                    Icons.local_fire_department,
+                                    size: 11,
+                                    color: Color(0xFFDFE900),
                                   ),
-                                ),
-                              ],
+                                  SizedBox(width: 4),
+                                  Text(
+                                    S.personalRecord,
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      color: Color(0xFF090A09),
+                                    ),
+                                  ),
+                                ],
+                              ),
                             ),
                           ],
                         ),
@@ -601,11 +638,17 @@ class BottomNavPill extends StatelessWidget {
                     shape: BoxShape.circle,
                   ),
                   alignment: Alignment.center,
-                  child: Text(
-                    'START',
-                    style: PacerText.fugazBrand.copyWith(
-                      fontSize: 20,
-                      color: Colors.black,
+                  // Fugaz One 20 "START" is ~75px wide — scale to the circle
+                  // instead of wrapping on narrow screens.
+                  padding: const EdgeInsets.all(8),
+                  child: FittedBox(
+                    fit: BoxFit.scaleDown,
+                    child: Text(
+                      'START',
+                      style: PacerText.fugazBrand.copyWith(
+                        fontSize: 20,
+                        color: Colors.black,
+                      ),
                     ),
                   ),
                 ),
@@ -749,12 +792,32 @@ class GpsPill extends StatelessWidget {
         borderRadius: BorderRadius.circular(30),
       ),
       child: const Row(
+        mainAxisSize: MainAxisSize.min,
+        mainAxisAlignment: MainAxisAlignment.center,
         children: [
-          SizedBox(width: 16),
           Icon(Icons.wifi, size: 20, color: Colors.black),
-          SizedBox(width: 9),
+          SizedBox(width: 6),
           Text('GPS', style: TextStyle(fontSize: 16, color: Colors.black)),
         ],
+      ),
+    );
+  }
+}
+
+/// Centers content in a phone-width column on wide screens (iPad/desktop).
+/// Mobile-first Figma widths stay exact on phones; tablets get a centered
+/// column instead of stretched or overflowing rows.
+class PhoneColumn extends StatelessWidget {
+  final Widget child;
+  final double maxWidth;
+  const PhoneColumn({super.key, required this.child, this.maxWidth = 430});
+
+  @override
+  Widget build(BuildContext context) {
+    return Center(
+      child: ConstrainedBox(
+        constraints: BoxConstraints(maxWidth: maxWidth),
+        child: child,
       ),
     );
   }
