@@ -369,7 +369,10 @@ class RunTrackerScreen extends StatefulWidget {
 }
 
 class _RunTrackerScreenState extends State<RunTrackerScreen> {
+  // _running == true means the session is paused (shows LANJUTKAN+SELESAI);
+  // _started gates the initial MULAI action.
   bool _running = false;
+  bool _started = false;
   bool _finished = false;
 
   @override
@@ -496,7 +499,18 @@ class _RunTrackerScreenState extends State<RunTrackerScreen> {
                     mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
                       MapCircleButton(size: circle),
-                      if (!_running)
+                      if (!_started)
+                        CircleAction(
+                          label: S.startLabel,
+                          bg: PacerColors.lime,
+                          fg: PacerColors.ink,
+                          size: circle,
+                          onTap: () => setState(() {
+                            _started = true;
+                            _running = false;
+                          }),
+                        )
+                      else if (!_running)
                         CircleAction(
                           label: S.pause,
                           bg: PacerColors.lime,
@@ -513,7 +527,7 @@ class _RunTrackerScreenState extends State<RunTrackerScreen> {
                           size: circle,
                           onTap: () => setState(() => _running = false),
                         ),
-                      if (_running)
+                      if (_started && _running)
                         CircleAction(
                           label: S.finish,
                           bg: PacerColors.ink,
@@ -1530,14 +1544,79 @@ class _HistoryScreenState extends State<HistoryScreen> {
 }
 
 /// Figma challenge detail full page.
-class ChallengeDetailSheet extends StatelessWidget {
-  const ChallengeDetailSheet({super.key});
+/// [challengeId] null in demo mode (join button shows a demo snackbar).
+class ChallengeDetailSheet extends StatefulWidget {
+  final String? challengeId;
+  const ChallengeDetailSheet({super.key, this.challengeId});
 
-  static void show(BuildContext context) {
+  static void show(BuildContext context, {String? challengeId}) {
     showModalBottomSheet(
       context: context,
-      builder: (_) => const ChallengeDetailSheet(),
+      builder: (_) => ChallengeDetailSheet(challengeId: challengeId),
     );
+  }
+
+  @override
+  State<ChallengeDetailSheet> createState() => _ChallengeDetailSheetState();
+}
+
+class _ChallengeDetailSheetState extends State<ChallengeDetailSheet> {
+  bool? _joined;
+  bool _busy = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _check();
+  }
+
+  bool get _live {
+    try {
+      return supa.auth.currentUser != null && widget.challengeId != null;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  Future<void> _check() async {
+    if (!_live) return;
+    try {
+      final parts = await ChallengeRepository().myParticipations();
+      if (mounted) {
+        setState(() {
+          _joined = parts.any((p) => p.challengeId == widget.challengeId);
+        });
+      }
+    } catch (_) {
+      /* stays null → join attempt reports errors */
+    }
+  }
+
+  Future<void> _toggle() async {
+    final id = widget.challengeId;
+    if (!_live || id == null) {
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(S.demoChallengeStarted)));
+      return;
+    }
+    setState(() => _busy = true);
+    try {
+      final repo = ChallengeRepository();
+      if (_joined == true) {
+        await repo.leaveChallenge(id);
+        if (mounted) setState(() => _joined = false);
+      } else {
+        await repo.joinChallenge(id);
+        if (mounted) setState(() => _joined = true);
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text('${S.errLoginFailed} ($e)')));
+      }
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
   }
 
   @override
@@ -1584,10 +1663,8 @@ class ChallengeDetailSheet extends StatelessWidget {
                 ),
                 const SizedBox(height: 16),
                 LimeActionBar(
-                  S.startChallenge,
-                  onPressed: () => ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text(S.demoChallengeStarted)),
-                  ),
+                  _joined == true ? S.leaveChallenge : S.startChallenge,
+                  onPressed: _busy ? null : _toggle,
                 ),
                 const SizedBox(height: 16),
               ],
@@ -2278,12 +2355,12 @@ class _ChallengeListScreenState extends State<ChallengeListScreen> {
                   final live = snap.data;
                   final cards = (live == null || live.isEmpty)
                       ? const [
-                          ('10', ' KM', '29-10-2009'),
-                          ('8', ' KM', '29-10-2009'),
+                          ('10', ' KM', '29-10-2009', null),
+                          ('8', ' KM', '29-10-2009', null),
                         ]
                       : [
                           for (final c in live)
-                            (_heroValue(c), _heroUnit(c), _heroDate(c)),
+                            (_heroValue(c), _heroUnit(c), _heroDate(c), c.id),
                         ];
                   return Column(
                     children: [
@@ -2291,7 +2368,8 @@ class _ChallengeListScreenState extends State<ChallengeListScreen> {
                         GestureDetector(
                           onTap: () => showModalBottomSheet(
                             context: context,
-                            builder: (_) => const ChallengeDetailSheet(),
+                            builder: (_) =>
+                                ChallengeDetailSheet(challengeId: c.$4),
                           ),
                           child: Container(
                             width: double.infinity,
@@ -2458,9 +2536,69 @@ class PersyaratanScreen extends StatelessWidget {
   }
 }
 
-/// Figma buat club form.
-class CreateClubScreen extends StatelessWidget {
+/// Figma buat club form. Creates the team server-side (coach/admin only —
+/// regular users get a "coach only" message); demo mode pops with a demo note.
+class CreateClubScreen extends StatefulWidget {
   const CreateClubScreen({super.key});
+
+  @override
+  State<CreateClubScreen> createState() => _CreateClubScreenState();
+}
+
+class _CreateClubScreenState extends State<CreateClubScreen> {
+  final _name = TextEditingController();
+  String? _error;
+  bool _busy = false;
+
+  @override
+  void dispose() {
+    _name.dispose();
+    super.dispose();
+  }
+
+  bool get _live {
+    try {
+      return supa.auth.currentUser != null;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  Future<void> _submit() async {
+    setState(() => _error = null);
+    final nama = _name.text.trim();
+    if (nama.isEmpty) {
+      setState(() => _error = S.errFillAll);
+      return;
+    }
+    if (!_live) {
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(S.demoJoinSent)));
+        Navigator.of(context).pop();
+      }
+      return;
+    }
+    setState(() => _busy = true);
+    try {
+      await TeamRepository().createTeam(nama: nama);
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(S.teamCreated)));
+        Navigator.of(context).pop();
+      }
+    } on PostgrestException catch (e) {
+      setState(
+        () => _error = e.code == '42501'
+            ? S.coachOnly
+            : '${S.errLoginFailed} (${e.message})',
+      );
+    } catch (_) {
+      setState(() => _error = S.errLoginFailed);
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -2494,6 +2632,7 @@ class CreateClubScreen extends StatelessWidget {
               const SizedBox(height: 12),
               Text(S.teamName),
               TextField(
+                controller: _name,
                 decoration: InputDecoration(
                   filled: true,
                   fillColor: PacerColors.formBg,
@@ -2503,6 +2642,16 @@ class CreateClubScreen extends StatelessWidget {
                   ),
                 ),
               ),
+              if (_error != null) ...[
+                const SizedBox(height: 8),
+                Text(
+                  _error!,
+                  style: const TextStyle(
+                    color: PacerColors.errorRed,
+                    fontSize: 15,
+                  ),
+                ),
+              ],
               const SizedBox(height: 12),
               Text(S.clubFocus),
               const Wrap(
@@ -2535,7 +2684,7 @@ class CreateClubScreen extends StatelessWidget {
                 ],
               ),
               const SizedBox(height: 20),
-              LimeActionBar('Buat Teams'),
+              LimeActionBar(S.createTeam, onPressed: _busy ? null : _submit),
               Center(
                 child: TextButton(
                   onPressed: () => Navigator.of(context).pop(),

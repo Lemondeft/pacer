@@ -68,6 +68,7 @@ class S {
   static String get duration => _en ? 'Duration' : 'Durasi';
   static String get calories => _en ? 'Calories' : 'Kalori';
   static String get pause => _en ? 'PAUSE' : 'JEDA';
+  static String get startLabel => _en ? 'START' : 'MULAI';
   static String get continueLabel => _en ? 'CONTINUE' : 'LANJUT';
   static String get finish => _en ? 'FINISH' : 'SELESAI';
   static String get running => _en ? 'Running' : 'Lari';
@@ -125,6 +126,10 @@ class S {
   static String get date => _en ? 'Date' : 'Tanggal';
   static String get startChallenge =>
       _en ? 'start challenge' : 'mulai tantangan';
+  static String get leaveChallenge => _en ? 'leave challenge' : 'keluar';
+  static String get coachOnly =>
+      _en ? 'Only coaches can do that.' : 'Hanya coach yang bisa.';
+  static String get teamCreated => _en ? 'Team created.' : 'Tim dibuat.';
   static String get createChallenge =>
       _en ? 'Create challenge' : 'Buat challenge';
 
