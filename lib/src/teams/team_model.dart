@@ -10,6 +10,10 @@ class Team {
   final String nama;
   final double? targetNilai;
   final String? dibuatOleh;
+
+  /// Shareable join code (invite_code, 8-char). Null on rows read before
+  /// the invite-code migration.
+  final String? inviteCode;
   final DateTime? createdAt;
 
   const Team({
@@ -17,6 +21,7 @@ class Team {
     required this.nama,
     this.targetNilai,
     this.dibuatOleh,
+    this.inviteCode,
     this.createdAt,
   });
 
@@ -25,6 +30,7 @@ class Team {
     nama: json['nama'] as String,
     targetNilai: jsonToDouble(json['target_nilai']),
     dibuatOleh: json['dibuat_oleh'] as String?,
+    inviteCode: json['invite_code'] as String?,
     createdAt: _parseDate(json['created_at']),
   );
 
@@ -33,6 +39,7 @@ class Team {
     'nama': nama,
     'target_nilai': targetNilai,
     'dibuat_oleh': dibuatOleh,
+    'invite_code': inviteCode,
     'created_at': createdAt?.toIso8601String(),
   };
 }

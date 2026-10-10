@@ -17,6 +17,7 @@ Apply migrations in order via the Supabase dashboard SQL editor:
 4. `supabase/migrations/20261009230000_users_language.sql` — `users.language` preference
 5. `supabase/migrations/20261010000000_pacer_coach_read.sql` — coach reads for grading
 6. `supabase/migrations/20261011000000_pacer_chat.sql` — team chat (in development; also enable Realtime for `chat_messages` if the migration's publication line doesn't apply)
+7. `supabase/migrations/20261013000000_pacer_invite_codes.sql` — team invite codes + code-gated join (tightens direct member inserts to coach-only)
 
 ```sh
 flutter run -d linux   # or chrome

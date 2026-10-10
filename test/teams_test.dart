@@ -12,6 +12,7 @@ void main() {
         nama: 'Tim A',
         targetNilai: 5000.0,
         dibuatOleh: 'u-coach',
+        inviteCode: 'A1B2C3D4',
         createdAt: createdAt,
       );
       final restored = Team.fromJson(team.toJson());
@@ -19,6 +20,7 @@ void main() {
       expect(restored.nama, 'Tim A');
       expect(restored.targetNilai, 5000.0);
       expect(restored.dibuatOleh, 'u-coach');
+      expect(restored.inviteCode, 'A1B2C3D4');
       expect(restored.createdAt, createdAt);
     });
 
@@ -33,6 +35,7 @@ void main() {
       final restored = Team.fromJson(team.toJson());
       expect(restored.targetNilai, isNull);
       expect(restored.dibuatOleh, isNull);
+      expect(restored.inviteCode, isNull);
     });
 
     test('fromJson reads a realistic PostgREST row', () {
@@ -41,11 +44,13 @@ void main() {
         'nama': 'Tim C',
         'target_nilai': '5500', // numeric may arrive as string
         'dibuat_oleh': 'u-coach',
+        'invite_code': 'E5F6A7B8',
         'created_at': '2026-10-09T06:30:00+00:00',
       });
       expect(team.nama, 'Tim C');
       expect(team.targetNilai, 5500.0);
       expect(team.dibuatOleh, 'u-coach');
+      expect(team.inviteCode, 'E5F6A7B8');
       expect(team.createdAt, isNotNull);
     });
   });

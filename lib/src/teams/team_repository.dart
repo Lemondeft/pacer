@@ -33,7 +33,8 @@ class TeamRepository {
     final row = await _client.from('teams').insert(payload).select().single();
     final team = Team.fromJson(Map<String, dynamic>.from(row));
     try {
-      await joinTeam(team.id);
+      // The fresh row carries its DB-generated invite code.
+      await joinTeam(team.id, team.inviteCode ?? '');
     } catch (_) {
       // Join is best-effort: if the gate above passed, this normally
       // succeeds; the team exists either way.
@@ -88,17 +89,15 @@ class TeamRepository {
     return Team.fromJson(Map<String, dynamic>.from(row));
   }
 
-  /// Joins the caller to a team: inserts their own team_members row
-  /// (RLS members_insert allows user_id = auth.uid()). The DB unique
-  /// (team_id, user_id) constraint rejects double joins; peran defaults
-  /// to 'anggota' server-side.
-  Future<TeamMember> joinTeam(String teamId) async {
-    final row = await _client
-        .from('team_members')
-        .insert({'team_id': teamId, 'user_id': _requireUserId()})
-        .select()
-        .single();
-    return TeamMember.fromJson(Map<String, dynamic>.from(row));
+  /// Joins via invite code through the code-checked join_team() rpc
+  /// (server verifies the code; wrong codes raise PostgrestException).
+  /// Idempotent: re-joining returns silently. The DB unique
+  /// (team_id, user_id) constraint is the backstop.
+  Future<void> joinTeam(String teamId, String code) async {
+    await _client.rpc(
+      'join_team',
+      params: {'p_team_id': teamId, 'p_code': code},
+    );
   }
 
   /// Removes the caller's own membership row (RLS members_delete allows

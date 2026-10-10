@@ -1126,11 +1126,10 @@ class _TeamsScreenState extends State<TeamsScreen> {
                       _teamGrid([
                         for (final t in filtered)
                           GestureDetector(
-                            onTap: () => Navigator.of(context).push(
-                              MaterialPageRoute(
-                                builder: (_) =>
-                                    ChatScreen(teamId: t.id, teamName: t.nama),
-                              ),
+                            onTap: () => TeamDetailSheet.show(
+                              context,
+                              teamId: t.id,
+                              teamName: t.nama,
                             ),
                             child: TeamCard(name: t.nama),
                           ),
@@ -1221,39 +1220,6 @@ class _TeamsScreenState extends State<TeamsScreen> {
                   ),
                 ],
               ),
-              const SizedBox(height: 16),
-              Text(
-                S.nearestGroupRun,
-                style: TextStyle(fontWeight: FontWeight.w500, fontSize: 20),
-              ),
-              const SizedBox(height: 8),
-              Container(
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: scheme.runCard,
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: const Row(
-                  children: [
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            'Saturday Sunrise 10K',
-                            style: TextStyle(fontWeight: FontWeight.w800),
-                          ),
-                          Text(
-                            'SABTU, 06:00 WIB • GBK Senayan',
-                            style: TextStyle(fontSize: 12),
-                          ),
-                        ],
-                      ),
-                    ),
-                    _JoinButton(),
-                  ],
-                ),
-              ),
             ],
           ),
         ),
@@ -1262,22 +1228,353 @@ class _TeamsScreenState extends State<TeamsScreen> {
   }
 }
 
-class _JoinButton extends StatelessWidget {
-  const _JoinButton();
+/// Team detail bottom sheet: member count + join/leave + chat entry.
+/// Chat stays reachable only after joining (RLS hides the channel otherwise).
+class TeamDetailSheet extends StatefulWidget {
+  final String teamId;
+  final String teamName;
+  const TeamDetailSheet({
+    super.key,
+    required this.teamId,
+    required this.teamName,
+  });
+
+  static void show(
+    BuildContext context, {
+    required String teamId,
+    required String teamName,
+  }) {
+    showModalBottomSheet(
+      context: context,
+      builder: (_) => TeamDetailSheet(teamId: teamId, teamName: teamName),
+    );
+  }
+
+  @override
+  State<TeamDetailSheet> createState() => _TeamDetailSheetState();
+}
+
+class _TeamDetailSheetState extends State<TeamDetailSheet> {
+  bool? _joined;
+  int? _memberCount;
+  bool _busy = false;
+  Team? _team;
+  bool _isCoach = false;
+  final _code = TextEditingController();
+
+  @override
+  void initState() {
+    super.initState();
+    _refresh();
+  }
+
+  @override
+  void dispose() {
+    _code.dispose();
+    super.dispose();
+  }
+
+  String? _uidOf() {
+    try {
+      return supa.auth.currentUser?.id;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<void> _refresh() async {
+    try {
+      final uid = _uidOf();
+      final repo = TeamRepository();
+      final team = await repo.getTeam(widget.teamId);
+      String? peran;
+      try {
+        peran = (await AuthRepository().getProfile())?.peran;
+      } catch (_) {
+        /* stays null */
+      }
+      if (!mounted) return;
+      setState(() {
+        _team = team;
+        _isCoach = peran == 'coach' || peran == 'admin';
+      });
+      if (uid == null) {
+        if (mounted) setState(() => _joined = false);
+        return;
+      }
+      final roster = await repo.teamRoster(widget.teamId);
+      if (!mounted) return;
+      setState(() {
+        _joined = roster.any((m) => m.userId == uid);
+        // Exact for members/coaches; outsiders see only themselves.
+        _memberCount = roster.length;
+      });
+    } catch (_) {
+      // Stays null: join attempt reports errors via snackbar.
+    }
+  }
+
+  Future<void> _toggle() async {
+    // Leave path needs no code.
+    if (_joined == true) {
+      setState(() => _busy = true);
+      try {
+        await TeamRepository().leaveTeam(widget.teamId);
+        if (mounted) setState(() => _joined = false);
+        await _refresh();
+      } catch (_) {
+        if (mounted) {
+          ScaffoldMessenger.of(context)
+              .showSnackBar(SnackBar(content: Text(S.errSaveFailed)));
+        }
+      } finally {
+        if (mounted) setState(() => _busy = false);
+      }
+      return;
+    }
+    final code = _code.text.trim();
+    if (code.isEmpty) {
+      ScaffoldMessenger.of(
+        context,
+      ).showSnackBar(const SnackBar(content: Text('Masukkan kode tim dulu.')));
+      return;
+    }
+    setState(() => _busy = true);
+    try {
+      await TeamRepository().joinTeam(widget.teamId, code);
+      if (!mounted) return;
+      setState(() => _joined = true);
+      await _refresh();
+    } on PostgrestException {
+      // Wrong code (server-checked): distinct message, no raw error text.
+      if (mounted) {
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('Kode salah. Coba lagi.')));
+      }
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(S.errSaveFailed)));
+      }
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  /// Coach CRUD: rename / retarget the team.
+  Future<void> _editTeam() async {
+    final team = _team;
+    if (team == null) return;
+    final name = TextEditingController(text: team.nama);
+    final target = TextEditingController(
+      text: team.targetNilai == null ? '' : '${team.targetNilai!.toInt()}',
+    );
+    final saved = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Ubah tim'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: name,
+              decoration: const InputDecoration(labelText: 'Nama'),
+            ),
+            TextField(
+              controller: target,
+              decoration: const InputDecoration(labelText: 'Target (m)'),
+              keyboardType: TextInputType.number,
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: Text(S.cancelLabel),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: Text(S.saveLabel),
+          ),
+        ],
+      ),
+    );
+    final nama = name.text.trim();
+    final targetNilai = double.tryParse(target.text.trim());
+    name.dispose();
+    target.dispose();
+    if (saved != true || nama.isEmpty || !mounted) return;
+    try {
+      await TeamRepository().updateTeam(
+        team.id,
+        nama: nama,
+        targetNilai: targetNilai,
+      );
+      await _refresh();
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(S.errSaveFailed)));
+      }
+    }
+  }
+
+  /// Coach CRUD: delete the team (members cascade server-side).
+  Future<void> _deleteTeam() async {
+    final team = _team;
+    if (team == null) return;
+    final yes = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Hapus tim?'),
+        content: Text('${team.nama} dan semua anggotanya akan dihapus.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: Text(S.cancelLabel),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Hapus'),
+          ),
+        ],
+      ),
+    );
+    if (yes != true || !mounted) return;
+    try {
+      await TeamRepository().deleteTeam(team.id);
+      if (mounted) Navigator.of(context).pop();
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(S.errSaveFailed)));
+      }
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
-    return ElevatedButton(
-      onPressed: () =>
-          ScaffoldMessenger.of(context)
-              .showSnackBar(SnackBar(content: Text(S.demoJoinSent))),
-      style: ElevatedButton.styleFrom(
-        backgroundColor: PacerColors.joinYellow,
-        foregroundColor: Colors.black,
-        minimumSize: const Size(88, 48),
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+    return Center(
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 560),
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: SingleChildScrollView(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        widget.teamName,
+                        style: PacerText.pageTitleOf(context),
+                      ),
+                    ),
+                    IconButton(
+                      onPressed: () => Navigator.of(context).pop(),
+                      icon: const Icon(Icons.close, color: PacerColors.ink),
+                    ),
+                  ],
+                ),
+                if (_joined == true && _memberCount != null) ...[
+                  const SizedBox(height: 4),
+                  Text(
+                    '$_memberCount anggota',
+                    style: const TextStyle(fontSize: 14),
+                  ),
+                ],
+                // Invite code: shown once joined (or to coaches) — never to
+                // outsiders, or the code gate would be decorative.
+                if ((_joined == true || _isCoach) &&
+                    _team?.inviteCode != null) ...[
+                  const SizedBox(height: 8),
+                  Row(
+                    children: [
+                      const Text(
+                        'Kode tim: ',
+                        style: TextStyle(
+                          fontWeight: FontWeight.w600,
+                          fontSize: 15,
+                        ),
+                      ),
+                      Text(
+                        _team!.inviteCode!,
+                        style: const TextStyle(
+                          fontWeight: FontWeight.w800,
+                          fontSize: 16,
+                          letterSpacing: 2,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+                // Joiners type the shared code here; server verifies it.
+                if (_joined != true) ...[
+                  const SizedBox(height: 12),
+                  TextField(
+                    controller: _code,
+                    textCapitalization: TextCapitalization.characters,
+                    decoration: const InputDecoration(
+                      hintText: 'Kode tim',
+                      border: OutlineInputBorder(),
+                    ),
+                  ),
+                ],
+                // Coach CRUD.
+                if (_isCoach) ...[
+                  const SizedBox(height: 12),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: OutlinedButton(
+                          onPressed: _editTeam,
+                          child: const Text('Ubah'),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: OutlinedButton(
+                          onPressed: _deleteTeam,
+                          child: const Text('Hapus'),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+                const SizedBox(height: 16),
+                LimeActionBar(
+                  _joined == true ? S.leaveChallenge : S.join,
+                  onPressed: _busy ? null : _toggle,
+                ),
+                if (_joined == true) ...[
+                  const SizedBox(height: 12),
+                  SizedBox(
+                    width: double.infinity,
+                    child: OutlinedButton(
+                      onPressed: () {
+                        Navigator.of(context).pop();
+                        Navigator.of(context).push(
+                          MaterialPageRoute(
+                            builder: (_) => ChatScreen(
+                              teamId: widget.teamId,
+                              teamName: widget.teamName,
+                            ),
+                          ),
+                        );
+                      },
+                      child: Text(S.teamChat),
+                    ),
+                  ),
+                ],
+                const SizedBox(height: 16),
+              ],
+            ),
+          ),
+        ),
       ),
-      child: Text(S.join),
     );
   }
 }
