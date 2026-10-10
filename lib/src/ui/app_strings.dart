@@ -63,6 +63,11 @@ class S {
 
   // Tracker
   static String get gps => 'GPS';
+  static String get gpsOff => _en
+      ? 'Turn on location services to record.'
+      : 'Nyalakan layanan lokasi untuk merekam.';
+  static String get gpsDenied =>
+      _en ? 'Location permission denied.' : 'Izin lokasi ditolak.';
   static String get distanceKm => _en ? 'Distance (Km)' : 'Jarak (Km)';
   static String get avgPace => _en ? 'Avg Pace' : 'Pace Rata-rata';
   static String get duration => _en ? 'Duration' : 'Durasi';

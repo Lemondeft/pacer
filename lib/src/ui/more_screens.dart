@@ -1,11 +1,14 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:latlong2/latlong.dart' hide Path;
 import 'package:pacer/core/responsive/responsive.dart';
 import 'package:pacer/src/aktivitas/activity_model.dart';
 import 'package:pacer/src/aktivitas/activity_repository.dart';
 import 'package:pacer/src/auth/auth_repository.dart';
 import 'package:pacer/src/challenge/challenge_model.dart';
 import 'package:pacer/src/challenge/challenge_repository.dart';
+import 'package:pacer/src/tracking/recorder.dart';
+import 'package:pacer/src/tracking/route_map.dart';
 import 'package:pacer/src/leaderboard/leaderboard_model.dart';
 import 'package:pacer/src/leaderboard/leaderboard_repository.dart';
 import 'package:pacer/src/teams/team_model.dart';
@@ -371,214 +374,284 @@ class RunTrackerScreen extends StatefulWidget {
 class _RunTrackerScreenState extends State<RunTrackerScreen> {
   // _running == true means the session is paused (shows LANJUTKAN+SELESAI);
   // _started gates the initial MULAI action.
+  late final RunRecorder _recorder = RunRecorder();
   bool _running = false;
   bool _started = false;
   bool _finished = false;
+  RunSummary? _summary;
+
+  @override
+  void dispose() {
+    _recorder.dispose();
+    super.dispose();
+  }
+
+  String _gpsMessage() {
+    switch (_recorder.error) {
+      case 'gpsOff':
+        return S.gpsOff;
+      default:
+        return S.gpsDenied;
+    }
+  }
+
+  Future<void> _begin() async {
+    if (!await _recorder.ensureGps()) {
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(_gpsMessage())));
+      }
+      return;
+    }
+    try {
+      // Setup screen has no sport picker yet — default to outdoor run.
+      await _recorder.start('lari');
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text('${S.errLoginFailed} ($e)')));
+      }
+      return;
+    }
+    setState(() {
+      _started = true;
+      _running = false;
+    });
+  }
+
+  void _pause() {
+    _recorder.pause();
+    setState(() => _running = true);
+  }
+
+  void _resume() {
+    _recorder.resume();
+    setState(() => _running = false);
+  }
+
+  Future<void> _finish() async {
+    final summary = await _recorder.finish();
+    if (mounted) {
+      setState(() {
+        _summary = summary;
+        _finished = true;
+      });
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
     if (_finished) {
-      return RunFinishScreen(onBack: () => setState(() => _finished = false));
+      return RunFinishScreen(
+        summary: _summary,
+        onBack: () => setState(() => _finished = false),
+      );
     }
     return Scaffold(
       body: Stack(
         children: [
-          Positioned.fill(
-            child: Container(
-              decoration: const BoxDecoration(
-                gradient: LinearGradient(
-                  colors: [Color(0xFFF1F5F9), Color(0xFFE2E8F0)],
-                  begin: Alignment.topCenter,
-                  end: Alignment.bottomCenter,
-                ),
+          // Live OSM map behind the stats; falls back to Jakarta when empty.
+          ListenableBuilder(
+            listenable: _recorder,
+            builder: (context, _) => Positioned.fill(
+              child: RouteMap(
+                points: _recorder.points,
+                height: double.infinity,
               ),
-              child: CustomPaint(painter: _RouteGridPainter()),
             ),
           ),
           SafeArea(
             // Fluid layout: hero number and action circles scale with width
             // (fluid 72→160 / 84→112); on expanded widths the route visual
             // and the stats/actions sit side by side in two panes.
-            child: LayoutBuilder(
-              builder: (context, c) {
-                final w = c.maxWidth;
-                final hero = fluid(w, 72, 160);
-                final circle = fluid(w, 84, 112);
-                Widget header = Padding(
-                  padding: const EdgeInsets.fromLTRB(32, 12, 32, 0),
-                  child: Row(
-                    children: [
-                      Container(
-                        width: 48,
-                        height: 48,
-                        decoration: const BoxDecoration(
-                          color: Colors.white,
-                          shape: BoxShape.circle,
-                          boxShadow: [
-                            BoxShadow(
-                              color: Color(0x0D000000),
-                              blurRadius: 2,
-                              offset: Offset(0, 1),
+            // ListenableBuilder repaints hero + stats on every GPS fix.
+            child: ListenableBuilder(
+              listenable: _recorder,
+              builder: (context, _) => LayoutBuilder(
+                builder: (context, c) {
+                  final w = c.maxWidth;
+                  final hero = fluid(w, 72, 160);
+                  final circle = fluid(w, 84, 112);
+                  Widget header = Padding(
+                    padding: const EdgeInsets.fromLTRB(32, 12, 32, 0),
+                    child: Row(
+                      children: [
+                        Container(
+                          width: 48,
+                          height: 48,
+                          decoration: const BoxDecoration(
+                            color: Colors.white,
+                            shape: BoxShape.circle,
+                            boxShadow: [
+                              BoxShadow(
+                                color: Color(0x0D000000),
+                                blurRadius: 2,
+                                offset: Offset(0, 1),
+                              ),
+                            ],
+                          ),
+                          child: IconButton(
+                            onPressed:
+                                widget.onBack ??
+                                () => Navigator.maybePop(context),
+                            icon: const Icon(
+                              Icons.arrow_back,
+                              color: PacerColors.ink,
                             ),
-                          ],
-                        ),
-                        child: IconButton(
-                          onPressed:
-                              widget.onBack ??
-                              () => Navigator.maybePop(context),
-                          icon: const Icon(
-                            Icons.arrow_back,
-                            color: PacerColors.ink,
                           ),
                         ),
-                      ),
-                      const Spacer(),
-                      Container(
-                        width: 83,
-                        height: 10,
-                        decoration: BoxDecoration(
-                          color: PacerColors.ink.withValues(alpha: 0.15),
-                          borderRadius: BorderRadius.circular(5),
+                        const Spacer(),
+                        Container(
+                          width: 83,
+                          height: 10,
+                          decoration: BoxDecoration(
+                            color: PacerColors.ink.withValues(alpha: 0.15),
+                            borderRadius: BorderRadius.circular(5),
+                          ),
                         ),
-                      ),
-                      const SizedBox(width: 24),
-                      const GpsPill(),
-                    ],
-                  ),
-                );
-                Widget heroBlock = Center(
-                  child: Column(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      Text('00,00', style: PacerText.giantNum(hero)),
-                      Text(
-                        S.distanceKm,
-                        style: const TextStyle(
-                          fontWeight: FontWeight.w300,
-                          fontSize: 15,
-                          color: Color(0x99000000),
+                        const SizedBox(width: 24),
+                        const GpsPill(),
+                      ],
+                    ),
+                  );
+                  Widget heroBlock = Center(
+                    child: Column(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Text(
+                          fmtKmNum(_recorder.distanceM),
+                          style: PacerText.giantNum(hero),
                         ),
-                      ),
-                    ],
-                  ),
-                );
-                Widget stats = Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 32),
-                  child: Row(
-                    children: [
-                      Expanded(
-                        child: TrackerStatColumn(
-                          avatarSize: 20,
-                          initials: 'A',
-                          value: "0'00''",
-                          label: S.avgPace,
+                        Text(
+                          S.distanceKm,
+                          style: const TextStyle(
+                            fontWeight: FontWeight.w300,
+                            fontSize: 15,
+                            color: Color(0x99000000),
+                          ),
                         ),
-                      ),
-                      Expanded(
-                        child: TrackerStatColumn(
-                          avatarSize: 25,
-                          initials: 'B',
-                          value: '00.00',
-                          label: S.duration,
+                      ],
+                    ),
+                  );
+                  final livePace = _recorder.paceSecPerKm;
+                  final paceText = livePace == null
+                      ? "0'00''"
+                      : "${livePace ~/ 60}'${(livePace % 60).round().toString().padLeft(2, '0')}\"";
+                  Widget stats = Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 32),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: TrackerStatColumn(
+                            avatarSize: 20,
+                            initials: 'A',
+                            value: paceText,
+                            label: S.avgPace,
+                          ),
                         ),
-                      ),
-                      Expanded(
-                        child: TrackerStatColumn(
-                          avatarSize: 30,
-                          initials: 'C',
-                          value: '0 kcal',
-                          label: S.calories,
+                        Expanded(
+                          child: TrackerStatColumn(
+                            avatarSize: 25,
+                            initials: 'B',
+                            value: fmtDurasi(_recorder.elapsed.inSeconds),
+                            label: S.duration,
+                          ),
                         ),
-                      ),
-                    ],
-                  ),
-                );
-                Widget actions = Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 32),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      MapCircleButton(size: circle),
-                      if (!_started)
-                        CircleAction(
-                          label: S.startLabel,
-                          bg: PacerColors.lime,
-                          fg: PacerColors.ink,
-                          size: circle,
-                          onTap: () => setState(() {
-                            _started = true;
-                            _running = false;
-                          }),
-                        )
-                      else if (!_running)
-                        CircleAction(
-                          label: S.pause,
-                          bg: PacerColors.lime,
-                          fg: PacerColors.ink,
-                          size: circle,
-                          onTap: () => setState(() => _running = true),
-                        )
-                      else
-                        CircleAction(
-                          label: S.continueLabel,
-                          bg: Colors.white,
-                          fg: PacerColors.ink,
-                          labelSize: 14,
-                          size: circle,
-                          onTap: () => setState(() => _running = false),
+                        Expanded(
+                          child: TrackerStatColumn(
+                            avatarSize: 30,
+                            initials: 'C',
+                            value: '0 kcal',
+                            label: S.calories,
+                          ),
                         ),
-                      if (_started && _running)
-                        CircleAction(
-                          label: S.finish,
-                          bg: PacerColors.ink,
-                          fg: PacerColors.lime,
-                          size: circle,
-                          onTap: () => setState(() => _finished = true),
-                        )
-                      else
-                        SizedBox(width: circle),
-                    ],
-                  ),
-                );
-                if (w >= Breakpoints.expanded) {
-                  // Two panes: route visual left, stats + actions right.
+                      ],
+                    ),
+                  );
+                  Widget actions = Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 32),
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        MapCircleButton(size: circle),
+                        if (!_started)
+                          CircleAction(
+                            label: S.startLabel,
+                            bg: PacerColors.lime,
+                            fg: PacerColors.ink,
+                            size: circle,
+                            onTap: _begin,
+                          )
+                        else if (!_running)
+                          CircleAction(
+                            label: S.pause,
+                            bg: PacerColors.lime,
+                            fg: PacerColors.ink,
+                            size: circle,
+                            onTap: _pause,
+                          )
+                        else
+                          CircleAction(
+                            label: S.continueLabel,
+                            bg: Colors.white,
+                            fg: PacerColors.ink,
+                            labelSize: 14,
+                            size: circle,
+                            onTap: _resume,
+                          ),
+                        if (_started && _running)
+                          CircleAction(
+                            label: S.finish,
+                            bg: PacerColors.ink,
+                            fg: PacerColors.lime,
+                            size: circle,
+                            onTap: _finish,
+                          )
+                        else
+                          SizedBox(width: circle),
+                      ],
+                    ),
+                  );
+                  if (w >= Breakpoints.expanded) {
+                    // Two panes: route visual left, stats + actions right.
+                    return Column(
+                      children: [
+                        header,
+                        Expanded(
+                          child: Row(
+                            children: [
+                              Expanded(flex: 3, child: heroBlock),
+                              SizedBox(width: fluid(w, 24, 64)),
+                              Expanded(
+                                flex: 2,
+                                child: Column(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    stats,
+                                    const SizedBox(height: 32),
+                                    actions,
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: 24),
+                      ],
+                    );
+                  }
                   return Column(
                     children: [
                       header,
-                      Expanded(
-                        child: Row(
-                          children: [
-                            Expanded(flex: 3, child: heroBlock),
-                            SizedBox(width: fluid(w, 24, 64)),
-                            Expanded(
-                              flex: 2,
-                              child: Column(
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: [
-                                  stats,
-                                  const SizedBox(height: 32),
-                                  actions,
-                                ],
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
+                      Expanded(child: heroBlock),
+                      stats,
+                      const SizedBox(height: 24),
+                      actions,
                       const SizedBox(height: 24),
                     ],
                   );
-                }
-                return Column(
-                  children: [
-                    header,
-                    Expanded(child: heroBlock),
-                    stats,
-                    const SizedBox(height: 24),
-                    actions,
-                    const SizedBox(height: 24),
-                  ],
-                );
-              },
+                },
+              ),
             ),
           ),
         ],
@@ -631,11 +704,19 @@ class RunFinishScreen extends StatelessWidget {
   final String? title;
   final bool isHistoryDetail;
   final VoidCallback? onBack;
+
+  /// Real totals from a just-finished recording; null shows mock values.
+  final RunSummary? summary;
+
+  /// Loads and draws the saved GPS route in history-detail mode.
+  final String? aktivitasId;
   const RunFinishScreen({
     super.key,
     this.title,
     this.isHistoryDetail = false,
     this.onBack,
+    this.summary,
+    this.aktivitasId,
   });
 
   @override
@@ -704,30 +785,54 @@ class RunFinishScreen extends StatelessWidget {
                   Container(height: 1, color: const Color(0x40000000)),
                   if (isHistoryDetail) ...[
                     const SizedBox(height: 28),
-                    Container(
-                      width: 161,
-                      height: 158,
-                      alignment: Alignment.center,
-                      decoration: BoxDecoration(
-                        border: Border.all(color: PacerColors.lime, width: 5),
-                        borderRadius: BorderRadius.circular(20),
-                      ),
-                      child: Container(
-                        width: 20,
-                        height: 20,
-                        decoration: const BoxDecoration(
-                          color: PacerColors.ink,
-                          shape: BoxShape.circle,
+                    if (aktivitasId != null)
+                      FutureBuilder<List<RutePoint>>(
+                        future: ActivityRepository().getRoute(aktivitasId!),
+                        builder: (context, snap) {
+                          final pts = snap.data;
+                          if (pts == null || pts.isEmpty) {
+                            return const MapPlaceholder(
+                              height: 185,
+                              label: 'Belum ada rute tersimpan',
+                            );
+                          }
+                          return RouteMap(
+                            points: [for (final p in pts) LatLng(p.lat, p.lng)],
+                            height: 185,
+                          );
+                        },
+                      )
+                    else
+                      Container(
+                        width: 161,
+                        height: 158,
+                        alignment: Alignment.center,
+                        decoration: BoxDecoration(
+                          border: Border.all(color: PacerColors.lime, width: 5),
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                        child: Container(
+                          width: 20,
+                          height: 20,
+                          decoration: const BoxDecoration(
+                            color: PacerColors.ink,
+                            shape: BoxShape.circle,
+                          ),
                         ),
                       ),
-                    ),
                     const SizedBox(height: 28),
                   ] else
                     const SizedBox(height: 216),
                   SummaryLimeCard(
-                    distance: isHistoryDetail ? '3,00 Km' : '0,00 Km',
-                    duration: isHistoryDetail ? '15.00' : '00.00',
-                    pace: isHistoryDetail ? "5'00''" : "0'00''",
+                    distance: summary != null
+                        ? fmtKm(summary!.jarakM)
+                        : (isHistoryDetail ? '3,00 Km' : '0,00 Km'),
+                    duration: summary != null
+                        ? fmtDurasi(summary!.durasiS)
+                        : (isHistoryDetail ? '15.00' : '00.00'),
+                    pace: summary != null
+                        ? fmtPace(summary!.durasiS, summary!.jarakM)
+                        : (isHistoryDetail ? "5'00''" : "0'00''"),
                   ),
                   const SizedBox(height: 18),
                   LayoutBuilder(
@@ -1361,6 +1466,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
           builder: (_) => RunFinishScreen(
             title: '${cap(a.jenis)} ${fmtDate(a.mulaiAt)}'.trim(),
             isHistoryDetail: true,
+            aktivitasId: a.id,
           ),
         ),
       ),
