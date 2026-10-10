@@ -206,6 +206,8 @@ class _CreateAccountScreenState extends State<CreateAccountScreen> {
         nama: nama,
       );
       widget.onSubmitted();
+    } on EmailConfirmationRequired catch (_) {
+      setState(() => _error = S.confirmEmail);
     } on AuthException catch (e) {
       setState(() => _error = e.message);
     } catch (_) {

@@ -29,6 +29,9 @@ class RunRecorder extends ChangeNotifier {
   String _jenis = 'lari';
   bool _started = false;
   bool _recording = false;
+
+  /// True between _begin and insert-return; blocks double-tap double rows.
+  bool _starting = false;
   double _distanceM = 0;
   String? _error;
 
@@ -62,18 +65,25 @@ class RunRecorder extends ChangeNotifier {
       return false;
     }
     _error = null;
+    notifyListeners();
     return true;
   }
 
   /// Creates the aktivitas row and starts listening. Throws [StateError]
-  /// when signed out (RLS owner insert needs auth.uid()).
+  /// when signed out (RLS owner insert needs auth.uid()). Reentrant-safe:
+  /// concurrent calls while the insert is in flight share one row.
   Future<void> start(String jenis) async {
-    if (_started) return;
+    if (_started || _starting) return;
     if (!aktivitasJenis.contains(jenis)) {
       throw ArgumentError.value(jenis, 'jenis', 'must be a known jenis');
     }
-    final activity = await _repo.createActivity(jenis: jenis);
-    _aktivitasId = activity.id;
+    _starting = true;
+    try {
+      final activity = await _repo.createActivity(jenis: jenis);
+      _aktivitasId = activity.id;
+    } finally {
+      _starting = false;
+    }
     _jenis = jenis;
     _fixes.clear();
     _distanceM = 0;
@@ -129,12 +139,37 @@ class RunRecorder extends ChangeNotifier {
       _Fix(
         lat: p.latitude,
         lng: p.longitude,
-        speed: p.speed,
+        // Unknown speed arrives as -1: persist null, never negative.
+        speed: p.speed < 0 ? null : p.speed,
         alt: p.altitude,
         at: p.timestamp,
       ),
     );
     notifyListeners();
+  }
+
+  /// Abandons an open recording: deletes the unfinished aktivitas row
+  /// (owner-delete is allowed) and resets. Returns false when nothing open.
+  Future<bool> discard() async {
+    final id = _aktivitasId;
+    _sub?.cancel();
+    _sub = null;
+    _clock.stop();
+    _clock.reset();
+    _recording = false;
+    _started = false;
+    _starting = false;
+    _aktivitasId = null;
+    _fixes.clear();
+    _distanceM = 0;
+    notifyListeners();
+    if (id == null) return false;
+    try {
+      await _repo.deleteActivity(id);
+      return true;
+    } catch (_) {
+      return false;
+    }
   }
 
   /// Persists everything and resets. Returns null when never started.
@@ -163,7 +198,12 @@ class RunRecorder extends ChangeNotifier {
           direkamAt: _fixes[i].at,
         ),
     ];
-    final finished = await _repo.finishActivity(id, jarakM: _distanceM);
+    final finished = await _repo.finishActivity(
+      id,
+      jarakM: _distanceM,
+      // Persist the pause-excluding clock, not DB wall-clock time.
+      durasiS: _clock.elapsed.inSeconds,
+    );
     if (points.isNotEmpty) await _repo.addRoutePoints(id, points);
     await _repo.upsertStatistik(
       periodeKey(now),
@@ -197,7 +237,7 @@ class RunRecorder extends ChangeNotifier {
 class _Fix {
   final double lat;
   final double lng;
-  final double speed;
+  final double? speed;
   final double alt;
   final DateTime at;
   const _Fix({

@@ -74,7 +74,7 @@ class _LoginScreenState extends State<LoginScreen> {
     setState(() => _busy = true);
     try {
       await AuthRepository().signIn(email: email, password: _password.text);
-      widget.onLoggedIn();
+      if (mounted) widget.onLoggedIn();
     } on AuthException catch (e) {
       setState(() => _error = e.message);
     } catch (_) {
@@ -380,6 +380,9 @@ class _RunTrackerScreenState extends State<RunTrackerScreen> {
   bool _finished = false;
   RunSummary? _summary;
 
+  /// True while start/finish network calls are in flight (double-tap guard).
+  bool _opBusy = false;
+
   @override
   void dispose() {
     _recorder.dispose();
@@ -396,27 +399,34 @@ class _RunTrackerScreenState extends State<RunTrackerScreen> {
   }
 
   Future<void> _begin() async {
-    if (!await _recorder.ensureGps()) {
-      if (mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text(_gpsMessage())));
-      }
-      return;
-    }
+    // Double-tap guard: recorder.start is reentrant-safe too, belt and braces.
+    if (_opBusy) return;
+    _opBusy = true;
     try {
-      // Setup screen has no sport picker yet — default to outdoor run.
-      await _recorder.start('lari');
-    } catch (e) {
-      if (mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text('${S.errLoginFailed} ($e)')));
+      if (!await _recorder.ensureGps()) {
+        if (mounted) {
+          ScaffoldMessenger.of(context)
+              .showSnackBar(SnackBar(content: Text(_gpsMessage())));
+        }
+        return;
       }
-      return;
+      try {
+        // Setup screen has no sport picker yet — default to outdoor run.
+        await _recorder.start('lari');
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context)
+              .showSnackBar(SnackBar(content: Text(S.errSaveFailed)));
+        }
+        return;
+      }
+      setState(() {
+        _started = true;
+        _running = false;
+      });
+    } finally {
+      _opBusy = false;
     }
-    setState(() {
-      _started = true;
-      _running = false;
-    });
   }
 
   void _pause() {
@@ -430,12 +440,21 @@ class _RunTrackerScreenState extends State<RunTrackerScreen> {
   }
 
   Future<void> _finish() async {
-    final summary = await _recorder.finish();
-    if (mounted) {
-      setState(() {
-        _summary = summary;
-        _finished = true;
-      });
+    // Offline at finish is the expected failure mode: stay on the tracker
+    // with the recording intact instead of red-screening.
+    try {
+      final summary = await _recorder.finish();
+      if (mounted) {
+        setState(() {
+          _summary = summary;
+          _finished = true;
+        });
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(S.errSaveFailed)));
+      }
     }
   }
 
@@ -447,214 +466,244 @@ class _RunTrackerScreenState extends State<RunTrackerScreen> {
         onBack: () => setState(() => _finished = false),
       );
     }
-    return Scaffold(
-      body: Stack(
-        children: [
-          // Live OSM map behind the stats; falls back to Jakarta when empty.
-          ListenableBuilder(
-            listenable: _recorder,
-            builder: (context, _) => Positioned.fill(
-              child: RouteMap(
-                points: _recorder.points,
-                height: double.infinity,
+    // Back mid-run asks to discard instead of leaking an unfinished row
+    // (dispose cancels GPS but never finishes).
+    return PopScope(
+      canPop: !_recorder.started,
+      onPopInvokedWithResult: (didPop, _) async {
+        if (didPop) return;
+        final discard = await showDialog<bool>(
+          context: context,
+          builder: (context) => AlertDialog(
+            title: Text(S.discardTitle),
+            content: Text(S.discardBody),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(false),
+                child: Text(S.back),
+              ),
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(true),
+                child: Text(S.discardYes),
+              ),
+            ],
+          ),
+        );
+        if (discard == true) {
+          await _recorder.discard();
+          if (context.mounted) Navigator.of(context).pop();
+        }
+      },
+      child: Scaffold(
+        body: Stack(
+          children: [
+            // Live OSM map behind the stats; falls back to Jakarta when empty.
+            ListenableBuilder(
+              listenable: _recorder,
+              builder: (context, _) => Positioned.fill(
+                child: RouteMap(
+                  points: _recorder.points,
+                  height: double.infinity,
+                ),
               ),
             ),
-          ),
-          SafeArea(
-            // Fluid layout: hero number and action circles scale with width
-            // (fluid 72→160 / 84→112); on expanded widths the route visual
-            // and the stats/actions sit side by side in two panes.
-            // ListenableBuilder repaints hero + stats on every GPS fix.
-            child: ListenableBuilder(
-              listenable: _recorder,
-              builder: (context, _) => LayoutBuilder(
-                builder: (context, c) {
-                  final w = c.maxWidth;
-                  final hero = fluid(w, 72, 160);
-                  final circle = fluid(w, 84, 112);
-                  Widget header = Padding(
-                    padding: const EdgeInsets.fromLTRB(32, 12, 32, 0),
-                    child: Row(
-                      children: [
-                        Container(
-                          width: 48,
-                          height: 48,
-                          decoration: const BoxDecoration(
-                            color: Colors.white,
-                            shape: BoxShape.circle,
-                            boxShadow: [
-                              BoxShadow(
-                                color: Color(0x0D000000),
-                                blurRadius: 2,
-                                offset: Offset(0, 1),
+            SafeArea(
+              // Fluid layout: hero number and action circles scale with width
+              // (fluid 72→160 / 84→112); on expanded widths the route visual
+              // and the stats/actions sit side by side in two panes.
+              // ListenableBuilder repaints hero + stats on every GPS fix.
+              child: ListenableBuilder(
+                listenable: _recorder,
+                builder: (context, _) => LayoutBuilder(
+                  builder: (context, c) {
+                    final w = c.maxWidth;
+                    final hero = fluid(w, 72, 160);
+                    final circle = fluid(w, 84, 112);
+                    Widget header = Padding(
+                      padding: const EdgeInsets.fromLTRB(32, 12, 32, 0),
+                      child: Row(
+                        children: [
+                          Container(
+                            width: 48,
+                            height: 48,
+                            decoration: const BoxDecoration(
+                              color: Colors.white,
+                              shape: BoxShape.circle,
+                              boxShadow: [
+                                BoxShadow(
+                                  color: Color(0x0D000000),
+                                  blurRadius: 2,
+                                  offset: Offset(0, 1),
+                                ),
+                              ],
+                            ),
+                            child: IconButton(
+                              onPressed:
+                                  widget.onBack ??
+                                  () => Navigator.maybePop(context),
+                              icon: const Icon(
+                                Icons.arrow_back,
+                                color: PacerColors.ink,
                               ),
-                            ],
-                          ),
-                          child: IconButton(
-                            onPressed:
-                                widget.onBack ??
-                                () => Navigator.maybePop(context),
-                            icon: const Icon(
-                              Icons.arrow_back,
-                              color: PacerColors.ink,
                             ),
                           ),
-                        ),
-                        const Spacer(),
-                        Container(
-                          width: 83,
-                          height: 10,
-                          decoration: BoxDecoration(
-                            color: PacerColors.ink.withValues(alpha: 0.15),
-                            borderRadius: BorderRadius.circular(5),
+                          const Spacer(),
+                          Container(
+                            width: 83,
+                            height: 10,
+                            decoration: BoxDecoration(
+                              color: PacerColors.ink.withValues(alpha: 0.15),
+                              borderRadius: BorderRadius.circular(5),
+                            ),
                           ),
-                        ),
-                        const SizedBox(width: 24),
-                        const GpsPill(),
-                      ],
-                    ),
-                  );
-                  Widget heroBlock = Center(
-                    child: Column(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Text(
-                          fmtKmNum(_recorder.distanceM),
-                          style: PacerText.giantNum(hero),
-                        ),
-                        Text(
-                          S.distanceKm,
-                          style: const TextStyle(
-                            fontWeight: FontWeight.w300,
-                            fontSize: 15,
-                            color: Color(0x99000000),
+                          const SizedBox(width: 24),
+                          const GpsPill(),
+                        ],
+                      ),
+                    );
+                    Widget heroBlock = Center(
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            fmtKmNum(_recorder.distanceM),
+                            style: PacerText.giantNum(hero),
                           ),
-                        ),
-                      ],
-                    ),
-                  );
-                  final livePace = _recorder.paceSecPerKm;
-                  final paceText = livePace == null
-                      ? "0'00''"
-                      : "${livePace ~/ 60}'${(livePace % 60).round().toString().padLeft(2, '0')}\"";
-                  Widget stats = Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 32),
-                    child: Row(
-                      children: [
-                        Expanded(
-                          child: TrackerStatColumn(
-                            avatarSize: 20,
-                            initials: 'A',
-                            value: paceText,
-                            label: S.avgPace,
+                          Text(
+                            S.distanceKm,
+                            style: const TextStyle(
+                              fontWeight: FontWeight.w300,
+                              fontSize: 15,
+                              color: Color(0x99000000),
+                            ),
                           ),
-                        ),
-                        Expanded(
-                          child: TrackerStatColumn(
-                            avatarSize: 25,
-                            initials: 'B',
-                            value: fmtDurasi(_recorder.elapsed.inSeconds),
-                            label: S.duration,
+                        ],
+                      ),
+                    );
+                    final livePace = _recorder.paceSecPerKm;
+                    final paceSecs = livePace?.round();
+                    final paceText = paceSecs == null
+                        ? "0'00''"
+                        : "${paceSecs ~/ 60}'${(paceSecs % 60).toString().padLeft(2, '0')}\"";
+                    Widget stats = Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 32),
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: TrackerStatColumn(
+                              avatarSize: 20,
+                              initials: 'A',
+                              value: paceText,
+                              label: S.avgPace,
+                            ),
                           ),
-                        ),
-                        Expanded(
-                          child: TrackerStatColumn(
-                            avatarSize: 30,
-                            initials: 'C',
-                            value: '0 kcal',
-                            label: S.calories,
+                          Expanded(
+                            child: TrackerStatColumn(
+                              avatarSize: 25,
+                              initials: 'B',
+                              value: fmtDurasi(_recorder.elapsed.inSeconds),
+                              label: S.duration,
+                            ),
                           ),
-                        ),
-                      ],
-                    ),
-                  );
-                  Widget actions = Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 32),
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                      children: [
-                        MapCircleButton(size: circle),
-                        if (!_started)
-                          CircleAction(
-                            label: S.startLabel,
-                            bg: PacerColors.lime,
-                            fg: PacerColors.ink,
-                            size: circle,
-                            onTap: _begin,
-                          )
-                        else if (!_running)
-                          CircleAction(
-                            label: S.pause,
-                            bg: PacerColors.lime,
-                            fg: PacerColors.ink,
-                            size: circle,
-                            onTap: _pause,
-                          )
-                        else
-                          CircleAction(
-                            label: S.continueLabel,
-                            bg: Colors.white,
-                            fg: PacerColors.ink,
-                            labelSize: 14,
-                            size: circle,
-                            onTap: _resume,
+                          Expanded(
+                            child: TrackerStatColumn(
+                              avatarSize: 30,
+                              initials: 'C',
+                              value: '0 kcal',
+                              label: S.calories,
+                            ),
                           ),
-                        if (_started && _running)
-                          CircleAction(
-                            label: S.finish,
-                            bg: PacerColors.ink,
-                            fg: PacerColors.lime,
-                            size: circle,
-                            onTap: _finish,
-                          )
-                        else
-                          SizedBox(width: circle),
-                      ],
-                    ),
-                  );
-                  if (w >= Breakpoints.expanded) {
-                    // Two panes: route visual left, stats + actions right.
+                        ],
+                      ),
+                    );
+                    Widget actions = Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 32),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          MapCircleButton(size: circle),
+                          if (!_started)
+                            CircleAction(
+                              label: S.startLabel,
+                              bg: PacerColors.lime,
+                              fg: PacerColors.ink,
+                              size: circle,
+                              onTap: _opBusy ? null : _begin,
+                            )
+                          else if (!_running)
+                            CircleAction(
+                              label: S.pause,
+                              bg: PacerColors.lime,
+                              fg: PacerColors.ink,
+                              size: circle,
+                              onTap: _pause,
+                            )
+                          else
+                            CircleAction(
+                              label: S.continueLabel,
+                              bg: Colors.white,
+                              fg: PacerColors.ink,
+                              labelSize: 14,
+                              size: circle,
+                              onTap: _resume,
+                            ),
+                          if (_started && _running)
+                            CircleAction(
+                              label: S.finish,
+                              bg: PacerColors.ink,
+                              fg: PacerColors.lime,
+                              size: circle,
+                              onTap: _finish,
+                            )
+                          else
+                            SizedBox(width: circle),
+                        ],
+                      ),
+                    );
+                    if (w >= Breakpoints.expanded) {
+                      // Two panes: route visual left, stats + actions right.
+                      return Column(
+                        children: [
+                          header,
+                          Expanded(
+                            child: Row(
+                              children: [
+                                Expanded(flex: 3, child: heroBlock),
+                                SizedBox(width: fluid(w, 24, 64)),
+                                Expanded(
+                                  flex: 2,
+                                  child: Column(
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    children: [
+                                      stats,
+                                      const SizedBox(height: 32),
+                                      actions,
+                                    ],
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          const SizedBox(height: 24),
+                        ],
+                      );
+                    }
                     return Column(
                       children: [
                         header,
-                        Expanded(
-                          child: Row(
-                            children: [
-                              Expanded(flex: 3, child: heroBlock),
-                              SizedBox(width: fluid(w, 24, 64)),
-                              Expanded(
-                                flex: 2,
-                                child: Column(
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  children: [
-                                    stats,
-                                    const SizedBox(height: 32),
-                                    actions,
-                                  ],
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
+                        Expanded(child: heroBlock),
+                        stats,
+                        const SizedBox(height: 24),
+                        actions,
                         const SizedBox(height: 24),
                       ],
                     );
-                  }
-                  return Column(
-                    children: [
-                      header,
-                      Expanded(child: heroBlock),
-                      stats,
-                      const SizedBox(height: 24),
-                      actions,
-                      const SizedBox(height: 24),
-                    ],
-                  );
-                },
+                  },
+                ),
               ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -1271,7 +1320,29 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
                 builder: (context, snap) {
                   final d = snap.data;
                   final rows = d?.rows;
-                  if (rows == null || rows.length < 3) return _demoBoard();
+                  // Demo/offline only: never render mock names for signed-in users.
+                  if (rows == null) return _demoBoard();
+                  if (rows.isEmpty) {
+                    return const Padding(
+                      padding: EdgeInsets.symmetric(vertical: 32),
+                      child: Text('Belum ada peringkat.'),
+                    );
+                  }
+                  // Live board with fewer than 3 rows: list without podium.
+                  if (rows.length < 3) {
+                    final uid = d?.uid;
+                    return Column(
+                      children: [
+                        for (var i = 0; i < rows.length; i++)
+                          _standingRow(
+                            rank: i + 1,
+                            name: rows[i].nama,
+                            value: rows[i].entry.nilai.toStringAsFixed(1),
+                            mine: rows[i].entry.userId == uid,
+                          ),
+                      ],
+                    );
+                  }
                   final uid = d?.uid;
                   final top = rows.take(3).toList();
                   final rest = rows.skip(3).toList();
@@ -1718,7 +1789,7 @@ class _ChallengeDetailSheetState extends State<ChallengeDetailSheet> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text('${S.errLoginFailed} ($e)')));
+            .showSnackBar(SnackBar(content: Text(S.errSaveFailed)));
       }
     } finally {
       if (mounted) setState(() => _busy = false);
@@ -1965,7 +2036,7 @@ class StatisticScreen extends StatefulWidget {
 }
 
 class _StatisticScreenState extends State<StatisticScreen> {
-  Future<({double km, double? paceSecPerKm, int seconds})?>? _future;
+  Future<({double km, int seconds})?>? _future;
 
   @override
   void initState() {
@@ -1981,18 +2052,14 @@ class _StatisticScreenState extends State<StatisticScreen> {
     }
   }
 
-  /// This week's distance + pace + time; null in demo or when empty.
-  Future<({double km, double? paceSecPerKm, int seconds})?> _load() async {
+  /// This week's distance + time; null in demo or when empty.
+  Future<({double km, int seconds})?> _load() async {
     try {
       if (_demo) return null;
       final repo = ActivityRepository();
       final stats = await repo.getStatistik(periodeKey(DateTime.now()));
       if (stats == null || stats.jarakM <= 0) return null;
-      return (
-        km: stats.jarakM / 1000,
-        paceSecPerKm: stats.waktuS / (stats.jarakM / 1000),
-        seconds: stats.waktuS,
-      );
+      return (km: stats.jarakM / 1000, seconds: stats.waktuS);
     } catch (_) {
       return null;
     }
@@ -2052,63 +2119,55 @@ class _StatisticScreenState extends State<StatisticScreen> {
                     height: 160,
                     label: 'Senayan Loop (3x) • Elevasi +45m',
                   );
-                  Widget total =
-                      FutureBuilder<
-                        ({double km, double? paceSecPerKm, int seconds})?
-                      >(
-                        future: _future,
-                        builder: (context, snap) {
-                          final d = snap.data;
-                          // Demo (or empty week): Figma mock values.
-                          if (d == null) return _demoTotal();
-                          return Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
+                  Widget total = FutureBuilder<({double km, int seconds})?>(
+                    future: _future,
+                    builder: (context, snap) {
+                      final d = snap.data;
+                      // Demo (or empty week): Figma mock values.
+                      if (d == null) return _demoTotal();
+                      return Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            fmtKmNum(d.km * 1000),
+                            style: const TextStyle(
+                              fontWeight: FontWeight.w700,
+                              fontSize: 32,
+                            ),
+                          ),
+                          Text(
+                            S.totalRunDistance,
+                            style: TextStyle(
+                              fontSize: 11,
+                              color: PacerColors.slate400,
+                            ),
+                          ),
+                          const SizedBox(height: 12),
+                          Row(
                             children: [
-                              Text(
-                                fmtKmNum(d.km * 1000),
-                                style: const TextStyle(
-                                  fontWeight: FontWeight.w700,
-                                  fontSize: 32,
+                              Expanded(
+                                child: _StatCard(
+                                  S.averagePace,
+                                  fmtPace(d.seconds, d.km * 1000),
+                                  '/km',
                                 ),
                               ),
-                              Text(
-                                S.totalRunDistance,
-                                style: TextStyle(
-                                  fontSize: 11,
-                                  color: PacerColors.slate400,
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: _StatCard(
+                                  S.totalTime,
+                                  fmtDurasi(d.seconds),
+                                  'menit',
                                 ),
                               ),
-                              const SizedBox(height: 12),
-                              Row(
-                                children: [
-                                  Expanded(
-                                    child: _StatCard(
-                                      S.averagePace,
-                                      d.paceSecPerKm == null
-                                          ? '–'
-                                          : fmtPace(
-                                              d.seconds,
-                                              d.km * 1000,
-                                            ).replaceAll('"', '"'),
-                                      '/km',
-                                    ),
-                                  ),
-                                  const SizedBox(width: 8),
-                                  Expanded(
-                                    child: _StatCard(
-                                      S.totalTime,
-                                      fmtDurasi(d.seconds),
-                                      'menit',
-                                    ),
-                                  ),
-                                  const SizedBox(width: 8),
-                                  const Expanded(child: _StatCard('–', '', '')),
-                                ],
-                              ),
+                              const SizedBox(width: 8),
+                              const Expanded(child: _StatCard('–', '', '')),
                             ],
-                          );
-                        },
+                          ),
+                        ],
                       );
+                    },
+                  );
                   if (screenSizeOf(c.maxWidth) == ScreenSize.compact) {
                     return Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -2459,7 +2518,15 @@ class _ChallengeListScreenState extends State<ChallengeListScreen> {
                 future: _future,
                 builder: (context, snap) {
                   final live = snap.data;
-                  final cards = (live == null || live.isEmpty)
+                  // Signed in with zero challenges: honest empty state,
+                  // never mock hero cards.
+                  if (live != null && live.isEmpty) {
+                    return const Padding(
+                      padding: EdgeInsets.symmetric(vertical: 32),
+                      child: Text('Belum ada challenge.'),
+                    );
+                  }
+                  final cards = (live == null)
                       ? const [
                           ('10', ' KM', '29-10-2009', null),
                           ('8', ' KM', '29-10-2009', null),
@@ -2695,12 +2762,10 @@ class _CreateClubScreenState extends State<CreateClubScreen> {
       }
     } on PostgrestException catch (e) {
       setState(
-        () => _error = e.code == '42501'
-            ? S.coachOnly
-            : '${S.errLoginFailed} (${e.message})',
+        () => _error = e.code == '42501' ? S.coachOnly : S.errSaveFailed,
       );
     } catch (_) {
-      setState(() => _error = S.errLoginFailed);
+      setState(() => _error = S.errSaveFailed);
     } finally {
       if (mounted) setState(() => _busy = false);
     }

@@ -20,15 +20,25 @@ class TeamRepository {
     return id;
   }
 
-  /// Creates a team and returns the mapped row.
+  /// Creates a team and returns the mapped row. Records the creator in
+  /// dibuat_oleh and joins them, so the team shows in myTeams()/Home
+  /// immediately instead of waiting for a manual join.
   ///
   /// RLS teams_insert gates this to coach/admin (is_coach_or_admin());
   /// regular users get a PostgrestException (42501) from the server.
   Future<Team> createTeam({required String nama, double? targetNilai}) async {
-    final payload = <String, dynamic>{'nama': nama};
+    final userId = _requireUserId();
+    final payload = <String, dynamic>{'nama': nama, 'dibuat_oleh': userId};
     if (targetNilai != null) payload['target_nilai'] = targetNilai;
     final row = await _client.from('teams').insert(payload).select().single();
-    return Team.fromJson(Map<String, dynamic>.from(row));
+    final team = Team.fromJson(Map<String, dynamic>.from(row));
+    try {
+      await joinTeam(team.id);
+    } catch (_) {
+      // Join is best-effort: if the gate above passed, this normally
+      // succeeds; the team exists either way.
+    }
+    return team;
   }
 
   /// Updates nama and/or target_nilai, returns the mapped row.

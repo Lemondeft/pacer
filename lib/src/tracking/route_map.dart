@@ -30,6 +30,12 @@ class _RouteMapState extends State<RouteMap> {
   }
 
   @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
     final pts = widget.points;
     return SizedBox(

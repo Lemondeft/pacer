@@ -42,6 +42,17 @@ class S {
   static String get errLoginFailed => _en
       ? 'Login failed. Check your details.'
       : 'Masuk gagal. Periksa data Anda.';
+  static String get errSaveFailed =>
+      _en ? 'Save failed. Try again.' : 'Gagal menyimpan. Coba lagi.';
+  static String get confirmEmail => _en
+      ? 'Account created — check your email to verify, then log in.'
+      : 'Akun dibuat — cek email untuk verifikasi, lalu masuk.';
+  static String get discardTitle =>
+      _en ? 'Discard recording?' : 'Buang rekaman?';
+  static String get discardBody => _en
+      ? 'The unfinished activity will be deleted.'
+      : 'Aktivitas yang belum selesai akan dihapus.';
+  static String get discardYes => _en ? 'Discard' : 'Buang';
 
   // Home
   static String get history => _en ? 'History' : 'Riwayat';

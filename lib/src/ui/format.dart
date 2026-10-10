@@ -17,11 +17,12 @@ String fmtDurasi(int? s) {
 }
 
 /// Min/km pace as 5'12" from seconds + meters; '' when not computable.
+/// Rounds total seconds first so seconds never print as 60.
 String fmtPace(int? durasiS, double? jarakM) {
   if (durasiS == null || jarakM == null || jarakM <= 0) return '';
-  final secPerKm = durasiS / (jarakM / 1000);
-  final m = secPerKm ~/ 60;
-  final s = (secPerKm % 60).round();
+  final totalS = (durasiS / (jarakM / 1000)).round();
+  final m = totalS ~/ 60;
+  final s = totalS % 60;
   return "$m'${s.toString().padLeft(2, '0')}\"";
 }
 

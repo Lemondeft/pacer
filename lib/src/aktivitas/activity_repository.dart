@@ -62,9 +62,18 @@ class ActivityRepository {
   }
 
   /// Finishes a workout: reads mulai_at, sets selesai_at = now and durasi_s (>= 0).
-  Future<Activity> finishActivity(String id, {double? jarakM}) async {
+  /// Pass [durasiS] to persist a client-measured duration (e.g. excluding
+  /// pauses) instead of wall-clock DB time; must be >= 0.
+  Future<Activity> finishActivity(
+    String id, {
+    double? jarakM,
+    int? durasiS,
+  }) async {
     if (jarakM != null && jarakM < 0) {
       throw ArgumentError.value(jarakM, 'jarakM', 'must be >= 0');
+    }
+    if (durasiS != null && durasiS < 0) {
+      throw ArgumentError.value(durasiS, 'durasiS', 'must be >= 0');
     }
     final row = await _client
         .from('aktivitas')
@@ -81,7 +90,7 @@ class ActivityRepository {
     final selesai = DateTime.now();
     final update = <String, dynamic>{
       'selesai_at': selesai.toUtc().toIso8601String(),
-      'durasi_s': computeDurasiS(DateTime.parse(mulaiRaw), selesai),
+      'durasi_s': durasiS ?? computeDurasiS(DateTime.parse(mulaiRaw), selesai),
     };
     if (jarakM != null) update['jarak_m'] = jarakM;
     final updated = await _client
@@ -91,6 +100,15 @@ class ActivityRepository {
         .select()
         .single();
     return Activity.fromJson(Map<String, dynamic>.from(updated));
+  }
+
+  /// Deletes one aktivitas (its rute_points cascade). Owner-only via RLS.
+  Future<void> deleteActivity(String id) async {
+    await _client
+        .from('aktivitas')
+        .delete()
+        .eq('id', id)
+        .eq('user_id', _requireUserId());
   }
 
   /// Riwayat: newest workouts first (mulai_at desc), capped at [limit].
