@@ -129,8 +129,30 @@ class _RouteMapState extends State<RouteMap> {
                     ],
                   ),
                 // Attribution is legally required for OSM + CARTO tiles.
-                SimpleAttributionWidget(
-                  source: const Text('© OpenStreetMap contributors © CARTO'),
+                // Compact custom chip: the stock widget overflows narrow maps
+                // (RenderFlex +50px, see device log).
+                Positioned(
+                  right: 6,
+                  bottom: 6,
+                  child: ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 220),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 3,
+                      ),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withValues(alpha: 0.78),
+                        borderRadius: BorderRadius.circular(4),
+                      ),
+                      child: const Text(
+                        '© OpenStreetMap contributors © CARTO',
+                        style: TextStyle(fontSize: 10, color: Colors.black87),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                  ),
                 ),
               ],
             ),
