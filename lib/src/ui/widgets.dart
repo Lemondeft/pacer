@@ -1208,22 +1208,26 @@ class MapPlaceholder extends StatelessWidget {
 class PacerEmptyState extends StatelessWidget {
   final String message;
   final IconData icon;
+
+  /// Compact variant for fixed-height slots (e.g. the 150px home carousel).
+  final bool compact;
   const PacerEmptyState(
     this.message, {
     super.key,
     this.icon = Icons.inbox_outlined,
+    this.compact = false,
   });
 
   @override
   Widget build(BuildContext context) {
     return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 48, horizontal: 24),
+      padding: EdgeInsets.symmetric(vertical: compact ? 8 : 48, horizontal: 24),
       child: Center(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(icon, size: 32, color: PacerColors.slate200),
-            const SizedBox(height: 12),
+            Icon(icon, size: compact ? 20 : 32, color: PacerColors.slate200),
+            SizedBox(height: compact ? 6 : 12),
             Text(
               message,
               style: PacerText.emptyBody,

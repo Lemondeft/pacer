@@ -435,18 +435,8 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
         ),
         const SizedBox(height: 8),
-        if (activities == null) ...[
-          const RunSessionCard(),
-          const SizedBox(height: 16),
-          const RunSessionCard(
-            title: 'Sunday Morning Run',
-            date: '14/7/2024',
-            time: '1.00.00',
-            pace: "4'00''",
-            distance: '15,00 Km',
-            limePill: true,
-          ),
-        ] else if (activities.isEmpty)
+        // No mocks: offline and empty both show the empty state.
+        if (activities == null || activities.isEmpty)
           const PacerEmptyState(
             'Belum ada aktivitas. Mulai lari pertamamu!',
             icon: Icons.directions_run_outlined,
@@ -484,22 +474,13 @@ class _HomeScreenState extends State<HomeScreen> {
                 scrollDirection: Axis.horizontal,
                 padding: EdgeInsets.zero,
                 children: [
-                  if (teams == null) ...[
-                    TeamCard(
-                      name: 'JakBar Pacer',
-                      location: 'Jakarta Barat, Indonesia',
-                      width: cardW,
-                    ),
-                    const SizedBox(width: 19),
-                    TeamCard(
-                      name: 'Tangerang Runners',
-                      location: 'Tangerang, Indonesia',
-                      width: cardW,
-                    ),
-                  ] else if (teams.isEmpty)
+                  // No mocks: offline and empty both show the empty state.
+                  // Compact variant: the carousel is only 150px tall.
+                  if (teams == null || teams.isEmpty)
                     const PacerEmptyState(
                       'Belum gabung tim mana pun.',
                       icon: Icons.groups_outlined,
+                      compact: true,
                     )
                   else
                     for (var i = 0; i < teams.length; i++) ...[

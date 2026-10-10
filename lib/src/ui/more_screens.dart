@@ -1008,18 +1008,6 @@ class _TeamsScreenState extends State<TeamsScreen> {
     );
   }
 
-  Widget _demoGrid() {
-    return _teamGrid(const [
-      TeamCard(name: 'JakBar Pacer', location: 'Jakarta Barat, Indonesia'),
-      TeamCard(name: 'Tangerang Runners', location: 'Tangerang, Indonesia'),
-      TeamCard(
-        name: 'Jakarta Night Striders',
-        location: 'GBK Senayan • Gate 5',
-      ),
-      TeamCard(name: 'Senayan Squad', location: 'Jakarta Selatan, Indonesia'),
-    ]);
-  }
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -1051,18 +1039,24 @@ class _TeamsScreenState extends State<TeamsScreen> {
                             t.nama.toLowerCase().contains(_query.toLowerCase()),
                       )
                       .toList();
-                  if (!live) {
-                    return _demoGrid();
-                  }
-                  if (filtered.isEmpty) {
-                    return const PacerEmptyState(
-                      'Tidak ada tim yang cocok.',
-                      icon: Icons.search_off_outlined,
-                    );
-                  }
-                  return _teamGrid([
-                    for (final t in filtered) TeamCard(name: t.nama),
-                  ]);
+                  // Grid shell always renders (stable layout); honest empty
+                  // text underneath when there is nothing to show.
+                  final emptyMsg = !live || _query.isEmpty
+                      ? 'Belum ada tim.'
+                      : 'Tidak ada tim yang cocok.';
+                  final emptyIcon = !live || _query.isEmpty
+                      ? Icons.groups_outlined
+                      : Icons.search_off_outlined;
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      _teamGrid([
+                        for (final t in filtered) TeamCard(name: t.nama),
+                      ]),
+                      if (filtered.isEmpty)
+                        PacerEmptyState(emptyMsg, icon: emptyIcon),
+                    ],
+                  );
                 },
               ),
               const SizedBox(height: 16),
@@ -1234,14 +1228,6 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
     }
   }
 
-  static const _rows = [
-    ('Reza Pratama', '36.4 Km'),
-    ('Indra Wijaya', '34.1 Km'),
-    ('Siti Rahma (You)', '31.0 Km'),
-    ('Budi Santoso', '28.5 Km'),
-    ('Clara Angelica', '25.9 Km'),
-  ];
-
   Widget _standingRow({
     required int rank,
     required String name,
@@ -1285,51 +1271,6 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
   }
 
   /// Figma mock board (demo mode or fewer than 3 ranked rows).
-  Widget _demoBoard() {
-    return Column(
-      children: [
-        Row(
-          crossAxisAlignment: CrossAxisAlignment.end,
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            _podium(
-              'A. Nugroho',
-              '42.1',
-              68,
-              PacerColors.podiumGray,
-              rank: 2,
-              medal: PacerColors.medalSilver,
-            ),
-            _podium(
-              'D. Kusuma',
-              '48.2',
-              89,
-              PacerColors.medalGold,
-              rank: 1,
-              medal: PacerColors.medalGold,
-            ),
-            _podium(
-              'F. Sanjaya',
-              '39.5',
-              63,
-              PacerColors.medalBronze,
-              rank: 3,
-              medal: PacerColors.medalBronze,
-            ),
-          ],
-        ),
-        const SizedBox(height: 16),
-        for (var i = 0; i < _rows.length; i++)
-          _standingRow(
-            rank: i + 4,
-            name: _rows[i].$1,
-            value: _rows[i].$2,
-            mine: _rows[i].$1.contains('(You)'),
-          ),
-      ],
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -1347,9 +1288,8 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
                 builder: (context, snap) {
                   final d = snap.data;
                   final rows = d?.rows;
-                  // Demo/offline only: never render mock names for signed-in users.
-                  if (rows == null) return _demoBoard();
-                  if (rows.isEmpty) {
+                  // No mocks: offline and empty both show the empty state.
+                  if (rows == null || rows.isEmpty) {
                     return const PacerEmptyState(
                       'Belum ada peringkat.',
                       icon: Icons.leaderboard_outlined,
@@ -1579,6 +1519,13 @@ class _HistoryScreenState extends State<HistoryScreen> {
             title: '${cap(a.jenis)} ${fmtDate(a.mulaiAt)}'.trim(),
             isHistoryDetail: true,
             aktivitasId: a.id,
+            summary: RunSummary(
+              aktivitasId: a.id,
+              jenis: a.jenis,
+              jarakM: a.jarakM ?? 0,
+              durasiS: a.durasiS ?? 0,
+              pointCount: 0,
+            ),
           ),
         ),
       ),
@@ -1593,86 +1540,6 @@ class _HistoryScreenState extends State<HistoryScreen> {
   }
 
   /// Figma mock hero + cards (demo mode, loading, or error).
-  Widget _demoHistory(double w) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        // Hero scales down instead of overflowing at 360px widths.
-        SizedBox(
-          width: double.infinity,
-          child: FittedBox(
-            fit: BoxFit.scaleDown,
-            alignment: Alignment.centerLeft,
-            child: Row(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.end,
-              children: [
-                // Hero number scales with width (fluid 88→140).
-                Text('46,00', style: PacerText.giantNum(fluid(w, 88, 140))),
-                const Text(
-                  'Kilometer',
-                  style: TextStyle(fontWeight: FontWeight.w300, fontSize: 24),
-                ),
-              ],
-            ),
-          ),
-        ),
-        const SizedBox(height: 8),
-        // Wrap instead of a fixed Row so the summary never overflows.
-        const Wrap(
-          crossAxisAlignment: WrapCrossAlignment.center,
-          spacing: 12,
-          children: [
-            Text(
-              '4 Run',
-              style: TextStyle(fontWeight: FontWeight.w500, fontSize: 24),
-            ),
-            Text(
-              '5,50 Average Pace',
-              style: TextStyle(fontWeight: FontWeight.w300, fontSize: 20),
-            ),
-            Text(
-              '4.10.00 Time',
-              style: TextStyle(fontWeight: FontWeight.w300, fontSize: 20),
-            ),
-          ],
-        ),
-        const SizedBox(height: 12),
-        _historyGrid(context, [
-          for (final card in const [
-            RunSessionCard(title: 'Monday : 07.30'),
-            RunSessionCard(
-              title: 'Monday : 07.30',
-              date: '8/7/2024',
-              time: '28.40',
-              pace: "6'10''",
-              distance: '5,00 Km',
-              limePill: true,
-            ),
-            RunSessionCard(
-              title: 'Monday : 07.30',
-              date: '1/7/2024',
-              time: '1.00.00',
-              pace: "4'00''",
-              distance: '15,00 Km',
-            ),
-          ])
-            GestureDetector(
-              onTap: () => Navigator.of(context).push(
-                MaterialPageRoute(
-                  builder: (_) => const RunFinishScreen(
-                    title: 'Monday Morning Run',
-                    isHistoryDetail: true,
-                  ),
-                ),
-              ),
-              child: card,
-            ),
-        ]),
-      ],
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     final w = MediaQuery.sizeOf(context).width;
@@ -1689,19 +1556,16 @@ class _HistoryScreenState extends State<HistoryScreen> {
                 future: _future,
                 builder: (context, snap) {
                   final activities = snap.data;
-                  // Demo (or still loading / error): Figma mock content.
-                  if (_demo || activities == null) return _demoHistory(w);
-                  if (activities.isEmpty) {
-                    return const PacerEmptyState(
-                      'Belum ada aktivitas. Mulai lari pertamamu!',
-                      icon: Icons.directions_run_outlined,
-                    );
-                  }
-                  final totalKm = activities.fold<double>(
+                  // Grid shell always renders (stable layout); zeros + empty
+                  // text when offline or empty — never mock content.
+                  final list = (!_demo && activities != null)
+                      ? activities
+                      : const <Activity>[];
+                  final totalKm = list.fold<double>(
                     0,
                     (s, a) => s + (a.jarakM ?? 0),
                   );
-                  final totalS = activities.fold<int>(
+                  final totalS = list.fold<int>(
                     0,
                     (s, a) => s + (a.durasiS ?? 0),
                   );
@@ -1741,14 +1605,16 @@ class _HistoryScreenState extends State<HistoryScreen> {
                         spacing: 12,
                         children: [
                           Text(
-                            '${activities.length} Run',
+                            '${list.length} Run',
                             style: const TextStyle(
                               fontWeight: FontWeight.w500,
                               fontSize: 24,
                             ),
                           ),
                           Text(
-                            '${fmtPace(totalS, totalKm)} Average Pace',
+                            list.isEmpty
+                                ? '– Average Pace'
+                                : '${fmtPace(totalS, totalKm)} Average Pace',
                             style: const TextStyle(
                               fontWeight: FontWeight.w300,
                               fontSize: 20,
@@ -1765,8 +1631,13 @@ class _HistoryScreenState extends State<HistoryScreen> {
                       ),
                       const SizedBox(height: 12),
                       _historyGrid(context, [
-                        for (final a in activities) _activityCard(a),
+                        for (final a in list) _activityCard(a),
                       ]),
+                      if (list.isEmpty)
+                        const PacerEmptyState(
+                          'Belum ada aktivitas. Mulai lari pertamamu!',
+                          icon: Icons.directions_run_outlined,
+                        ),
                     ],
                   );
                 },
@@ -2162,39 +2033,6 @@ class _StatisticScreenState extends State<StatisticScreen> {
   }
 
   /// Figma mock totals (demo mode or empty week).
-  Widget _demoTotal() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const Text(
-          '3,00 Km',
-          style: TextStyle(fontWeight: FontWeight.w700, fontSize: 32),
-        ),
-        Text(
-          S.totalRunDistance,
-          style: TextStyle(fontSize: 11, color: PacerColors.slate500),
-        ),
-        Text(
-          S.targetAchieved,
-          style: TextStyle(
-            color: PacerColors.chipGreen,
-            fontWeight: FontWeight.w600,
-          ),
-        ),
-        const SizedBox(height: 16),
-        Row(
-          children: [
-            Expanded(child: _StatCard(S.averagePace, "5'00\"", '/km')),
-            const SizedBox(width: 8),
-            Expanded(child: _StatCard(S.totalTime, '15.00', 'menit')),
-            const SizedBox(width: 8),
-            Expanded(child: _StatCard(S.activeCalories, '542', 'kkal')),
-          ],
-        ),
-      ],
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -2211,16 +2049,53 @@ class _StatisticScreenState extends State<StatisticScreen> {
               const SizedBox(height: 12),
               LayoutBuilder(
                 builder: (context, c) {
-                  Widget map = const MapPlaceholder(
-                    height: 160,
-                    label: 'Senayan Loop (3x) • Elevasi +45m',
-                  );
+                  Widget map = const MapPlaceholder(height: 160);
                   Widget total = FutureBuilder<({double km, int seconds})?>(
                     future: _future,
                     builder: (context, snap) {
                       final d = snap.data;
-                      // Demo (or empty week): Figma mock values.
-                      if (d == null) return _demoTotal();
+                      // No mocks: offline and empty week show zeros.
+                      if (d == null) {
+                        return Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text(
+                              '0,00 Km',
+                              style: TextStyle(
+                                fontWeight: FontWeight.w700,
+                                fontSize: 32,
+                              ),
+                            ),
+                            Text(
+                              S.totalRunDistance,
+                              style: TextStyle(
+                                fontSize: 11,
+                                color: PacerColors.slate500,
+                              ),
+                            ),
+                            const SizedBox(height: 12),
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: _StatCard(S.averagePace, '–', '/km'),
+                                ),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: _StatCard(S.totalTime, '–', 'menit'),
+                                ),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: _StatCard(
+                                    S.activeCalories,
+                                    '–',
+                                    'kkal',
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ],
+                        );
+                      }
                       return Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
@@ -2449,29 +2324,10 @@ class _StreaksScreenState extends State<StreaksScreen> {
   }
 
   /// Figma mock strip (demo mode or no streak yet).
-  Widget _demoWeek() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const Text(
-          'MINGGU INI • 5 dari 7 Hari',
-          style: TextStyle(
-            color: PacerColors.streakBlue,
-            fontWeight: FontWeight.w600,
-            fontSize: 12,
-          ),
-        ),
-        const SizedBox(height: 12),
-        _weekRow(const [true, true, true, true, false, false, false], 4),
-        const SizedBox(height: 16),
-        const StreakCard(),
-      ],
-    );
-  }
-
   @override
   Widget build(BuildContext context) {
     return Scaffold(
+      backgroundColor: Colors.white,
       body: SafeArea(
         child: ResponsiveScroll(
           maxWidth: 720,
@@ -2487,8 +2343,34 @@ class _StreaksScreenState extends State<StreaksScreen> {
                 future: _future,
                 builder: (context, snap) {
                   final d = snap.data;
-                  // Demo (or no streak yet): Figma mock strip.
-                  if (d == null) return _demoWeek();
+                  // No mocks: offline and no streak show an empty week.
+                  if (d == null) {
+                    return Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          'MINGGU INI • 0 dari 7 Hari',
+                          style: TextStyle(
+                            color: PacerColors.streakBlue,
+                            fontWeight: FontWeight.w600,
+                            fontSize: 12,
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        _weekRow(const [
+                          false,
+                          false,
+                          false,
+                          false,
+                          false,
+                          false,
+                          false,
+                        ], DateTime.now().weekday - 1),
+                        const SizedBox(height: 16),
+                        const StreakCard(count: 0),
+                      ],
+                    );
+                  }
                   final done = _doneWeek(d.count, d.terakhir);
                   final todayIdx = DateTime.now().weekday - 1;
                   final doneThisWeek = [
@@ -2627,23 +2509,17 @@ class _ChallengeListScreenState extends State<ChallengeListScreen> {
                 future: _future,
                 builder: (context, snap) {
                   final live = snap.data;
-                  // Signed in with zero challenges: honest empty state,
-                  // never mock hero cards.
-                  if (live != null && live.isEmpty) {
+                  // No mocks: offline and empty both show the empty state.
+                  if (live == null || live.isEmpty) {
                     return const PacerEmptyState(
                       'Belum ada challenge.',
                       icon: Icons.emoji_events_outlined,
                     );
                   }
-                  final cards = (live == null)
-                      ? const [
-                          ('10', ' KM', '29-10-2009', null),
-                          ('8', ' KM', '29-10-2009', null),
-                        ]
-                      : [
-                          for (final c in live)
-                            (_heroValue(c), _heroUnit(c), _heroDate(c), c.id),
-                        ];
+                  final cards = [
+                    for (final c in live)
+                      (_heroValue(c), _heroUnit(c), _heroDate(c), c.id),
+                  ];
                   return Column(
                     children: [
                       for (final c in cards)
