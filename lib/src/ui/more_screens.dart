@@ -1,12 +1,21 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:pacer/core/responsive/responsive.dart';
+import 'package:pacer/src/aktivitas/activity_model.dart';
+import 'package:pacer/src/aktivitas/activity_repository.dart';
 import 'package:pacer/src/auth/auth_repository.dart';
+import 'package:pacer/src/challenge/challenge_model.dart';
+import 'package:pacer/src/challenge/challenge_repository.dart';
+import 'package:pacer/src/leaderboard/leaderboard_model.dart';
+import 'package:pacer/src/leaderboard/leaderboard_repository.dart';
+import 'package:pacer/src/teams/team_model.dart';
+import 'package:pacer/src/teams/team_repository.dart';
 import 'package:pacer/supabase.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'app_strings.dart';
 import 'app_theme.dart';
+import 'format.dart';
 import 'screens.dart';
 import 'widgets.dart';
 
@@ -762,8 +771,70 @@ class RunFinishScreen extends StatelessWidget {
 }
 
 /// Figma CLUBS list: Outfit 400/32 title + 358 search + 329x133 cards + buat-teams pill.
-class TeamsScreen extends StatelessWidget {
+/// Live team list when signed in (search filters by name); Figma mock cards
+/// in demo mode.
+class TeamsScreen extends StatefulWidget {
   const TeamsScreen({super.key});
+
+  @override
+  State<TeamsScreen> createState() => _TeamsScreenState();
+}
+
+class _TeamsScreenState extends State<TeamsScreen> {
+  Future<List<Team>>? _future;
+  String _query = '';
+
+  @override
+  void initState() {
+    super.initState();
+    _future = _load();
+  }
+
+  bool get _backend {
+    try {
+      supa;
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  Future<List<Team>> _load() async {
+    if (!_backend) return const [];
+    if (supa.auth.currentUser == null) return const [];
+    try {
+      return await TeamRepository().listTeams();
+    } catch (_) {
+      return const [];
+    }
+  }
+
+  /// Empty in demo/offline (mock cards show); null only before first frame.
+  Widget _teamGrid(List<Widget> children) {
+    return GridView(
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+        maxCrossAxisExtent: 360,
+        mainAxisSpacing: 12,
+        crossAxisSpacing: 12,
+        mainAxisExtent: 140,
+      ),
+      children: children,
+    );
+  }
+
+  Widget _demoGrid() {
+    return _teamGrid(const [
+      TeamCard(name: 'JakBar Pacer', location: 'Jakarta Barat, Indonesia'),
+      TeamCard(name: 'Tangerang Runners', location: 'Tangerang, Indonesia'),
+      TeamCard(
+        name: 'Jakarta Night Striders',
+        location: 'GBK Senayan • Gate 5',
+      ),
+      TeamCard(name: 'Senayan Squad', location: 'Jakarta Selatan, Indonesia'),
+    ]);
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -777,38 +848,38 @@ class TeamsScreen extends StatelessWidget {
             children: [
               Text(S.findTeamsNearby, style: const TextStyle(fontSize: 32)),
               const SizedBox(height: 12),
-              const SearchField(),
+              SearchField(onChanged: (v) => setState(() => _query = v)),
               const SizedBox(height: 16),
               // Team cards flow into a grid: 1 column on phones, 2 on
               // tablets, 3+ on desktop — driven by max extent, never a
               // hardcoded count.
-              GridView(
-                shrinkWrap: true,
-                physics: const NeverScrollableScrollPhysics(),
-                gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-                  maxCrossAxisExtent: 360,
-                  mainAxisSpacing: 12,
-                  crossAxisSpacing: 12,
-                  mainAxisExtent: 140,
-                ),
-                children: const [
-                  TeamCard(
-                    name: 'JakBar Pacer',
-                    location: 'Jakarta Barat, Indonesia',
-                  ),
-                  TeamCard(
-                    name: 'Tangerang Runners',
-                    location: 'Tangerang, Indonesia',
-                  ),
-                  TeamCard(
-                    name: 'Jakarta Night Striders',
-                    location: 'GBK Senayan • Gate 5',
-                  ),
-                  TeamCard(
-                    name: 'Senayan Squad',
-                    location: 'Jakarta Selatan, Indonesia',
-                  ),
-                ],
+              FutureBuilder<List<Team>>(
+                future: _future,
+                builder: (context, snap) {
+                  final teams = snap.data;
+                  final live =
+                      teams != null &&
+                      (_backend && supa.auth.currentUser != null);
+                  final filtered = (teams ?? const <Team>[])
+                      .where(
+                        (t) =>
+                            _query.isEmpty ||
+                            t.nama.toLowerCase().contains(_query.toLowerCase()),
+                      )
+                      .toList();
+                  if (!live) {
+                    return _demoGrid();
+                  }
+                  if (filtered.isEmpty) {
+                    return const Padding(
+                      padding: EdgeInsets.symmetric(vertical: 32),
+                      child: Text('Tidak ada tim yang cocok.'),
+                    );
+                  }
+                  return _teamGrid([
+                    for (final t in filtered) TeamCard(name: t.nama),
+                  ]);
+                },
               ),
               const SizedBox(height: 16),
               GestureDetector(
@@ -923,8 +994,55 @@ class _JoinButton extends StatelessWidget {
 }
 
 /// Figma leaderboard podium page + rows 4-8 with lime-highlighted you-row.
-class LeaderboardScreen extends StatelessWidget {
+/// Live standings (first board) when signed in; Figma mock rows in demo mode.
+/// Your own row is highlighted by user id, never by name matching.
+class LeaderboardScreen extends StatefulWidget {
   const LeaderboardScreen({super.key});
+
+  @override
+  State<LeaderboardScreen> createState() => _LeaderboardScreenState();
+}
+
+/// Live board data; [rows] null in demo mode (mock rows show).
+class _BoardData {
+  final String? boardNama;
+  final List<({Peringkat entry, String nama})>? rows;
+  final String? uid;
+  const _BoardData({this.boardNama, this.rows, this.uid});
+}
+
+class _LeaderboardScreenState extends State<LeaderboardScreen> {
+  Future<_BoardData>? _future;
+
+  @override
+  void initState() {
+    super.initState();
+    _future = _load();
+  }
+
+  bool get _backend {
+    try {
+      supa;
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  Future<_BoardData> _load() async {
+    try {
+      if (!_backend) return const _BoardData();
+      final uid = supa.auth.currentUser?.id;
+      if (uid == null) return const _BoardData();
+      final repo = LeaderboardRepository();
+      final boards = await repo.listLeaderboards(limit: 1);
+      if (boards.isEmpty) return const _BoardData();
+      final rows = await repo.getPeringkatWithNames(boards.first.id);
+      return _BoardData(boardNama: boards.first.nama, rows: rows, uid: uid);
+    } catch (_) {
+      return const _BoardData();
+    }
+  }
 
   static const _rows = [
     ('Reza Pratama', '36.4 Km'),
@@ -933,6 +1051,89 @@ class LeaderboardScreen extends StatelessWidget {
     ('Budi Santoso', '28.5 Km'),
     ('Clara Angelica', '25.9 Km'),
   ];
+
+  Widget _standingRow({
+    required int rank,
+    required String name,
+    required String value,
+    required bool mine,
+  }) {
+    return Container(
+      width: double.infinity,
+      margin: const EdgeInsets.only(bottom: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 16),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: mine ? PacerColors.lime : PacerColors.border),
+        color: mine ? PacerColors.lime.withValues(alpha: 0.1) : Colors.white,
+      ),
+      child: Row(
+        children: [
+          Text(
+            '$rank',
+            style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 16),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Text(
+              name,
+              style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 16),
+            ),
+          ),
+          Text(
+            value,
+            style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 16),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// Figma mock board (demo mode or fewer than 3 ranked rows).
+  Widget _demoBoard() {
+    return Column(
+      children: [
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.end,
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            _podium(
+              'A. Nugroho',
+              '42.1',
+              68,
+              PacerColors.podiumGray,
+              rank: 2,
+              medal: PacerColors.medalSilver,
+            ),
+            _podium(
+              'D. Kusuma',
+              '48.2',
+              89,
+              PacerColors.medalGold,
+              rank: 1,
+              medal: PacerColors.medalGold,
+            ),
+            _podium(
+              'F. Sanjaya',
+              '39.5',
+              63,
+              PacerColors.medalBronze,
+              rank: 3,
+              medal: PacerColors.medalBronze,
+            ),
+          ],
+        ),
+        const SizedBox(height: 16),
+        for (var i = 0; i < _rows.length; i++)
+          _standingRow(
+            rank: i + 4,
+            name: _rows[i].$1,
+            value: _rows[i].$2,
+            mine: _rows[i].$1.contains('(You)'),
+          ),
+      ],
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -946,85 +1147,60 @@ class LeaderboardScreen extends StatelessWidget {
             children: [
               Text(S.teamsLeaderboard, style: PacerText.pageTitle),
               const SizedBox(height: 16),
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.end,
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  _podium(
-                    'A. Nugroho',
-                    '42.1',
-                    68,
-                    PacerColors.podiumGray,
-                    rank: 2,
-                    medal: PacerColors.medalSilver,
-                  ),
-                  _podium(
-                    'D. Kusuma',
-                    '48.2',
-                    89,
-                    PacerColors.medalGold,
-                    rank: 1,
-                    medal: PacerColors.medalGold,
-                  ),
-                  _podium(
-                    'F. Sanjaya',
-                    '39.5',
-                    63,
-                    PacerColors.medalBronze,
-                    rank: 3,
-                    medal: PacerColors.medalBronze,
-                  ),
-                ],
-              ),
-              const SizedBox(height: 16),
-              for (var i = 0; i < _rows.length; i++)
-                Container(
-                  width: double.infinity,
-                  margin: const EdgeInsets.only(bottom: 8),
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 12,
-                    vertical: 16,
-                  ),
-                  decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(16),
-                    border: Border.all(
-                      color: _rows[i].$1.contains('(You)')
-                          ? PacerColors.lime
-                          : PacerColors.border,
-                    ),
-                    color: _rows[i].$1.contains('(You)')
-                        ? PacerColors.lime.withValues(alpha: 0.1)
-                        : Colors.white,
-                  ),
-                  child: Row(
+              FutureBuilder<_BoardData>(
+                future: _future,
+                builder: (context, snap) {
+                  final d = snap.data;
+                  final rows = d?.rows;
+                  if (rows == null || rows.length < 3) return _demoBoard();
+                  final uid = d?.uid;
+                  final top = rows.take(3).toList();
+                  final rest = rows.skip(3).toList();
+                  String val(double v) => v.toStringAsFixed(1);
+                  return Column(
                     children: [
-                      Text(
-                        '${i + 4}',
-                        style: const TextStyle(
-                          fontWeight: FontWeight.w700,
-                          fontSize: 16,
-                        ),
-                      ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: Text(
-                          _rows[i].$1,
-                          style: const TextStyle(
-                            fontWeight: FontWeight.w600,
-                            fontSize: 16,
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.end,
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          _podium(
+                            top[1].nama,
+                            val(top[1].entry.nilai),
+                            68,
+                            PacerColors.podiumGray,
+                            rank: 2,
+                            medal: PacerColors.medalSilver,
                           ),
-                        ),
+                          _podium(
+                            top[0].nama,
+                            val(top[0].entry.nilai),
+                            89,
+                            PacerColors.medalGold,
+                            rank: 1,
+                            medal: PacerColors.medalGold,
+                          ),
+                          _podium(
+                            top[2].nama,
+                            val(top[2].entry.nilai),
+                            63,
+                            PacerColors.medalBronze,
+                            rank: 3,
+                            medal: PacerColors.medalBronze,
+                          ),
+                        ],
                       ),
-                      Text(
-                        _rows[i].$2,
-                        style: const TextStyle(
-                          fontWeight: FontWeight.w700,
-                          fontSize: 16,
+                      const SizedBox(height: 16),
+                      for (var i = 0; i < rest.length; i++)
+                        _standingRow(
+                          rank: i + 4,
+                          name: rest[i].nama,
+                          value: val(rest[i].entry.nilai),
+                          mine: uid != null && rest[i].entry.userId == uid,
                         ),
-                      ),
                     ],
-                  ),
-                ),
+                  );
+                },
+              ),
               const SizedBox(height: 12),
               Row(
                 children: [
@@ -1112,8 +1288,149 @@ class LeaderboardScreen extends StatelessWidget {
 }
 
 /// Figma HISTORY: "46,00" Fugaz 88 + desc row + Monday cards.
-class HistoryScreen extends StatelessWidget {
+/// Live activity list when signed in; Figma mock cards in demo mode.
+class HistoryScreen extends StatefulWidget {
   const HistoryScreen({super.key});
+
+  @override
+  State<HistoryScreen> createState() => _HistoryScreenState();
+}
+
+class _HistoryScreenState extends State<HistoryScreen> {
+  Future<List<Activity>>? _future;
+
+  @override
+  void initState() {
+    super.initState();
+    _future = _load();
+  }
+
+  /// Demo when offline or signed out (mock cards show, not the empty state).
+  bool get _demo {
+    try {
+      return supa.auth.currentUser == null;
+    } catch (_) {
+      return true;
+    }
+  }
+
+  Future<List<Activity>> _load() async {
+    try {
+      if (_demo) return const [];
+      return await ActivityRepository().listActivities();
+    } catch (_) {
+      return const [];
+    }
+  }
+
+  /// Session cards flow into a grid on medium and up.
+  Widget _historyGrid(BuildContext context, List<Widget> cards) {
+    return GridView(
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+        maxCrossAxisExtent: 380,
+        mainAxisSpacing: 12,
+        crossAxisSpacing: 12,
+        mainAxisExtent: 156,
+      ),
+      children: cards,
+    );
+  }
+
+  Widget _activityCard(Activity a) {
+    String cap(String j) =>
+        j.isEmpty ? j : '${j[0].toUpperCase()}${j.substring(1)}';
+    return GestureDetector(
+      onTap: () => Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (_) => RunFinishScreen(
+            title: '${cap(a.jenis)} ${fmtDate(a.mulaiAt)}'.trim(),
+            isHistoryDetail: true,
+          ),
+        ),
+      ),
+      child: RunSessionCard(
+        title: cap(a.jenis),
+        date: fmtDate(a.mulaiAt),
+        time: fmtDurasi(a.durasiS),
+        pace: fmtPace(a.durasiS, a.jarakM),
+        distance: fmtKm(a.jarakM),
+      ),
+    );
+  }
+
+  /// Figma mock hero + cards (demo mode, loading, or error).
+  Widget _demoHistory(double w) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.end,
+          children: [
+            // Hero number scales with width (fluid 88→140).
+            Text('46,00', style: PacerText.giantNum(fluid(w, 88, 140))),
+            const Text(
+              'Kilometer',
+              style: TextStyle(fontWeight: FontWeight.w300, fontSize: 24),
+            ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        // Wrap instead of a fixed Row so the summary never overflows.
+        const Wrap(
+          crossAxisAlignment: WrapCrossAlignment.center,
+          spacing: 12,
+          children: [
+            Text(
+              '4 Run',
+              style: TextStyle(fontWeight: FontWeight.w500, fontSize: 24),
+            ),
+            Text(
+              '5,50 Average Pace',
+              style: TextStyle(fontWeight: FontWeight.w300, fontSize: 20),
+            ),
+            Text(
+              '4.10.00 Time',
+              style: TextStyle(fontWeight: FontWeight.w300, fontSize: 20),
+            ),
+          ],
+        ),
+        const SizedBox(height: 12),
+        _historyGrid(context, [
+          for (final card in const [
+            RunSessionCard(title: 'Monday : 07.30'),
+            RunSessionCard(
+              title: 'Monday : 07.30',
+              date: '8/7/2024',
+              time: '28.40',
+              pace: "6'10''",
+              distance: '5,00 Km',
+              limePill: true,
+            ),
+            RunSessionCard(
+              title: 'Monday : 07.30',
+              date: '1/7/2024',
+              time: '1.00.00',
+              pace: "4'00''",
+              distance: '15,00 Km',
+            ),
+          ])
+            GestureDetector(
+              onTap: () => Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (_) => const RunFinishScreen(
+                    title: 'Monday Morning Run',
+                    isHistoryDetail: true,
+                  ),
+                ),
+              ),
+              child: card,
+            ),
+        ]),
+      ],
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -1127,79 +1444,82 @@ class HistoryScreen extends StatelessWidget {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(S.history, style: PacerText.pageTitle),
-              Row(
-                crossAxisAlignment: CrossAxisAlignment.end,
-                children: [
-                  // Hero number scales with width (fluid 88→140).
-                  Text('46,00', style: PacerText.giantNum(fluid(w, 88, 140))),
-                  const Text(
-                    'Kilometer',
-                    style: TextStyle(fontWeight: FontWeight.w300, fontSize: 24),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 8),
-              // Wrap instead of a fixed Row so the summary never overflows.
-              const Wrap(
-                crossAxisAlignment: WrapCrossAlignment.center,
-                spacing: 12,
-                children: [
-                  Text(
-                    '4 Run',
-                    style: TextStyle(fontWeight: FontWeight.w500, fontSize: 24),
-                  ),
-                  Text(
-                    '5,50 Average Pace',
-                    style: TextStyle(fontWeight: FontWeight.w300, fontSize: 20),
-                  ),
-                  Text(
-                    '4.10.00 Time',
-                    style: TextStyle(fontWeight: FontWeight.w300, fontSize: 20),
-                  ),
-                ],
-              ),
-              const SizedBox(height: 12),
-              // Session cards flow into a grid on medium and up.
-              GridView(
-                shrinkWrap: true,
-                physics: const NeverScrollableScrollPhysics(),
-                gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
-                  maxCrossAxisExtent: 380,
-                  mainAxisSpacing: 12,
-                  crossAxisSpacing: 12,
-                  mainAxisExtent: 156,
-                ),
-                children: [
-                  for (final card in const [
-                    RunSessionCard(title: 'Monday : 07.30'),
-                    RunSessionCard(
-                      title: 'Monday : 07.30',
-                      date: '8/7/2024',
-                      time: '28.40',
-                      pace: "6'10''",
-                      distance: '5,00 Km',
-                      limePill: true,
-                    ),
-                    RunSessionCard(
-                      title: 'Monday : 07.30',
-                      date: '1/7/2024',
-                      time: '1.00.00',
-                      pace: "4'00''",
-                      distance: '15,00 Km',
-                    ),
-                  ])
-                    GestureDetector(
-                      onTap: () => Navigator.of(context).push(
-                        MaterialPageRoute(
-                          builder: (_) => const RunFinishScreen(
-                            title: 'Monday Morning Run',
-                            isHistoryDetail: true,
+              FutureBuilder<List<Activity>>(
+                future: _future,
+                builder: (context, snap) {
+                  final activities = snap.data;
+                  // Demo (or still loading / error): Figma mock content.
+                  if (_demo || activities == null) return _demoHistory(w);
+                  if (activities.isEmpty) {
+                    return const Padding(
+                      padding: EdgeInsets.symmetric(vertical: 48),
+                      child: Text('Belum ada aktivitas. Mulai lari pertamamu!'),
+                    );
+                  }
+                  final totalKm = activities.fold<double>(
+                    0,
+                    (s, a) => s + (a.jarakM ?? 0),
+                  );
+                  final totalS = activities.fold<int>(
+                    0,
+                    (s, a) => s + (a.durasiS ?? 0),
+                  );
+                  return Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.end,
+                        children: [
+                          // Hero number scales with width (fluid 88→140).
+                          Text(
+                            fmtKmNum(totalKm),
+                            style: PacerText.giantNum(fluid(w, 88, 140)),
                           ),
-                        ),
+                          const Text(
+                            'Kilometer',
+                            style: TextStyle(
+                              fontWeight: FontWeight.w300,
+                              fontSize: 24,
+                            ),
+                          ),
+                        ],
                       ),
-                      child: card,
-                    ),
-                ],
+                      const SizedBox(height: 8),
+                      // Wrap instead of a fixed Row so the summary never overflows.
+                      Wrap(
+                        crossAxisAlignment: WrapCrossAlignment.center,
+                        spacing: 12,
+                        children: [
+                          Text(
+                            '${activities.length} Run',
+                            style: const TextStyle(
+                              fontWeight: FontWeight.w500,
+                              fontSize: 24,
+                            ),
+                          ),
+                          Text(
+                            '${fmtPace(totalS, totalKm)} Average Pace',
+                            style: const TextStyle(
+                              fontWeight: FontWeight.w300,
+                              fontSize: 20,
+                            ),
+                          ),
+                          Text(
+                            '${fmtDurasi(totalS)} Time',
+                            style: const TextStyle(
+                              fontWeight: FontWeight.w300,
+                              fontSize: 20,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+                      _historyGrid(context, [
+                        for (final a in activities) _activityCard(a),
+                      ]),
+                    ],
+                  );
+                },
               ),
             ],
           ),
@@ -1452,8 +1772,82 @@ class AccountScreen extends StatelessWidget {
 }
 
 /// Figma Statistic: map card + total + 3 stat cards.
-class StatisticScreen extends StatelessWidget {
+/// Weekly totals when signed in (kcal has no source — shows '–' live);
+/// Figma mock values in demo mode.
+class StatisticScreen extends StatefulWidget {
   const StatisticScreen({super.key});
+
+  @override
+  State<StatisticScreen> createState() => _StatisticScreenState();
+}
+
+class _StatisticScreenState extends State<StatisticScreen> {
+  Future<({double km, double? paceSecPerKm, int seconds})?>? _future;
+
+  @override
+  void initState() {
+    super.initState();
+    _future = _load();
+  }
+
+  bool get _demo {
+    try {
+      return supa.auth.currentUser == null;
+    } catch (_) {
+      return true;
+    }
+  }
+
+  /// This week's distance + pace + time; null in demo or when empty.
+  Future<({double km, double? paceSecPerKm, int seconds})?> _load() async {
+    try {
+      if (_demo) return null;
+      final repo = ActivityRepository();
+      final stats = await repo.getStatistik(periodeKey(DateTime.now()));
+      if (stats == null || stats.jarakM <= 0) return null;
+      return (
+        km: stats.jarakM / 1000,
+        paceSecPerKm: stats.waktuS / (stats.jarakM / 1000),
+        seconds: stats.waktuS,
+      );
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// Figma mock totals (demo mode or empty week).
+  Widget _demoTotal() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          '3,00 Km',
+          style: TextStyle(fontWeight: FontWeight.w700, fontSize: 32),
+        ),
+        Text(
+          S.totalRunDistance,
+          style: TextStyle(fontSize: 11, color: PacerColors.slate400),
+        ),
+        Text(
+          S.targetAchieved,
+          style: TextStyle(
+            color: PacerColors.chipGreen,
+            fontWeight: FontWeight.w600,
+          ),
+        ),
+        const SizedBox(height: 12),
+        Row(
+          children: [
+            Expanded(child: _StatCard(S.averagePace, "5'00\"", '/km')),
+            const SizedBox(width: 8),
+            Expanded(child: _StatCard(S.totalTime, '15.00', 'menit')),
+            const SizedBox(width: 8),
+            Expanded(child: _StatCard(S.activeCalories, '542', 'kkal')),
+          ],
+        ),
+      ],
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -1475,48 +1869,63 @@ class StatisticScreen extends StatelessWidget {
                     height: 160,
                     label: 'Senayan Loop (3x) • Elevasi +45m',
                   );
-                  Widget total = Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      const Text(
-                        '3,00 Km',
-                        style: TextStyle(
-                          fontWeight: FontWeight.w700,
-                          fontSize: 32,
-                        ),
-                      ),
-                      Text(
-                        S.totalRunDistance,
-                        style: TextStyle(
-                          fontSize: 11,
-                          color: PacerColors.slate400,
-                        ),
-                      ),
-                      Text(
-                        S.targetAchieved,
-                        style: TextStyle(
-                          color: PacerColors.chipGreen,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                      const SizedBox(height: 12),
-                      Row(
-                        children: [
-                          Expanded(
-                            child: _StatCard(S.averagePace, "5'00\"", '/km'),
-                          ),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: _StatCard(S.totalTime, '15.00', 'menit'),
-                          ),
-                          const SizedBox(width: 8),
-                          Expanded(
-                            child: _StatCard(S.activeCalories, '542', 'kkal'),
-                          ),
-                        ],
-                      ),
-                    ],
-                  );
+                  Widget total =
+                      FutureBuilder<
+                        ({double km, double? paceSecPerKm, int seconds})?
+                      >(
+                        future: _future,
+                        builder: (context, snap) {
+                          final d = snap.data;
+                          // Demo (or empty week): Figma mock values.
+                          if (d == null) return _demoTotal();
+                          return Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                fmtKmNum(d.km * 1000),
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.w700,
+                                  fontSize: 32,
+                                ),
+                              ),
+                              Text(
+                                S.totalRunDistance,
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  color: PacerColors.slate400,
+                                ),
+                              ),
+                              const SizedBox(height: 12),
+                              Row(
+                                children: [
+                                  Expanded(
+                                    child: _StatCard(
+                                      S.averagePace,
+                                      d.paceSecPerKm == null
+                                          ? '–'
+                                          : fmtPace(
+                                              d.seconds,
+                                              d.km * 1000,
+                                            ).replaceAll('"', '"'),
+                                      '/km',
+                                    ),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  Expanded(
+                                    child: _StatCard(
+                                      S.totalTime,
+                                      fmtDurasi(d.seconds),
+                                      'menit',
+                                    ),
+                                  ),
+                                  const SizedBox(width: 8),
+                                  const Expanded(child: _StatCard('–', '', '')),
+                                ],
+                              ),
+                            ],
+                          );
+                        },
+                      );
                   if (screenSizeOf(c.maxWidth) == ScreenSize.compact) {
                     return Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -1580,12 +1989,137 @@ class _StatCard extends StatelessWidget {
 }
 
 /// Figma Streaks: 7-day strip + streak card.
-class StreaksScreen extends StatelessWidget {
+/// Live streak row when signed in (done days reconstructed as the trailing
+/// streak ending at the last workout day); Figma mock strip in demo mode.
+/// Personal record has no source column — shows '–' live.
+class StreaksScreen extends StatefulWidget {
   const StreaksScreen({super.key});
 
   @override
+  State<StreaksScreen> createState() => _StreaksScreenState();
+}
+
+class _StreaksScreenState extends State<StreaksScreen> {
+  Future<({int count, DateTime? terakhir, double totalKm})?>? _future;
+
+  @override
+  void initState() {
+    super.initState();
+    _future = _load();
+  }
+
+  bool get _demo {
+    try {
+      return supa.auth.currentUser == null;
+    } catch (_) {
+      return true;
+    }
+  }
+
+  Future<({int count, DateTime? terakhir, double totalKm})?> _load() async {
+    try {
+      if (_demo) return null;
+      final repo = ActivityRepository();
+      final streak = await repo.getStreak();
+      final activities = await repo.listActivities(limit: 100);
+      final totalKm =
+          activities.fold<double>(0, (s, a) => s + (a.jarakM ?? 0)) / 1000;
+      return (
+        count: streak?.berjalan ?? 0,
+        terakhir: streak?.terakhir,
+        totalKm: totalKm,
+      );
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// Done flags for Mon..Sun: trailing [count] days ending at [terakhir].
+  List<bool> _doneWeek(int count, DateTime? terakhir) {
+    final now = DateTime.now();
+    final monday = now.subtract(Duration(days: now.weekday - 1));
+    return [
+      for (var i = 0; i < 7; i++)
+        terakhir != null &&
+            count > 0 &&
+            () {
+              final day = DateTime(monday.year, monday.month, monday.day + i);
+              final last = DateTime(
+                terakhir.year,
+                terakhir.month,
+                terakhir.day,
+              );
+              final back = last.difference(day).inDays;
+              return back >= 0 && back < count;
+            }(),
+    ];
+  }
+
+  static const _days = ['Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab', 'Min'];
+
+  /// 7-day strip; [done] flags per weekday Mon..Sun, [todayIdx] glows.
+  Widget _weekRow(List<bool> done, int todayIdx) {
+    return Row(
+      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+      children: List.generate(7, (i) {
+        final d = done[i];
+        final today = i == todayIdx;
+        return Column(
+          children: [
+            Container(
+              width: 36,
+              height: 36,
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: d ? PacerColors.streakBlue : Colors.white,
+                border: Border.all(
+                  color: d || today
+                      ? PacerColors.streakBlue
+                      : PacerColors.slate200,
+                  width: 2,
+                ),
+                boxShadow: today
+                    ? [const BoxShadow(color: Color(0xFFFFE600), blurRadius: 8)]
+                    : null,
+              ),
+              child: d
+                  ? const Icon(Icons.check, size: 16, color: Colors.white)
+                  : null,
+            ),
+            Text(
+              _days[i],
+              style: const TextStyle(fontSize: 11, color: PacerColors.slate400),
+            ),
+          ],
+        );
+      }),
+    );
+  }
+
+  /// Figma mock strip (demo mode or no streak yet).
+  Widget _demoWeek() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          'MINGGU INI • 5 dari 7 Hari',
+          style: TextStyle(
+            color: PacerColors.streakBlue,
+            fontWeight: FontWeight.w600,
+            fontSize: 12,
+          ),
+        ),
+        const SizedBox(height: 12),
+        _weekRow(const [true, true, true, true, false, false, false], 4),
+        const SizedBox(height: 16),
+        const StreakCard(),
+      ],
+    );
+  }
+
+  @override
   Widget build(BuildContext context) {
-    const days = ['Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab', 'Min'];
     return Scaffold(
       body: SafeArea(
         child: ResponsiveScroll(
@@ -1598,96 +2132,66 @@ class StreaksScreen extends StatelessWidget {
               const SizedBox(height: 16),
               Text(S.streaks, style: PacerText.pageTitle),
               const SizedBox(height: 12),
-              LayoutBuilder(
-                builder: (context, c) {
+              FutureBuilder<({int count, DateTime? terakhir, double totalKm})?>(
+                future: _future,
+                builder: (context, snap) {
+                  final d = snap.data;
+                  // Demo (or no streak yet): Figma mock strip.
+                  if (d == null) return _demoWeek();
+                  final done = _doneWeek(d.count, d.terakhir);
+                  final todayIdx = DateTime.now().weekday - 1;
+                  final doneThisWeek = [
+                    for (var i = 0; i < 7; i++)
+                      if (done[i]) i,
+                  ].length;
                   Widget week = Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Text(
-                        'MINGGU INI • 5 dari 7 Hari',
-                        style: TextStyle(
+                      Text(
+                        'MINGGU INI • $doneThisWeek dari 7 Hari',
+                        style: const TextStyle(
                           color: PacerColors.streakBlue,
                           fontWeight: FontWeight.w600,
                           fontSize: 12,
                         ),
                       ),
                       const SizedBox(height: 12),
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: List.generate(7, (i) {
-                          final done = i < 4;
-                          final today = i == 4;
-                          return Column(
-                            children: [
-                              Container(
-                                width: 36,
-                                height: 36,
-                                alignment: Alignment.center,
-                                decoration: BoxDecoration(
-                                  shape: BoxShape.circle,
-                                  color: done
-                                      ? PacerColors.streakBlue
-                                      : Colors.white,
-                                  border: Border.all(
-                                    color: done || today
-                                        ? PacerColors.streakBlue
-                                        : PacerColors.slate200,
-                                    width: 2,
-                                  ),
-                                  boxShadow: today
-                                      ? [
-                                          const BoxShadow(
-                                            color: Color(0xFFFFE600),
-                                            blurRadius: 8,
-                                          ),
-                                        ]
-                                      : null,
-                                ),
-                                child: done
-                                    ? const Icon(
-                                        Icons.check,
-                                        size: 16,
-                                        color: Colors.white,
-                                      )
-                                    : null,
-                              ),
-                              Text(
-                                days[i],
-                                style: const TextStyle(
-                                  fontSize: 11,
-                                  color: PacerColors.slate400,
-                                ),
-                              ),
-                            ],
-                          );
-                        }),
-                      ),
+                      _weekRow(done, todayIdx),
                       const SizedBox(height: 16),
-                      const StreakCard(),
+                      StreakCard(count: d.count),
                     ],
                   );
-                  if (screenSizeOf(c.maxWidth) == ScreenSize.compact) {
-                    return week;
-                  }
-                  // medium and up: week + card left, streak stats right —
-                  // no empty bottom half.
-                  return Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Expanded(child: week),
-                      const SizedBox(width: 24),
-                      Expanded(
-                        child: Column(
-                          children: [
-                            _StatCard(S.streaks, '24', ''),
-                            const SizedBox(height: 12),
-                            _StatCard(S.personalRecord, '42', ''),
-                            const SizedBox(height: 12),
-                            _StatCard(S.history, '156', 'km'),
-                          ],
-                        ),
-                      ),
-                    ],
+                  return LayoutBuilder(
+                    builder: (context, c) {
+                      if (screenSizeOf(c.maxWidth) == ScreenSize.compact) {
+                        return week;
+                      }
+                      // medium and up: week + card left, streak stats right —
+                      // no empty bottom half.
+                      return Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Expanded(child: week),
+                          const SizedBox(width: 24),
+                          Expanded(
+                            child: Column(
+                              children: [
+                                _StatCard(S.streaks, '${d.count}', ''),
+                                const SizedBox(height: 12),
+                                // No personal-record source column — honest dash.
+                                _StatCard(S.personalRecord, '–', ''),
+                                const SizedBox(height: 12),
+                                _StatCard(
+                                  S.history,
+                                  fmtKmNum(d.totalKm * 1000),
+                                  'km',
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      );
+                    },
                   );
                 },
               ),
@@ -1701,8 +2205,57 @@ class StreaksScreen extends StatelessWidget {
 }
 
 /// Figma CHALLENGE list: 10 KM + 8 KM hero cards.
-class ChallengeListScreen extends StatelessWidget {
+/// Live challenges when signed in; Figma mock cards in demo mode.
+class ChallengeListScreen extends StatefulWidget {
   const ChallengeListScreen({super.key});
+
+  @override
+  State<ChallengeListScreen> createState() => _ChallengeListScreenState();
+}
+
+class _ChallengeListScreenState extends State<ChallengeListScreen> {
+  Future<List<Challenge>>? _future;
+
+  @override
+  void initState() {
+    super.initState();
+    _future = _load();
+  }
+
+  bool get _backend {
+    try {
+      supa;
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  Future<List<Challenge>> _load() async {
+    try {
+      if (!_backend) return const [];
+      if (supa.auth.currentUser == null) return const [];
+      return await ChallengeRepository().listChallenges();
+    } catch (_) {
+      return const [];
+    }
+  }
+
+  /// Hero number: km for jarak_m targets, minutes for waktu_s.
+  String _heroValue(Challenge c) {
+    final v = c.targetSatuan == 'jarak_m'
+        ? c.targetNilai / 1000
+        : c.targetNilai / 60;
+    return v == v.truncateToDouble() ? '${v.toInt()}' : v.toStringAsFixed(1);
+  }
+
+  String _heroUnit(Challenge c) => c.targetSatuan == 'jarak_m' ? ' KM' : ' MNT';
+
+  String _heroDate(Challenge c) {
+    final d = c.waktuSelesai ?? c.waktuMulai;
+    if (d == null) return '-';
+    return '${d.day}-${d.month}-${d.year}';
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -1719,49 +2272,73 @@ class ChallengeListScreen extends StatelessWidget {
               const SizedBox(height: 16),
               Text(S.challenge, style: PacerText.pageTitle),
               const SizedBox(height: 12),
-              for (final c in const [('10', '29-10-2009'), ('8', '29-10-2009')])
-                GestureDetector(
-                  onTap: () => showModalBottomSheet(
-                    context: context,
-                    builder: (_) => const ChallengeDetailSheet(),
-                  ),
-                  child: Container(
-                    width: double.infinity,
-                    height: fluid(w, 179, 220),
-                    margin: const EdgeInsets.only(bottom: 12),
-                    padding: const EdgeInsets.all(20),
-                    decoration: BoxDecoration(
-                      borderRadius: BorderRadius.circular(20),
-                      gradient: const LinearGradient(
-                        colors: [Color(0xFF2B2B2B), PacerColors.streakBg],
-                      ),
-                    ),
-                    child: Row(
-                      crossAxisAlignment: CrossAxisAlignment.end,
-                      children: [
-                        // Hero number scales with width (fluid 96→140).
-                        Text(
-                          c.$1,
-                          style: PacerText.giantNum(fluid(w, 96, 140))
-                              .copyWith(color: PacerColors.primary),
-                        ),
-                        Text(
-                          ' KM',
-                          style: PacerText.kmSuffix.copyWith(fontSize: 40),
-                        ),
-                        const Spacer(),
-                        Text(
-                          c.$2,
-                          style: const TextStyle(
-                            color: Colors.white,
-                            fontWeight: FontWeight.w600,
-                            fontSize: 16,
+              FutureBuilder<List<Challenge>>(
+                future: _future,
+                builder: (context, snap) {
+                  final live = snap.data;
+                  final cards = (live == null || live.isEmpty)
+                      ? const [
+                          ('10', ' KM', '29-10-2009'),
+                          ('8', ' KM', '29-10-2009'),
+                        ]
+                      : [
+                          for (final c in live)
+                            (_heroValue(c), _heroUnit(c), _heroDate(c)),
+                        ];
+                  return Column(
+                    children: [
+                      for (final c in cards)
+                        GestureDetector(
+                          onTap: () => showModalBottomSheet(
+                            context: context,
+                            builder: (_) => const ChallengeDetailSheet(),
+                          ),
+                          child: Container(
+                            width: double.infinity,
+                            height: fluid(w, 179, 220),
+                            margin: const EdgeInsets.only(bottom: 12),
+                            padding: const EdgeInsets.all(20),
+                            decoration: BoxDecoration(
+                              borderRadius: BorderRadius.circular(20),
+                              gradient: const LinearGradient(
+                                colors: [
+                                  Color(0xFF2B2B2B),
+                                  PacerColors.streakBg,
+                                ],
+                              ),
+                            ),
+                            child: Row(
+                              crossAxisAlignment: CrossAxisAlignment.end,
+                              children: [
+                                // Hero number scales with width (fluid 96→140).
+                                Text(
+                                  c.$1,
+                                  style: PacerText.giantNum(fluid(w, 96, 140))
+                                      .copyWith(color: PacerColors.primary),
+                                ),
+                                Text(
+                                  c.$2,
+                                  style: PacerText.kmSuffix.copyWith(
+                                    fontSize: 40,
+                                  ),
+                                ),
+                                const Spacer(),
+                                Text(
+                                  c.$3,
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontWeight: FontWeight.w600,
+                                    fontSize: 16,
+                                  ),
+                                ),
+                              ],
+                            ),
                           ),
                         ),
-                      ],
-                    ),
-                  ),
-                ),
+                    ],
+                  );
+                },
+              ),
               const SizedBox(height: 12),
               SizedBox(
                 width: double.infinity,

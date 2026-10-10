@@ -1,11 +1,16 @@
 import 'package:flutter/material.dart';
 import 'package:pacer/core/responsive/responsive.dart';
+import 'package:pacer/src/aktivitas/activity_model.dart';
+import 'package:pacer/src/aktivitas/activity_repository.dart';
 import 'package:pacer/src/auth/auth_repository.dart';
+import 'package:pacer/src/teams/team_model.dart';
+import 'package:pacer/src/teams/team_repository.dart';
 import 'package:pacer/supabase.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'app_strings.dart';
 import 'app_theme.dart';
+import 'format.dart';
 import 'more_screens.dart';
 import 'widgets.dart';
 
@@ -300,10 +305,64 @@ class _CreateAccountScreenState extends State<CreateAccountScreen> {
 /// Figma HOME: PACER header + streak hero + History cards + Pacer Teams.
 /// compact: single column. medium: streak full width, history + teams in
 /// 2 columns. expanded: streak pane left, history + teams pane right.
-class HomeScreen extends StatelessWidget {
+///
+/// Live data when signed in (streak row, own activities, own teams);
+/// Figma mock cards when in demo mode or while loading.
+class HomeScreen extends StatefulWidget {
   final VoidCallback? onSeeTeams;
   final VoidCallback? onSeeHistory;
   const HomeScreen({super.key, this.onSeeTeams, this.onSeeHistory});
+
+  @override
+  State<HomeScreen> createState() => _HomeScreenState();
+}
+
+/// Live home data; every field null in demo mode (keeps the mock cards).
+class _HomeData {
+  final List<Activity>? activities;
+  final int? streak;
+  final List<Team>? teams;
+  const _HomeData({this.activities, this.streak, this.teams});
+}
+
+class _HomeScreenState extends State<HomeScreen> {
+  _HomeData? _data;
+
+  @override
+  void initState() {
+    super.initState();
+    // _load never throws (demo fallback inside); refresh cards on arrival.
+    _load().then((d) {
+      if (mounted) setState(() => _data = d);
+    });
+  }
+
+  bool get _backend {
+    try {
+      supa;
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  Future<_HomeData> _load() async {
+    try {
+      if (!_backend) return const _HomeData();
+      if (supa.auth.currentUser == null) return const _HomeData();
+      final repo = ActivityRepository();
+      final activities = await repo.listActivities(limit: 5);
+      final streak = await repo.getStreak();
+      final teams = await TeamRepository().myTeams();
+      return _HomeData(
+        activities: activities,
+        streak: streak?.berjalan,
+        teams: teams,
+      );
+    } catch (_) {
+      return const _HomeData();
+    }
+  }
 
   Widget _header(BuildContext context) {
     return SizedBox(
@@ -338,17 +397,20 @@ class HomeScreen extends StatelessWidget {
       children: [
         SectionHeader(title: S.streaks),
         const SizedBox(height: 8),
-        const StreakCard(),
+        StreakCard(count: _data?.streak),
       ],
     );
   }
 
   Widget _history() {
+    String cap(String j) =>
+        j.isEmpty ? j : '${j[0].toUpperCase()}${j.substring(1)}';
+    final activities = _data?.activities;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         GestureDetector(
-          onTap: onSeeHistory,
+          onTap: widget.onSeeHistory,
           child: Row(
             mainAxisSize: MainAxisSize.min,
             children: [
@@ -364,25 +426,44 @@ class HomeScreen extends StatelessWidget {
           ),
         ),
         const SizedBox(height: 8),
-        const RunSessionCard(),
-        const SizedBox(height: 16),
-        const RunSessionCard(
-          title: 'Sunday Morning Run',
-          date: '14/7/2024',
-          time: '1.00.00',
-          pace: "4'00''",
-          distance: '15,00 Km',
-          limePill: true,
-        ),
+        if (activities == null) ...[
+          const RunSessionCard(),
+          const SizedBox(height: 16),
+          const RunSessionCard(
+            title: 'Sunday Morning Run',
+            date: '14/7/2024',
+            time: '1.00.00',
+            pace: "4'00''",
+            distance: '15,00 Km',
+            limePill: true,
+          ),
+        ] else if (activities.isEmpty)
+          const Padding(
+            padding: EdgeInsets.symmetric(vertical: 24),
+            child: Text('Belum ada aktivitas. Mulai lari pertamamu!'),
+          )
+        else
+          for (final a in activities.take(2))
+            Padding(
+              padding: const EdgeInsets.only(bottom: 16),
+              child: RunSessionCard(
+                title: cap(a.jenis),
+                date: fmtDate(a.mulaiAt),
+                time: fmtDurasi(a.durasiS),
+                pace: fmtPace(a.durasiS, a.jarakM),
+                distance: fmtKm(a.jarakM),
+              ),
+            ),
       ],
     );
   }
 
   Widget _teams() {
+    final teams = _data?.teams;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        SectionHeader(title: S.pacerTeams, onSeeAll: onSeeTeams),
+        SectionHeader(title: S.pacerTeams, onSeeAll: widget.onSeeTeams),
         const SizedBox(height: 20),
         // Horizontal carousel: cards grow with width via fluid(), never fixed.
         SizedBox(
@@ -394,17 +475,28 @@ class HomeScreen extends StatelessWidget {
                 scrollDirection: Axis.horizontal,
                 padding: EdgeInsets.zero,
                 children: [
-                  TeamCard(
-                    name: 'JakBar Pacer',
-                    location: 'Jakarta Barat, Indonesia',
-                    width: cardW,
-                  ),
-                  const SizedBox(width: 19),
-                  TeamCard(
-                    name: 'Tangerang Runners',
-                    location: 'Tangerang, Indonesia',
-                    width: cardW,
-                  ),
+                  if (teams == null) ...[
+                    TeamCard(
+                      name: 'JakBar Pacer',
+                      location: 'Jakarta Barat, Indonesia',
+                      width: cardW,
+                    ),
+                    const SizedBox(width: 19),
+                    TeamCard(
+                      name: 'Tangerang Runners',
+                      location: 'Tangerang, Indonesia',
+                      width: cardW,
+                    ),
+                  ] else if (teams.isEmpty)
+                    const Padding(
+                      padding: EdgeInsets.symmetric(vertical: 48),
+                      child: Text('Belum gabung tim mana pun.'),
+                    )
+                  else
+                    for (var i = 0; i < teams.length; i++) ...[
+                      if (i > 0) const SizedBox(width: 19),
+                      TeamCard(name: teams[i].nama, width: cardW),
+                    ],
                 ],
               );
             },

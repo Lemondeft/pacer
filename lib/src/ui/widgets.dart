@@ -259,7 +259,8 @@ class RunSessionCard extends StatelessWidget {
 
 /// Team tile — fills its parent (grid cell or column); [width] only for
 /// fixed-width slots like the home carousel. Gradient + location pin +
-/// Fugaz name (no invented avatar).
+/// Fugaz name (no invented avatar). [location] is optional: the teams table
+/// has no location column, so live rows pass nothing.
 class TeamCard extends StatelessWidget {
   final String name;
   final String location;
@@ -267,7 +268,7 @@ class TeamCard extends StatelessWidget {
   const TeamCard({
     super.key,
     required this.name,
-    required this.location,
+    this.location = '',
     this.width,
   });
 
@@ -417,9 +418,11 @@ class InitialAvatar extends StatelessWidget {
 }
 
 /// Purple streak hero card. Fills its parent width; intrinsic height.
-/// Decorative circles clip at the card bounds.
+/// Decorative circles clip at the card bounds. [count] overrides the
+/// demo number when live data is available.
 class StreakCard extends StatelessWidget {
-  const StreakCard({super.key});
+  final int? count;
+  const StreakCard({super.key, this.count});
 
   @override
   Widget build(BuildContext context) {
@@ -512,7 +515,7 @@ class StreakCard extends StatelessWidget {
                               crossAxisAlignment: CrossAxisAlignment.end,
                               children: [
                                 Text(
-                                  '24',
+                                  '${count ?? 24}',
                                   style: PacerText.giantNum(56)
                                       .copyWith(color: PacerColors.streakNum),
                                 ),
@@ -1082,11 +1085,20 @@ class LimeActionBar extends StatelessWidget {
 /// Clubs search field. Fills parent width, r12 #F8FAFC.
 class SearchField extends StatelessWidget {
   final String hint;
-  const SearchField({super.key, this.hint = 'Cari klub, kota, atau teman...'});
+  final TextEditingController? controller;
+  final ValueChanged<String>? onChanged;
+  const SearchField({
+    super.key,
+    this.hint = 'Cari klub, kota, atau teman...',
+    this.controller,
+    this.onChanged,
+  });
 
   @override
   Widget build(BuildContext context) {
     return TextField(
+      controller: controller,
+      onChanged: onChanged,
       decoration: InputDecoration(
         hintText: hint,
         hintStyle: const TextStyle(color: PacerColors.slate400, fontSize: 14),

@@ -118,6 +118,39 @@ class ActivityRepository {
     ];
   }
 
+  /// Reads the caller's streak row without writing (null when never recorded).
+  /// Unlike [recordStreak], this never touches terakhir_olahraga_tgl.
+  Future<({int berjalan, DateTime? terakhir})?> getStreak() async {
+    final userId = _requireUserId();
+    final row = await _client
+        .from('streak')
+        .select('streak_berjalan, terakhir_olahraga_tgl')
+        .eq('user_id', userId)
+        .maybeSingle();
+    if (row == null) return null;
+    final tglRaw = row['terakhir_olahraga_tgl'] as String?;
+    return (
+      berjalan: (row['streak_berjalan'] as num?)?.toInt() ?? 0,
+      terakhir: tglRaw == null ? null : DateTime.parse(tglRaw),
+    );
+  }
+
+  /// Reads the caller's statistik totals for [periode] (null when none yet).
+  Future<({double jarakM, int waktuS})?> getStatistik(String periode) async {
+    final userId = _requireUserId();
+    final row = await _client
+        .from('statistik')
+        .select('total_jarak_m, total_waktu_s')
+        .eq('user_id', userId)
+        .eq('periode', periode)
+        .maybeSingle();
+    if (row == null) return null;
+    return (
+      jarakM: jsonToDouble(row['total_jarak_m']) ?? 0,
+      waktuS: (row['total_waktu_s'] as num?)?.toInt() ?? 0,
+    );
+  }
+
   /// Statistik: rpc-free read-then-write; adds [jarakM]/[waktuS] into [periode] totals.
   Future<void> upsertStatistik(
     String periode,

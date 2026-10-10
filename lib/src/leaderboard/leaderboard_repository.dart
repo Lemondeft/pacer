@@ -42,6 +42,42 @@ class LeaderboardRepository {
     ];
   }
 
+  /// Standings with display names via the peringkat→users FK.
+  /// Falls back to a shortened user id when the nested row is absent,
+  /// so the UI never breaks on join-shape differences.
+  Future<List<({Peringkat entry, String nama})>> getPeringkatWithNames(
+    String leaderboardId, {
+    int limit = 50,
+  }) async {
+    final rows = await _client
+        .from('peringkat')
+        .select(
+          'id, leaderboard_id, user_id, nilai, posisi, updated_at, users!inner(nama)',
+        )
+        .eq('leaderboard_id', leaderboardId)
+        .order('nilai', ascending: false)
+        .limit(limit);
+    return [
+      for (final raw in rows)
+        () {
+          final row = Map<String, dynamic>.from(raw as Map);
+          final entry = Peringkat.fromJson(row);
+          return (entry: entry, nama: _displayName(row, entry.userId));
+        }(),
+    ];
+  }
+
+  String _displayName(Map<String, dynamic> row, String userId) {
+    final nested = row['users'];
+    final candidate = nested is Map
+        ? nested['nama']
+        : (nested is List && nested.isNotEmpty
+              ? (nested.first as Map)['nama']
+              : null);
+    if (candidate is String && candidate.isNotEmpty) return candidate;
+    return userId.length > 8 ? '${userId.substring(0, 8)}…' : userId;
+  }
+
   /// The caller's own ranked entries across all boards, newest update first.
   Future<List<Peringkat>> myPeringkat() async {
     final userId = _client.auth.currentUser?.id;
