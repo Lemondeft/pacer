@@ -697,11 +697,12 @@ class BottomNavPill extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = PacerScheme.of(context);
+    // Per-tab glyphs matching the nav rail: outlined idle, filled selected.
     const icons = [
-      Icons.emoji_events_outlined,
-      Icons.leaderboard_outlined,
-      Icons.groups_outlined,
-      Icons.local_fire_department_outlined,
+      (Icons.home_outlined, Icons.home),
+      (Icons.directions_run_outlined, Icons.directions_run),
+      (Icons.groups_outlined, Icons.groups),
+      (Icons.leaderboard_outlined, Icons.leaderboard),
     ];
     return ClipRRect(
       borderRadius: BorderRadius.circular(50),
@@ -727,7 +728,7 @@ class BottomNavPill extends StatelessWidget {
                   child: IconButton(
                     onPressed: () => onTap(i),
                     icon: Icon(
-                      icons[i],
+                      index == i ? icons[i].$2 : icons[i].$1,
                       size: 30,
                       color: index == i ? PacerColors.lime : scheme.navIcon,
                     ),
@@ -765,7 +766,7 @@ class BottomNavPill extends StatelessWidget {
                   child: IconButton(
                     onPressed: () => onTap(i),
                     icon: Icon(
-                      icons[i],
+                      index == i ? icons[i].$2 : icons[i].$1,
                       size: 30,
                       color: index == i ? PacerColors.lime : scheme.navIcon,
                     ),
