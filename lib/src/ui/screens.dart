@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:pacer/core/responsive/responsive.dart';
 
 import 'app_strings.dart';
 import 'app_theme.dart';
@@ -6,6 +7,7 @@ import 'more_screens.dart';
 import 'widgets.dart';
 
 /// Figma LOADING SCREEN: the one PacerLogo + blue progress rectangle 218x18 r2.
+/// Centered splash, capped at 480 — no scaling, no stretch.
 class LoadingScreen extends StatelessWidget {
   final VoidCallback onDone;
   const LoadingScreen({super.key, required this.onDone});
@@ -16,36 +18,39 @@ class LoadingScreen extends StatelessWidget {
       backgroundColor: Colors.white,
       body: SafeArea(
         child: Center(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              const PacerLogo(width: 160, fontSize: 44),
-              const SizedBox(height: 24),
-              TweenAnimationBuilder<double>(
-                tween: Tween(begin: 0, end: 1),
-                duration: const Duration(milliseconds: 1200),
-                onEnd: onDone,
-                builder: (context, value, _) {
-                  return Container(
-                    width: 218,
-                    height: 18,
-                    decoration: BoxDecoration(
-                      color: PacerColors.slate200,
-                      borderRadius: BorderRadius.circular(2),
-                    ),
-                    alignment: Alignment.centerLeft,
-                    child: Container(
-                      width: 218 * value,
+          child: ConstrainedBox(
+            constraints: const BoxConstraints(maxWidth: 480),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const PacerLogo(width: 160, fontSize: 44),
+                const SizedBox(height: 24),
+                TweenAnimationBuilder<double>(
+                  tween: Tween(begin: 0, end: 1),
+                  duration: const Duration(milliseconds: 1200),
+                  onEnd: onDone,
+                  builder: (context, value, _) {
+                    return Container(
+                      width: 218,
                       height: 18,
                       decoration: BoxDecoration(
-                        color: PacerColors.primary,
+                        color: PacerColors.slate200,
                         borderRadius: BorderRadius.circular(2),
                       ),
-                    ),
-                  );
-                },
-              ),
-            ],
+                      alignment: Alignment.centerLeft,
+                      child: Container(
+                        width: 218 * value,
+                        height: 18,
+                        decoration: BoxDecoration(
+                          color: PacerColors.primary,
+                          borderRadius: BorderRadius.circular(2),
+                        ),
+                      ),
+                    );
+                  },
+                ),
+              ],
+            ),
           ),
         ),
       ),
@@ -53,7 +58,8 @@ class LoadingScreen extends StatelessWidget {
   }
 }
 
-/// Figma GET STARTED: "Pacer, siap membantu!" + Sign In filled 357x69 + Log In outlined.
+/// Figma GET STARTED: "Pacer, siap membantu!" + Sign In filled + Log In outlined.
+/// Form-style screen: 720 shell, vertically centered when short.
 class GetStartedScreen extends StatelessWidget {
   final VoidCallback onSignIn;
   final VoidCallback onLogIn;
@@ -67,55 +73,54 @@ class GetStartedScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     return Scaffold(
       body: SafeArea(
-        child: Center(
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.symmetric(horizontal: 18),
-            child: Column(
-              children: [
-                const PacerLogo(width: 198, fontSize: 40),
-                const SizedBox(height: 24),
-                Text(
-                  S.appTagline,
-                  style: const TextStyle(
-                    fontWeight: FontWeight.w600,
-                    fontSize: 24,
-                  ),
-                  textAlign: TextAlign.center,
+        child: ResponsiveScroll(
+          maxWidth: 720,
+          centerContent: true,
+          child: Column(
+            children: [
+              const PacerLogo(width: 198, fontSize: 40),
+              const SizedBox(height: 24),
+              Text(
+                S.appTagline,
+                style: const TextStyle(
+                  fontWeight: FontWeight.w600,
+                  fontSize: 24,
                 ),
-                const SizedBox(height: 32),
-                SizedBox(
-                  width: 357,
-                  height: 69,
-                  child: ElevatedButton(
-                    onPressed: onSignIn,
-                    style: ElevatedButton.styleFrom(
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(5),
-                      ),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 32),
+              SizedBox(
+                width: double.infinity,
+                height: 69,
+                child: ElevatedButton(
+                  onPressed: onSignIn,
+                  style: ElevatedButton.styleFrom(
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(5),
                     ),
-                    child: Text(S.signIn),
                   ),
+                  child: Text(S.signIn),
                 ),
-                const SizedBox(height: 16),
-                SizedBox(
-                  width: 357,
-                  height: 69,
-                  child: OutlinedButton(
-                    onPressed: onLogIn,
-                    style: OutlinedButton.styleFrom(
-                      side: const BorderSide(
-                        width: 2,
-                        color: PacerColors.primary,
-                      ),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(5),
-                      ),
+              ),
+              const SizedBox(height: 16),
+              SizedBox(
+                width: double.infinity,
+                height: 69,
+                child: OutlinedButton(
+                  onPressed: onLogIn,
+                  style: OutlinedButton.styleFrom(
+                    side: const BorderSide(
+                      width: 2,
+                      color: PacerColors.primary,
                     ),
-                    child: Text(S.logIn),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(5),
+                    ),
                   ),
+                  child: Text(S.logIn),
                 ),
-              ],
-            ),
+              ),
+            ],
           ),
         ),
       ),
@@ -123,7 +128,8 @@ class GetStartedScreen extends StatelessWidget {
   }
 }
 
-/// Figma SIGN IN: "Create an account" 40 + 4 fields 315x50 + Sign In + divider + icon row.
+/// Figma SIGN IN: "Create an account" 40 + 4 fields + Sign In + divider + icon row.
+/// Form-style screen: 720 shell, fields fill the shell width.
 class CreateAccountScreen extends StatefulWidget {
   final VoidCallback onSubmitted;
   final VoidCallback? onBack;
@@ -144,12 +150,12 @@ class _CreateAccountScreenState extends State<CreateAccountScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       body: SafeArea(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.symmetric(horizontal: 38),
+        child: ResponsiveScroll(
+          maxWidth: 720,
+          padding: const EdgeInsets.only(top: 12, bottom: 24),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const SizedBox(height: 12),
               const PageHeader(),
               const SizedBox(height: 16),
               Text(S.createAccount, style: PacerText.authTitle),
@@ -184,22 +190,15 @@ class _CreateAccountScreenState extends State<CreateAccountScreen> {
                 ),
               ],
               const SizedBox(height: 28),
-              Center(
-                child: PrimaryButton(
-                  label: S.signIn,
-                  onPressed: () {
-                    setState(() => _error = null);
-                    widget.onSubmitted();
-                  },
-                ),
+              PrimaryButton(
+                label: S.signIn,
+                onPressed: () {
+                  setState(() => _error = null);
+                  widget.onSubmitted();
+                },
               ),
               const SizedBox(height: 28),
-              const Center(
-                child: SizedBox(
-                  width: 289,
-                  child: Divider(color: Colors.black, height: 1),
-                ),
-              ),
+              const Divider(color: Colors.black, height: 1),
               const SizedBox(height: 16),
               Center(
                 child: Text(
@@ -233,98 +232,182 @@ class _CreateAccountScreenState extends State<CreateAccountScreen> {
   }
 }
 
-/// Figma HOME: PACER header + streak hero + History 2 cards + Pacer Teams 2 cards + floating pill nav.
+/// Figma HOME: PACER header + streak hero + History cards + Pacer Teams.
+/// compact: single column. medium: streak full width, history + teams in
+/// 2 columns. expanded: streak pane left, history + teams pane right.
 class HomeScreen extends StatelessWidget {
   final VoidCallback? onSeeTeams;
   final VoidCallback? onSeeHistory;
   const HomeScreen({super.key, this.onSeeTeams, this.onSeeHistory});
 
-  @override
-  Widget build(BuildContext context) {
-    return SafeArea(
-      child: SingleChildScrollView(
-        padding: const EdgeInsets.fromLTRB(32, 0, 32, 150),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            SizedBox(
-              height: 48,
-              child: Row(
-                children: [
-                  IconButton(
-                    onPressed: () => Navigator.of(context).push(
-                      MaterialPageRoute(builder: (_) => const FiturScreen()),
-                    ),
-                    icon: const Icon(Icons.menu, size: 32),
-                  ),
-                  Expanded(
-                    child: Center(
-                      // One consistent logo across the app.
-                      child: PacerLogo(width: 84, fontSize: 18),
-                    ),
-                  ),
-                  // Logged-in user's initials (Figma spec). Tap → Account.
-                  GestureDetector(
-                    onTap: () => Navigator.of(context).push(
-                      MaterialPageRoute(builder: (_) => const AccountScreen()),
-                    ),
-                    child: const InitialAvatar('RP', size: 42),
-                  ),
-                ],
+  Widget _header(BuildContext context) {
+    return SizedBox(
+      height: 48,
+      child: Row(
+        children: [
+          IconButton(
+            onPressed: () => Navigator.of(context)
+                .push(MaterialPageRoute(builder: (_) => const FiturScreen())),
+            icon: const Icon(Icons.menu, size: 32),
+          ),
+          Expanded(
+            child: Center(
+              // One consistent logo across the app.
+              child: PacerLogo(width: 84, fontSize: 18),
+            ),
+          ),
+          // Logged-in user's initials (Figma spec). Tap → Account.
+          GestureDetector(
+            onTap: () => Navigator.of(context)
+                .push(MaterialPageRoute(builder: (_) => const AccountScreen())),
+            child: const InitialAvatar('RP', size: 42),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _streak() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        SectionHeader(title: S.streaks),
+        const SizedBox(height: 8),
+        const StreakCard(),
+      ],
+    );
+  }
+
+  Widget _history() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        GestureDetector(
+          onTap: onSeeHistory,
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                S.history,
+                style: const TextStyle(
+                  fontWeight: FontWeight.w500,
+                  fontSize: 20,
+                ),
               ),
-            ),
-            const SizedBox(height: 16),
-            SectionHeader(title: S.streaks),
-            const SizedBox(height: 8),
-            const Center(child: StreakCard()),
-            const SizedBox(height: 8),
-            GestureDetector(
-              onTap: onSeeHistory,
-              child: Row(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    S.history,
-                    style: const TextStyle(
-                      fontWeight: FontWeight.w500,
-                      fontSize: 20,
-                    ),
-                  ),
-                  const Icon(Icons.chevron_right, size: 20),
-                ],
-              ),
-            ),
-            const SizedBox(height: 8),
-            const RunSessionCard(),
-            const SizedBox(height: 16),
-            const RunSessionCard(
-              title: 'Sunday Morning Run',
-              date: '14/7/2024',
-              time: '1.00.00',
-              pace: "4'00''",
-              distance: '15,00 Km',
-              limePill: true,
-            ),
-            const SizedBox(height: 32),
-            SectionHeader(title: S.pacerTeams, onSeeAll: onSeeTeams),
-            const SizedBox(height: 20),
-            SizedBox(
-              height: 133,
-              child: ListView(
+              const Icon(Icons.chevron_right, size: 20),
+            ],
+          ),
+        ),
+        const SizedBox(height: 8),
+        const RunSessionCard(),
+        const SizedBox(height: 16),
+        const RunSessionCard(
+          title: 'Sunday Morning Run',
+          date: '14/7/2024',
+          time: '1.00.00',
+          pace: "4'00''",
+          distance: '15,00 Km',
+          limePill: true,
+        ),
+      ],
+    );
+  }
+
+  Widget _teams() {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        SectionHeader(title: S.pacerTeams, onSeeAll: onSeeTeams),
+        const SizedBox(height: 20),
+        // Horizontal carousel: cards grow with width via fluid(), never fixed.
+        SizedBox(
+          height: 150,
+          child: LayoutBuilder(
+            builder: (context, c) {
+              final cardW = fluid(c.maxWidth, 241, 300);
+              return ListView(
                 scrollDirection: Axis.horizontal,
                 padding: EdgeInsets.zero,
-                children: const [
+                children: [
                   TeamCard(
                     name: 'JakBar Pacer',
                     location: 'Jakarta Barat, Indonesia',
+                    width: cardW,
                   ),
-                  SizedBox(width: 19),
+                  const SizedBox(width: 19),
                   TeamCard(
                     name: 'Tangerang Runners',
                     location: 'Tangerang, Indonesia',
+                    width: cardW,
                   ),
                 ],
-              ),
+              );
+            },
+          ),
+        ),
+      ],
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return SafeArea(
+      child: ResponsiveScroll(
+        // Bottom clearance for the floating nav pill (nav height + margin).
+        padding: const EdgeInsets.only(bottom: 150),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            _header(context),
+            const SizedBox(height: 16),
+            LayoutBuilder(
+              builder: (context, c) {
+                return switch (screenSizeOf(c.maxWidth)) {
+                  ScreenSize.compact => Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      _streak(),
+                      const SizedBox(height: 8),
+                      _history(),
+                      const SizedBox(height: 32),
+                      _teams(),
+                    ],
+                  ),
+                  ScreenSize.medium => Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      _streak(),
+                      const SizedBox(height: 24),
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Expanded(child: _history()),
+                          const SizedBox(width: 24),
+                          Expanded(child: _teams()),
+                        ],
+                      ),
+                    ],
+                  ),
+                  ScreenSize.expanded => Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Expanded(flex: 2, child: _streak()),
+                      const SizedBox(width: 32),
+                      Expanded(
+                        flex: 3,
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            _history(),
+                            const SizedBox(height: 32),
+                            _teams(),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                };
+              },
             ),
           ],
         ),
@@ -333,7 +416,9 @@ class HomeScreen extends StatelessWidget {
   }
 }
 
-/// Shell with floating dark pill nav (4 icons + central START).
+/// Shell: floating dark pill nav (4 icons + central START) on compact and
+/// medium; extended NavigationRail on expanded. The pill scales with
+/// fluid(w, 377, 480) — bigger on bigger screens, capped at ~480, centered.
 class MainShell extends StatefulWidget {
   const MainShell({super.key});
 
@@ -369,6 +454,22 @@ class _MainShellState extends State<MainShell> {
       const TeamsScreen(),
       const LeaderboardScreen(),
     ];
+    final w = MediaQuery.sizeOf(context).width;
+    if (w >= Breakpoints.expanded) {
+      return Scaffold(
+        body: Row(
+          children: [
+            _PacerNavRail(index: _index, onTap: _onPillTap, onStart: _goSetup),
+            Expanded(child: pages[_index]),
+          ],
+        ),
+      );
+    }
+    // Floating pill: fluid 377→480, capped at ~480 AND at the viewport
+    // (minus side margin) so it never overflows narrow screens.
+    var pillW = fluid(w, 377, 480);
+    if (pillW > w - 16) pillW = w - 16;
+    final pillScale = pillW / 377;
     return Scaffold(
       body: Stack(
         children: [
@@ -377,17 +478,103 @@ class _MainShellState extends State<MainShell> {
             Positioned(
               left: 0,
               right: 0,
-              bottom: 54,
+              // Sticks low: small margin above the bottom edge.
+              bottom: 16,
               child: Center(
-                child: BottomNavPill(
-                  index: _index,
-                  onTap: _onPillTap,
-                  onStart: _goSetup,
+                child: SizedBox(
+                  width: pillW,
+                  height: 80.7 * pillScale,
+                  // Pill is authored at fixed 377x80.7 design size; the
+                  // FittedBox scales it uniformly (aspect ratios match, so
+                  // contain == exact proportional scale).
+                  child: FittedBox(
+                    fit: BoxFit.contain,
+                    child: BottomNavPill(
+                      index: _index,
+                      onTap: _onPillTap,
+                      onStart: _goSetup,
+                    ),
+                  ),
                 ),
               ),
             ),
         ],
       ),
+    );
+  }
+}
+
+/// Extended NavigationRail for expanded widths — dark brand surface, lime
+/// selected icons, central START circle as the leading action.
+class _PacerNavRail extends StatelessWidget {
+  final int index;
+  final ValueChanged<int> onTap;
+  final VoidCallback onStart;
+  const _PacerNavRail({
+    required this.index,
+    required this.onTap,
+    required this.onStart,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return NavigationRail(
+      extended: true,
+      minExtendedWidth: 220,
+      backgroundColor: PacerColors.bottomBar,
+      selectedIndex: index,
+      onDestinationSelected: onTap,
+      leading: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 16),
+        child: GestureDetector(
+          onTap: onStart,
+          child: Container(
+            width: 70,
+            height: 70,
+            decoration: const BoxDecoration(
+              color: PacerColors.primary,
+              shape: BoxShape.circle,
+            ),
+            alignment: Alignment.center,
+            padding: const EdgeInsets.all(8),
+            child: FittedBox(
+              fit: BoxFit.scaleDown,
+              child: Text(
+                'START',
+                style: PacerText.fugazBrand.copyWith(
+                  fontSize: 20,
+                  color: Colors.black,
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+      destinations: [
+        NavigationRailDestination(
+          icon: const Icon(Icons.home_outlined),
+          selectedIcon: const Icon(Icons.home, color: PacerColors.lime),
+          label: Text(S.home),
+        ),
+        NavigationRailDestination(
+          icon: const Icon(Icons.directions_run_outlined),
+          selectedIcon: const Icon(
+            Icons.directions_run,
+            color: PacerColors.lime,
+          ),
+          label: Text(S.running),
+        ),
+        NavigationRailDestination(
+          icon: const Icon(Icons.groups_outlined),
+          selectedIcon: const Icon(Icons.groups, color: PacerColors.lime),
+          label: Text(S.teams),
+        ),
+        NavigationRailDestination(
+          icon: const Icon(Icons.leaderboard_outlined),
+          selectedIcon: const Icon(Icons.leaderboard, color: PacerColors.lime),
+          label: Text(S.leaderboard),
+        ),
+      ],
     );
   }
 }

@@ -8,6 +8,11 @@ enum Lang { id, en }
 /// `users.language` when signed in, local otherwise.
 final ValueNotifier<Lang> langNotifier = ValueNotifier(Lang.id);
 
+/// Set the moment the user explicitly picks a language. A backend read must
+/// never silently override an explicit in-session choice (e.g. when the
+/// profile row still holds the old default because a write failed).
+bool langUserLocked = false;
+
 /// All user-visible strings. Indonesian first, English alternate.
 class S {
   static bool get _en => langNotifier.value == Lang.en;
@@ -30,6 +35,12 @@ class S {
 
   // Home
   static String get history => _en ? 'History' : 'Riwayat';
+
+  static String get home => _en ? 'Home' : 'Beranda';
+
+  static String get teams => _en ? 'Teams' : 'Tim';
+
+  static String get leaderboard => _en ? 'Leaderboard' : 'Peringkat';
   static String get pacerTeams => _en ? 'Pacer Teams' : 'Tim Pacer';
   static String get seeAll => _en ? 'See all' : 'Lihat semua';
   static String get activeStreak => _en ? 'ACTIVE STREAK' : 'STREAK AKTIF';
@@ -187,4 +198,7 @@ class S {
       _en ? 'Demo: message sent' : 'Demo: pesan terkirim';
   static String get demoEmail =>
       _en ? 'Demo: sitirahma@pacer.id' : 'Demo: sitirahma@pacer.id';
+  static String get langSaveFailed => _en
+      ? "Couldn't save language online — using it on this device only."
+      : 'Bahasa gagal disimpan online — hanya berlaku di perangkat ini.';
 }

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:pacer/core/responsive/responsive.dart';
 import 'package:pacer/supabase.dart';
 
 import 'app_strings.dart';
@@ -17,12 +18,12 @@ class LoginScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     return Scaffold(
       body: SafeArea(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.symmetric(horizontal: 38),
+        child: ResponsiveScroll(
+          maxWidth: 720,
+          padding: const EdgeInsets.only(top: 12, bottom: 24),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const SizedBox(height: 12),
               const PageHeader(),
               const SizedBox(height: 16),
               Text(
@@ -38,16 +39,9 @@ class LoginScreen extends StatelessWidget {
                 obscure: true,
               ),
               const SizedBox(height: 28),
-              Center(
-                child: PrimaryButton(label: S.logIn, onPressed: onLoggedIn),
-              ),
+              PrimaryButton(label: S.logIn, onPressed: onLoggedIn),
               const SizedBox(height: 28),
-              const Center(
-                child: SizedBox(
-                  width: 289,
-                  child: Divider(color: Colors.black, height: 1),
-                ),
-              ),
+              const Divider(color: Colors.black, height: 1),
               const SizedBox(height: 24),
             ],
           ),
@@ -73,8 +67,9 @@ class _RunSetupScreenState extends State<RunSetupScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       body: SafeArea(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.fromLTRB(22, 65, 22, 24),
+        child: ResponsiveScroll(
+          maxWidth: 720,
+          padding: const EdgeInsets.only(top: 65, bottom: 24),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -95,35 +90,31 @@ class _RunSetupScreenState extends State<RunSetupScreen> {
                 child: const BackButton(color: PacerColors.ink),
               ),
               const SizedBox(height: 16),
-              SizedBox(
-                width: 350,
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      S.chooseSport,
-                      style: GoogleFonts.spaceGrotesk(
-                        fontWeight: FontWeight.w700,
-                        fontSize: 24,
-                        height: 32 / 24,
-                        color: const Color(0xFF181C22),
-                      ),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    S.chooseSport,
+                    style: GoogleFonts.spaceGrotesk(
+                      fontWeight: FontWeight.w700,
+                      fontSize: 24,
+                      height: 32 / 24,
+                      color: const Color(0xFF181C22),
                     ),
-                    const SizedBox(height: 4),
-                    Text(
-                      S.setupSubtitle,
-                      style: GoogleFonts.hankenGrotesk(
-                        fontSize: 14,
-                        height: 20 / 14,
-                        color: const Color(0xFF444749),
-                      ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    S.setupSubtitle,
+                    style: GoogleFonts.hankenGrotesk(
+                      fontSize: 14,
+                      height: 20 / 14,
+                      color: const Color(0xFF444749),
                     ),
-                  ],
-                ),
+                  ),
+                ],
               ),
               const SizedBox(height: 24),
               Container(
-                width: 350,
                 padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(
                   color: Colors.white,
@@ -131,48 +122,46 @@ class _RunSetupScreenState extends State<RunSetupScreen> {
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
-                    Row(
-                      children: [
-                        Container(
-                          width: 44,
-                          height: 44,
-                          decoration: BoxDecoration(
-                            color: Colors.black,
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          child: const Icon(
-                            Icons.directions_run,
-                            size: 21,
-                            color: Colors.white,
-                          ),
-                        ),
-                        const SizedBox(width: 12),
-                        Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              S.outdoorRun,
-                              style: GoogleFonts.spaceGrotesk(
-                                fontWeight: FontWeight.w600,
-                                fontSize: 16,
-                                height: 24 / 16,
-                                color: const Color(0xFF181C22),
-                              ),
-                            ),
-                            Text(
-                              S.gpsDistanceTempo,
-                              style: GoogleFonts.hankenGrotesk(
-                                fontSize: 12,
-                                height: 16 / 12,
-                                color: const Color(0xFF444749),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ],
+                    Container(
+                      width: 44,
+                      height: 44,
+                      decoration: BoxDecoration(
+                        color: Colors.black,
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: const Icon(
+                        Icons.directions_run,
+                        size: 21,
+                        color: Colors.white,
+                      ),
                     ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            S.outdoorRun,
+                            style: GoogleFonts.spaceGrotesk(
+                              fontWeight: FontWeight.w600,
+                              fontSize: 16,
+                              height: 24 / 16,
+                              color: const Color(0xFF181C22),
+                            ),
+                          ),
+                          Text(
+                            S.gpsDistanceTempo,
+                            style: GoogleFonts.hankenGrotesk(
+                              fontSize: 12,
+                              height: 16 / 12,
+                              color: const Color(0xFF444749),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(width: 12),
                     Container(
                       width: 24,
                       height: 24,
@@ -191,7 +180,6 @@ class _RunSetupScreenState extends State<RunSetupScreen> {
               ),
               const SizedBox(height: 24),
               Container(
-                width: 350,
                 padding: const EdgeInsets.only(top: 16),
                 decoration: const BoxDecoration(
                   border: Border(top: BorderSide(color: Color(0xFFE5E8F1))),
@@ -258,7 +246,7 @@ class _RunSetupScreenState extends State<RunSetupScreen> {
               ),
               const SizedBox(height: 24),
               SizedBox(
-                width: 350,
+                width: double.infinity,
                 height: 52,
                 child: ElevatedButton(
                   onPressed: widget.onStart,
@@ -323,21 +311,19 @@ class _RunTrackerScreenState extends State<RunTrackerScreen> {
             ),
           ),
           SafeArea(
-            // Design canvas is 393x808 (Figma 393x852 minus status bar).
-            // Scale it to any screen width so exact geometry (98px circles,
-            // Fugaz-78 distance) never crowds or clips on narrow phones.
-            child: FittedBox(
-              fit: BoxFit.scaleDown,
-              alignment: Alignment.topCenter,
-              child: SizedBox(
-                width: 393,
-                height: 808,
-                child: Stack(
-                  children: [
-                    Positioned(
-                      left: 32,
-                      top: 85 - 44,
-                      child: Container(
+            // Fluid layout: hero number and action circles scale with width
+            // (fluid 72→160 / 84→112); on expanded widths the route visual
+            // and the stats/actions sit side by side in two panes.
+            child: LayoutBuilder(
+              builder: (context, c) {
+                final w = c.maxWidth;
+                final hero = fluid(w, 72, 160);
+                final circle = fluid(w, 84, 112);
+                Widget header = Padding(
+                  padding: const EdgeInsets.fromLTRB(32, 12, 32, 0),
+                  child: Row(
+                    children: [
+                      Container(
                         width: 48,
                         height: 48,
                         decoration: const BoxDecoration(
@@ -361,12 +347,8 @@ class _RunTrackerScreenState extends State<RunTrackerScreen> {
                           ),
                         ),
                       ),
-                    ),
-                    const Positioned(right: 32, top: 85 - 44, child: GpsPill()),
-                    Positioned(
-                      left: 160,
-                      top: 102 - 44,
-                      child: Container(
+                      const Spacer(),
+                      Container(
                         width: 83,
                         height: 10,
                         decoration: BoxDecoration(
@@ -374,94 +356,133 @@ class _RunTrackerScreenState extends State<RunTrackerScreen> {
                           borderRadius: BorderRadius.circular(5),
                         ),
                       ),
-                    ),
-                    Positioned(
-                      left: 79,
-                      top: 210 - 44,
-                      child: Text('00,00', style: PacerText.giantNum(78)),
-                    ),
-                    Positioned(
-                      left: 149,
-                      top: 320 - 44,
-                      child: Text(
+                      const SizedBox(width: 24),
+                      const GpsPill(),
+                    ],
+                  ),
+                );
+                Widget heroBlock = Center(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text('00,00', style: PacerText.giantNum(hero)),
+                      Text(
                         S.distanceKm,
-                        style: TextStyle(
+                        style: const TextStyle(
                           fontWeight: FontWeight.w300,
                           fontSize: 15,
                           color: Color(0x99000000),
                         ),
                       ),
-                    ),
-                    Positioned(
-                      left: 38,
-                      top: 589 - 44,
-                      child: SizedBox(
-                        width: 317,
+                    ],
+                  ),
+                );
+                Widget stats = Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 32),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: TrackerStatColumn(
+                          avatarSize: 20,
+                          initials: 'A',
+                          value: "0'00''",
+                          label: S.avgPace,
+                        ),
+                      ),
+                      Expanded(
+                        child: TrackerStatColumn(
+                          avatarSize: 25,
+                          initials: 'B',
+                          value: '00.00',
+                          label: S.duration,
+                        ),
+                      ),
+                      Expanded(
+                        child: TrackerStatColumn(
+                          avatarSize: 30,
+                          initials: 'C',
+                          value: '0 kcal',
+                          label: S.calories,
+                        ),
+                      ),
+                    ],
+                  ),
+                );
+                Widget actions = Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 32),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      MapCircleButton(size: circle),
+                      if (!_running)
+                        CircleAction(
+                          label: S.pause,
+                          bg: PacerColors.lime,
+                          fg: PacerColors.ink,
+                          size: circle,
+                          onTap: () => setState(() => _running = true),
+                        )
+                      else
+                        CircleAction(
+                          label: S.continueLabel,
+                          bg: Colors.white,
+                          fg: PacerColors.ink,
+                          labelSize: 14,
+                          size: circle,
+                          onTap: () => setState(() => _running = false),
+                        ),
+                      if (_running)
+                        CircleAction(
+                          label: S.finish,
+                          bg: PacerColors.ink,
+                          fg: PacerColors.lime,
+                          size: circle,
+                          onTap: () => setState(() => _finished = true),
+                        )
+                      else
+                        SizedBox(width: circle),
+                    ],
+                  ),
+                );
+                if (w >= Breakpoints.expanded) {
+                  // Two panes: route visual left, stats + actions right.
+                  return Column(
+                    children: [
+                      header,
+                      Expanded(
                         child: Row(
-                          crossAxisAlignment: CrossAxisAlignment.end,
                           children: [
-                            TrackerStatColumn(
-                              avatarSize: 20,
-                              initials: 'A',
-                              value: "0'00''",
-                              label: S.avgPace,
-                            ),
-                            Spacer(),
-                            TrackerStatColumn(
-                              avatarSize: 25,
-                              initials: 'B',
-                              value: '00.00',
-                              label: S.duration,
-                            ),
-                            Spacer(),
-                            TrackerStatColumn(
-                              avatarSize: 30,
-                              initials: 'C',
-                              value: '0 kcal',
-                              label: S.calories,
+                            Expanded(flex: 3, child: heroBlock),
+                            SizedBox(width: fluid(w, 24, 64)),
+                            Expanded(
+                              flex: 2,
+                              child: Column(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  stats,
+                                  const SizedBox(height: 32),
+                                  actions,
+                                ],
+                              ),
                             ),
                           ],
                         ),
                       ),
-                    ),
-                    Positioned(
-                      left: 32,
-                      right: 32,
-                      top: 690 - 44,
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          const MapCircleButton(),
-                          if (!_running)
-                            CircleAction(
-                              label: S.pause,
-                              bg: PacerColors.lime,
-                              fg: PacerColors.ink,
-                              onTap: () => setState(() => _running = true),
-                            )
-                          else
-                            CircleAction(
-                              label: S.continueLabel,
-                              bg: Colors.white,
-                              fg: PacerColors.ink,
-                              labelSize: 14,
-                              onTap: () => setState(() => _running = false),
-                            ),
-                          if (_running)
-                            CircleAction(
-                              label: S.finish,
-                              bg: PacerColors.ink,
-                              fg: PacerColors.lime,
-                              onTap: () => setState(() => _finished = true),
-                            )
-                          else
-                            const SizedBox(width: 98),
-                        ],
-                      ),
-                    ),
+                      const SizedBox(height: 24),
+                    ],
+                  );
+                }
+                return Column(
+                  children: [
+                    header,
+                    Expanded(child: heroBlock),
+                    stats,
+                    const SizedBox(height: 24),
+                    actions,
+                    const SizedBox(height: 24),
                   ],
-                ),
-              ),
+                );
+              },
             ),
           ),
         ],
@@ -545,12 +566,13 @@ class RunFinishScreen extends StatelessWidget {
             ),
           ),
           SafeArea(
-            child: SingleChildScrollView(
-              padding: const EdgeInsets.fromLTRB(32, 0, 32, 120),
+            child: ResponsiveScroll(
+              maxWidth: 720,
+              padding: const EdgeInsets.only(bottom: 120),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  const SizedBox(height: 85 - 44),
+                  const SizedBox(height: 41),
                   Row(
                     children: [
                       IconButton(
@@ -583,11 +605,7 @@ class RunFinishScreen extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(height: 24),
-                  Container(
-                    width: 329,
-                    height: 1,
-                    color: const Color(0x40000000),
-                  ),
+                  Container(height: 1, color: const Color(0x40000000)),
                   if (isHistoryDetail) ...[
                     const SizedBox(height: 28),
                     Container(
@@ -616,31 +634,49 @@ class RunFinishScreen extends StatelessWidget {
                     pace: isHistoryDetail ? "5'00''" : "0'00''",
                   ),
                   const SizedBox(height: 18),
-                  for (final m in metrics)
-                    Padding(
-                      padding: const EdgeInsets.only(bottom: 9),
-                      child: MetricCard(
-                        title: m.$1,
-                        sub: m.$2,
-                        value: isHistoryDetail ? m.$3 : null,
-                        unit: isHistoryDetail ? m.$4 : null,
-                      ),
-                    ),
-                  if (isHistoryDetail) ...[
-                    const SizedBox(height: 9),
-                    LimeActionBar(
-                      S.done,
-                      onPressed: () => Navigator.of(context).pop(),
-                    ),
-                  ] else ...[
-                    const SizedBox(height: 12),
-                    Center(
-                      child: LimeActionBar(
-                        S.done,
-                        onPressed: () => Navigator.of(context).pop(),
-                      ),
-                    ),
-                  ],
+                  LayoutBuilder(
+                    builder: (context, c) {
+                      final cards = [
+                        for (final m in metrics)
+                          MetricCard(
+                            title: m.$1,
+                            sub: m.$2,
+                            value: isHistoryDetail ? m.$3 : null,
+                            unit: isHistoryDetail ? m.$4 : null,
+                          ),
+                      ];
+                      if (screenSizeOf(c.maxWidth) == ScreenSize.compact) {
+                        return Column(
+                          children: [
+                            for (final card in cards)
+                              Padding(
+                                padding: const EdgeInsets.only(bottom: 9),
+                                child: card,
+                              ),
+                          ],
+                        );
+                      }
+                      // medium and up: metric cards flow into a 2+ column
+                      // grid that grows with the width.
+                      return GridView(
+                        shrinkWrap: true,
+                        physics: const NeverScrollableScrollPhysics(),
+                        gridDelegate:
+                            const SliverGridDelegateWithMaxCrossAxisExtent(
+                              maxCrossAxisExtent: 400,
+                              mainAxisSpacing: 9,
+                              crossAxisSpacing: 9,
+                              mainAxisExtent: 90,
+                            ),
+                        children: cards,
+                      );
+                    },
+                  ),
+                  const SizedBox(height: 12),
+                  LimeActionBar(
+                    S.done,
+                    onPressed: () => Navigator.of(context).pop(),
+                  ),
                   const SizedBox(height: 24),
                 ],
               ),
@@ -661,39 +697,45 @@ class TeamsScreen extends StatelessWidget {
     return Scaffold(
       backgroundColor: Colors.white,
       body: SafeArea(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.fromLTRB(24, 16, 24, 120),
+        child: ResponsiveScroll(
+          padding: const EdgeInsets.only(top: 16, bottom: 120),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(S.findTeamsNearby,
-                style: TextStyle(fontSize: 32),
-              ),
+              Text(S.findTeamsNearby, style: const TextStyle(fontSize: 32)),
               const SizedBox(height: 12),
               const SearchField(),
               const SizedBox(height: 16),
-              const TeamCard(
-                name: 'JakBar Pacer',
-                location: 'Jakarta Barat, Indonesia',
-                width: 329,
-              ),
-              const SizedBox(height: 12),
-              const TeamCard(
-                name: 'Tangerang Runners',
-                location: 'Tangerang, Indonesia',
-                width: 329,
-              ),
-              const SizedBox(height: 12),
-              const TeamCard(
-                name: 'Jakarta Night Striders',
-                location: 'GBK Senayan • Gate 5',
-                width: 329,
-              ),
-              const SizedBox(height: 12),
-              const TeamCard(
-                name: 'Senayan Squad',
-                location: 'Jakarta Selatan, Indonesia',
-                width: 329,
+              // Team cards flow into a grid: 1 column on phones, 2 on
+              // tablets, 3+ on desktop — driven by max extent, never a
+              // hardcoded count.
+              GridView(
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+                  maxCrossAxisExtent: 360,
+                  mainAxisSpacing: 12,
+                  crossAxisSpacing: 12,
+                  mainAxisExtent: 140,
+                ),
+                children: const [
+                  TeamCard(
+                    name: 'JakBar Pacer',
+                    location: 'Jakarta Barat, Indonesia',
+                  ),
+                  TeamCard(
+                    name: 'Tangerang Runners',
+                    location: 'Tangerang, Indonesia',
+                  ),
+                  TeamCard(
+                    name: 'Jakarta Night Striders',
+                    location: 'GBK Senayan • Gate 5',
+                  ),
+                  TeamCard(
+                    name: 'Senayan Squad',
+                    location: 'Jakarta Selatan, Indonesia',
+                  ),
+                ],
               ),
               const SizedBox(height: 16),
               GestureDetector(
@@ -701,7 +743,7 @@ class TeamsScreen extends StatelessWidget {
                   MaterialPageRoute(builder: (_) => const PersyaratanScreen()),
                 ),
                 child: Container(
-                  width: 329,
+                  width: double.infinity,
                   height: 58,
                   alignment: Alignment.center,
                   decoration: BoxDecoration(
@@ -716,7 +758,8 @@ class TeamsScreen extends StatelessWidget {
                       ),
                     ],
                   ),
-                  child: Text(S.createTeam,
+                  child: Text(
+                    S.createTeam,
                     style: TextStyle(fontWeight: FontWeight.w600),
                   ),
                 ),
@@ -746,7 +789,8 @@ class TeamsScreen extends StatelessWidget {
                 ],
               ),
               const SizedBox(height: 16),
-              Text(S.nearestGroupRun,
+              Text(
+                S.nearestGroupRun,
                 style: TextStyle(fontWeight: FontWeight.w500, fontSize: 20),
               ),
               const SizedBox(height: 8),
@@ -791,9 +835,9 @@ class _JoinButton extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return ElevatedButton(
-      onPressed: () => ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(S.demoJoinSent)),
-      ),
+      onPressed: () =>
+          ScaffoldMessenger.of(context)
+              .showSnackBar(SnackBar(content: Text(S.demoJoinSent))),
       style: ElevatedButton.styleFrom(
         backgroundColor: PacerColors.joinYellow,
         foregroundColor: Colors.black,
@@ -822,7 +866,7 @@ class LeaderboardScreen extends StatelessWidget {
     return Scaffold(
       backgroundColor: Colors.white,
       body: SafeArea(
-        child: SingleChildScrollView(
+        child: ResponsiveScroll(
           padding: const EdgeInsets.fromLTRB(24, 16, 24, 120),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -862,7 +906,7 @@ class LeaderboardScreen extends StatelessWidget {
               const SizedBox(height: 16),
               for (var i = 0; i < _rows.length; i++)
                 Container(
-                  width: 358,
+                  width: double.infinity,
                   margin: const EdgeInsets.only(bottom: 8),
                   padding: const EdgeInsets.symmetric(
                     horizontal: 12,
@@ -1000,29 +1044,39 @@ class HistoryScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final w = MediaQuery.sizeOf(context).width;
     return Scaffold(
       backgroundColor: Colors.white,
       body: SafeArea(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.fromLTRB(24, 16, 24, 120),
+        child: ResponsiveScroll(
+          padding: const EdgeInsets.only(top: 16, bottom: 120),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(S.history, style: PacerText.pageTitle),
-              Text('46,00', style: PacerText.giantNum(88)),
-              const Text(
-                'Kilometer',
-                style: TextStyle(fontWeight: FontWeight.w300, fontSize: 24),
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: [
+                  // Hero number scales with width (fluid 88→140).
+                  Text('46,00', style: PacerText.giantNum(fluid(w, 88, 140))),
+                  const Text(
+                    'Kilometer',
+                    style: TextStyle(fontWeight: FontWeight.w300, fontSize: 24),
+                  ),
+                ],
               ),
               const SizedBox(height: 8),
-              const Row(
+              // Wrap instead of a fixed Row so the summary never overflows.
+              const Wrap(
+                crossAxisAlignment: WrapCrossAlignment.center,
+                spacing: 12,
                 children: [
                   Text(
-                    '4 Run   ',
+                    '4 Run',
                     style: TextStyle(fontWeight: FontWeight.w500, fontSize: 24),
                   ),
                   Text(
-                    '5,50 Average Pace   ',
+                    '5,50 Average Pace',
                     style: TextStyle(fontWeight: FontWeight.w300, fontSize: 20),
                   ),
                   Text(
@@ -1032,53 +1086,47 @@ class HistoryScreen extends StatelessWidget {
                 ],
               ),
               const SizedBox(height: 12),
-              GestureDetector(
-                onTap: () => Navigator.of(context).push(
-                  MaterialPageRoute(
-                    builder: (_) => const RunFinishScreen(
-                      title: 'Monday Morning Run',
-                      isHistoryDetail: true,
+              // Session cards flow into a grid on medium and up.
+              GridView(
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+                  maxCrossAxisExtent: 380,
+                  mainAxisSpacing: 12,
+                  crossAxisSpacing: 12,
+                  mainAxisExtent: 156,
+                ),
+                children: [
+                  for (final card in const [
+                    RunSessionCard(title: 'Monday : 07.30'),
+                    RunSessionCard(
+                      title: 'Monday : 07.30',
+                      date: '8/7/2024',
+                      time: '28.40',
+                      pace: "6'10''",
+                      distance: '5,00 Km',
+                      limePill: true,
                     ),
-                  ),
-                ),
-                child: const RunSessionCard(title: 'Monday : 07.30'),
-              ),
-              const SizedBox(height: 12),
-              GestureDetector(
-                onTap: () => Navigator.of(context).push(
-                  MaterialPageRoute(
-                    builder: (_) => const RunFinishScreen(
-                      title: 'Monday Morning Run',
-                      isHistoryDetail: true,
+                    RunSessionCard(
+                      title: 'Monday : 07.30',
+                      date: '1/7/2024',
+                      time: '1.00.00',
+                      pace: "4'00''",
+                      distance: '15,00 Km',
                     ),
-                  ),
-                ),
-                child: const RunSessionCard(
-                  title: 'Monday : 07.30',
-                  date: '8/7/2024',
-                  time: '28.40',
-                  pace: "6'10''",
-                  distance: '5,00 Km',
-                  limePill: true,
-                ),
-              ),
-              const SizedBox(height: 12),
-              GestureDetector(
-                onTap: () => Navigator.of(context).push(
-                  MaterialPageRoute(
-                    builder: (_) => const RunFinishScreen(
-                      title: 'Monday Morning Run',
-                      isHistoryDetail: true,
+                  ])
+                    GestureDetector(
+                      onTap: () => Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (_) => const RunFinishScreen(
+                            title: 'Monday Morning Run',
+                            isHistoryDetail: true,
+                          ),
+                        ),
+                      ),
+                      child: card,
                     ),
-                  ),
-                ),
-                child: const RunSessionCard(
-                  title: 'Monday : 07.30',
-                  date: '1/7/2024',
-                  time: '1.00.00',
-                  pace: "4'00''",
-                  distance: '15,00 Km',
-                ),
+                ],
               ),
             ],
           ),
@@ -1101,52 +1149,57 @@ class ChallengeDetailSheet extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Padding(
-      padding: const EdgeInsets.all(24),
-      child: SingleChildScrollView(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Text(S.challengeDetail, style: PacerText.pageTitle),
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.end,
+    // Sheets cap at ~560 on wide screens instead of stretching edge to edge.
+    return Center(
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 560),
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: SingleChildScrollView(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
               children: [
-                Text(
-                  '10 ',
-                  style: PacerText.giantNum(96)
-                      .copyWith(color: PacerColors.primary),
+                Text(S.challengeDetail, style: PacerText.pageTitle),
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    Text(
+                      '10 ',
+                      style: PacerText.giantNum(96)
+                          .copyWith(color: PacerColors.primary),
+                    ),
+                    Text('KM', style: PacerText.kmSuffix),
+                  ],
                 ),
-                Text('KM', style: PacerText.kmSuffix),
+                Text(
+                  S.distance,
+                  style: TextStyle(fontWeight: FontWeight.w600, fontSize: 24),
+                ),
+                const Text(
+                  'Waktu: 1,30 Jam',
+                  style: TextStyle(fontWeight: FontWeight.w600, fontSize: 24),
+                ),
+                const Text(
+                  'Tanggal: 29-10-2009',
+                  style: TextStyle(fontWeight: FontWeight.w600, fontSize: 24),
+                ),
+                const SizedBox(height: 12),
+                const MapPlaceholder(
+                  height: 185,
+                  label: 'Track — placeholder bebas hak cipta',
+                ),
+                const SizedBox(height: 16),
+                LimeActionBar(
+                  S.startChallenge,
+                  onPressed: () => ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(content: Text(S.demoChallengeStarted)),
+                  ),
+                ),
+                const SizedBox(height: 16),
               ],
             ),
-            Text(S.distance,
-              style: TextStyle(fontWeight: FontWeight.w600, fontSize: 24),
-            ),
-            const Text(
-              'Waktu: 1,30 Jam',
-              style: TextStyle(fontWeight: FontWeight.w600, fontSize: 24),
-            ),
-            const Text(
-              'Tanggal: 29-10-2009',
-              style: TextStyle(fontWeight: FontWeight.w600, fontSize: 24),
-            ),
-            const SizedBox(height: 12),
-            const MapPlaceholder(
-              height: 185,
-              label: 'Track — placeholder bebas hak cipta',
-            ),
-            const SizedBox(height: 16),
-            Center(
-              child: LimeActionBar(
-                S.startChallenge,
-                onPressed: () => ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text(S.demoChallengeStarted)),
-                ),
-              ),
-            ),
-            const SizedBox(height: 16),
-          ],
+          ),
         ),
       ),
     );
@@ -1194,8 +1247,9 @@ class AccountScreen extends StatelessWidget {
     return Scaffold(
       backgroundColor: Colors.white,
       body: SafeArea(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.fromLTRB(24, 16, 24, 120),
+        child: ResponsiveScroll(
+          maxWidth: 720,
+          padding: const EdgeInsets.only(top: 16, bottom: 120),
           child: Column(
             children: [
               Row(
@@ -1234,7 +1288,6 @@ class AccountScreen extends StatelessWidget {
               ),
               const SizedBox(height: 12),
               Container(
-                width: 377,
                 padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(
                   borderRadius: BorderRadius.circular(16),
@@ -1324,46 +1377,81 @@ class StatisticScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-        leading: const BackButton(color: PacerColors.ink),
-      ),
       body: SafeArea(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.symmetric(horizontal: 24),
+        child: ResponsiveScroll(
+          maxWidth: 720,
+          padding: const EdgeInsets.only(top: 16, bottom: 24),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              const PageHeader(),
+              const SizedBox(height: 16),
               Text(S.statistic, style: PacerText.pageTitle),
               const SizedBox(height: 12),
-              const MapPlaceholder(
-                height: 160,
-                label: 'Senayan Loop (3x) • Elevasi +45m',
-              ),
-              const SizedBox(height: 12),
-              const Text(
-                '3,00 Km',
-                style: TextStyle(fontWeight: FontWeight.w700, fontSize: 32),
-              ),
-              Text(S.totalRunDistance,
-                style: TextStyle(fontSize: 11, color: PacerColors.slate400),
-              ),
-              Text(S.targetAchieved,
-                style: TextStyle(
-                  color: PacerColors.chipGreen,
-                  fontWeight: FontWeight.w600,
-                ),
-              ),
-              const SizedBox(height: 12),
-              Row(
-                children: [
-                  Expanded(child: _StatCard(S.averagePace, "5'00\"", '/km')),
-                  SizedBox(width: 8),
-                  Expanded(child: _StatCard(S.totalTime, '15.00', 'menit')),
-                  SizedBox(width: 8),
-                  Expanded(child: _StatCard(S.activeCalories, '542', 'kkal')),
-                ],
+              LayoutBuilder(
+                builder: (context, c) {
+                  Widget map = const MapPlaceholder(
+                    height: 160,
+                    label: 'Senayan Loop (3x) • Elevasi +45m',
+                  );
+                  Widget total = Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        '3,00 Km',
+                        style: TextStyle(
+                          fontWeight: FontWeight.w700,
+                          fontSize: 32,
+                        ),
+                      ),
+                      Text(
+                        S.totalRunDistance,
+                        style: TextStyle(
+                          fontSize: 11,
+                          color: PacerColors.slate400,
+                        ),
+                      ),
+                      Text(
+                        S.targetAchieved,
+                        style: TextStyle(
+                          color: PacerColors.chipGreen,
+                          fontWeight: FontWeight.w600,
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                      Row(
+                        children: [
+                          Expanded(
+                            child: _StatCard(S.averagePace, "5'00\"", '/km'),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: _StatCard(S.totalTime, '15.00', 'menit'),
+                          ),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: _StatCard(S.activeCalories, '542', 'kkal'),
+                          ),
+                        ],
+                      ),
+                    ],
+                  );
+                  if (screenSizeOf(c.maxWidth) == ScreenSize.compact) {
+                    return Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [map, const SizedBox(height: 12), total],
+                    );
+                  }
+                  // medium and up: map pane beside the stats pane.
+                  return Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Expanded(child: map),
+                      const SizedBox(width: 24),
+                      Expanded(child: total),
+                    ],
+                  );
+                },
               ),
               const SizedBox(height: 24),
             ],
@@ -1418,77 +1506,110 @@ class StreaksScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     const days = ['Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab', 'Min'];
     return Scaffold(
-      appBar: AppBar(
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-        leading: const BackButton(color: PacerColors.ink),
-      ),
       body: SafeArea(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.symmetric(horizontal: 24),
+        child: ResponsiveScroll(
+          maxWidth: 720,
+          padding: const EdgeInsets.only(top: 16, bottom: 24),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              const PageHeader(),
+              const SizedBox(height: 16),
               Text(S.streaks, style: PacerText.pageTitle),
-              const Text(
-                'MINGGU INI • 5 dari 7 Hari',
-                style: TextStyle(
-                  color: PacerColors.streakBlue,
-                  fontWeight: FontWeight.w600,
-                  fontSize: 12,
-                ),
-              ),
               const SizedBox(height: 12),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: List.generate(7, (i) {
-                  final done = i < 4;
-                  final today = i == 4;
-                  return Column(
+              LayoutBuilder(
+                builder: (context, c) {
+                  Widget week = Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Container(
-                        width: 36,
-                        height: 36,
-                        alignment: Alignment.center,
-                        decoration: BoxDecoration(
-                          shape: BoxShape.circle,
-                          color: done ? PacerColors.streakBlue : Colors.white,
-                          border: Border.all(
-                            color: done || today
-                                ? PacerColors.streakBlue
-                                : PacerColors.slate200,
-                            width: 2,
-                          ),
-                          boxShadow: today
-                              ? [
-                                  const BoxShadow(
-                                    color: Color(0xFFFFE600),
-                                    blurRadius: 8,
-                                  ),
-                                ]
-                              : null,
+                      const Text(
+                        'MINGGU INI • 5 dari 7 Hari',
+                        style: TextStyle(
+                          color: PacerColors.streakBlue,
+                          fontWeight: FontWeight.w600,
+                          fontSize: 12,
                         ),
-                        child: done
-                            ? const Icon(
-                                Icons.check,
-                                size: 16,
-                                color: Colors.white,
-                              )
-                            : null,
                       ),
-                      Text(
-                        days[i],
-                        style: const TextStyle(
-                          fontSize: 11,
-                          color: PacerColors.slate400,
+                      const SizedBox(height: 12),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: List.generate(7, (i) {
+                          final done = i < 4;
+                          final today = i == 4;
+                          return Column(
+                            children: [
+                              Container(
+                                width: 36,
+                                height: 36,
+                                alignment: Alignment.center,
+                                decoration: BoxDecoration(
+                                  shape: BoxShape.circle,
+                                  color: done
+                                      ? PacerColors.streakBlue
+                                      : Colors.white,
+                                  border: Border.all(
+                                    color: done || today
+                                        ? PacerColors.streakBlue
+                                        : PacerColors.slate200,
+                                    width: 2,
+                                  ),
+                                  boxShadow: today
+                                      ? [
+                                          const BoxShadow(
+                                            color: Color(0xFFFFE600),
+                                            blurRadius: 8,
+                                          ),
+                                        ]
+                                      : null,
+                                ),
+                                child: done
+                                    ? const Icon(
+                                        Icons.check,
+                                        size: 16,
+                                        color: Colors.white,
+                                      )
+                                    : null,
+                              ),
+                              Text(
+                                days[i],
+                                style: const TextStyle(
+                                  fontSize: 11,
+                                  color: PacerColors.slate400,
+                                ),
+                              ),
+                            ],
+                          );
+                        }),
+                      ),
+                      const SizedBox(height: 16),
+                      const StreakCard(),
+                    ],
+                  );
+                  if (screenSizeOf(c.maxWidth) == ScreenSize.compact) {
+                    return week;
+                  }
+                  // medium and up: week + card left, streak stats right —
+                  // no empty bottom half.
+                  return Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Expanded(child: week),
+                      const SizedBox(width: 24),
+                      Expanded(
+                        child: Column(
+                          children: [
+                            _StatCard(S.streaks, '24', ''),
+                            const SizedBox(height: 12),
+                            _StatCard(S.personalRecord, '42', ''),
+                            const SizedBox(height: 12),
+                            _StatCard(S.history, '156', 'km'),
+                          ],
                         ),
                       ),
                     ],
                   );
-                }),
+                },
               ),
-              const SizedBox(height: 16),
-              const Center(child: StreakCard(width: 321, height: 157)),
               const SizedBox(height: 24),
             ],
           ),
@@ -1504,18 +1625,17 @@ class ChallengeListScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final w = MediaQuery.sizeOf(context).width;
     return Scaffold(
-      appBar: AppBar(
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-        leading: const BackButton(color: PacerColors.ink),
-      ),
       body: SafeArea(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.symmetric(horizontal: 24),
+        child: ResponsiveScroll(
+          maxWidth: 720,
+          padding: const EdgeInsets.only(top: 16, bottom: 24),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              const PageHeader(),
+              const SizedBox(height: 16),
               Text(S.challenge, style: PacerText.pageTitle),
               const SizedBox(height: 12),
               for (final c in const [('10', '29-10-2009'), ('8', '29-10-2009')])
@@ -1525,8 +1645,8 @@ class ChallengeListScreen extends StatelessWidget {
                     builder: (_) => const ChallengeDetailSheet(),
                   ),
                   child: Container(
-                    width: 342,
-                    height: 179,
+                    width: double.infinity,
+                    height: fluid(w, 179, 220),
                     margin: const EdgeInsets.only(bottom: 12),
                     padding: const EdgeInsets.all(20),
                     decoration: BoxDecoration(
@@ -1538,9 +1658,10 @@ class ChallengeListScreen extends StatelessWidget {
                     child: Row(
                       crossAxisAlignment: CrossAxisAlignment.end,
                       children: [
+                        // Hero number scales with width (fluid 96→140).
                         Text(
                           c.$1,
-                          style: PacerText.giantNum(96)
+                          style: PacerText.giantNum(fluid(w, 96, 140))
                               .copyWith(color: PacerColors.primary),
                         ),
                         Text(
@@ -1561,7 +1682,8 @@ class ChallengeListScreen extends StatelessWidget {
                   ),
                 ),
               const SizedBox(height: 12),
-              Center(
+              SizedBox(
+                width: double.infinity,
                 child: OutlinedButton(
                   onPressed: () => Navigator.of(context).push(
                     MaterialPageRoute(
@@ -1592,17 +1714,15 @@ class PersyaratanScreen extends StatelessWidget {
       (S.routineGroupRun, S.routineGroupRunDesc),
     ];
     return Scaffold(
-      appBar: AppBar(
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-        leading: const BackButton(color: PacerColors.ink),
-      ),
       body: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 24),
+        child: ResponsiveScroll(
+          maxWidth: 720,
+          padding: const EdgeInsets.only(top: 16, bottom: 24),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              const PageHeader(),
+              const SizedBox(height: 16),
               Text(
                 S.clubRequirements,
                 style: PacerText.pageTitle.copyWith(fontSize: 24),
@@ -1648,25 +1768,21 @@ class PersyaratanScreen extends StatelessWidget {
                     ],
                   ),
                 ),
-              const Spacer(),
-              Center(
-                child: SizedBox(
-                  height: 48,
-                  width: 200,
-                  child: ElevatedButton(
-                    onPressed: () => Navigator.of(context).push(
-                      MaterialPageRoute(
-                        builder: (_) => const CreateClubScreen(),
-                      ),
-                    ),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: PacerColors.lime,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(999),
-                      ),
-                    ),
-                    child: Text(S.agree),
+              const SizedBox(height: 24),
+              SizedBox(
+                width: double.infinity,
+                height: 48,
+                child: ElevatedButton(
+                  onPressed: () => Navigator.of(context).push(
+                    MaterialPageRoute(builder: (_) => const CreateClubScreen()),
                   ),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: PacerColors.lime,
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(999),
+                    ),
+                  ),
+                  child: Text(S.agree),
                 ),
               ),
               Center(
@@ -1691,17 +1807,15 @@ class CreateClubScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-        leading: const BackButton(color: PacerColors.ink),
-      ),
       body: SafeArea(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.symmetric(horizontal: 24),
+        child: ResponsiveScroll(
+          maxWidth: 720,
+          padding: const EdgeInsets.only(top: 16, bottom: 24),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              const PageHeader(),
+              const SizedBox(height: 16),
               Text(S.createTeam, style: PacerText.pageTitle),
               const SizedBox(height: 12),
               Container(
@@ -1713,7 +1827,8 @@ class CreateClubScreen extends StatelessWidget {
                   borderRadius: BorderRadius.circular(12),
                   border: Border.all(color: PacerColors.formBorder, width: 2),
                 ),
-                child: Text(S.addLogo,
+                child: Text(
+                  S.addLogo,
                   textAlign: TextAlign.center,
                   style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700),
                 ),
@@ -1762,7 +1877,7 @@ class CreateClubScreen extends StatelessWidget {
                 ],
               ),
               const SizedBox(height: 20),
-              const Center(child: LimeActionBar('Buat Teams')),
+              LimeActionBar('Buat Teams'),
               Center(
                 child: TextButton(
                   onPressed: () => Navigator.of(context).pop(),
@@ -1785,17 +1900,15 @@ class CreateChallengeScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      appBar: AppBar(
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-        leading: const BackButton(color: PacerColors.ink),
-      ),
       body: SafeArea(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.symmetric(horizontal: 24),
+        child: ResponsiveScroll(
+          maxWidth: 720,
+          padding: const EdgeInsets.only(top: 16, bottom: 24),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              const PageHeader(),
+              const SizedBox(height: 16),
               Text(
                 'buat challenge teams',
                 style: PacerText.pageTitle.copyWith(fontSize: 26),
@@ -1828,7 +1941,7 @@ class CreateChallengeScreen extends StatelessWidget {
                   ),
                 ),
               const SizedBox(height: 12),
-              Center(child: LimeActionBar(S.createChallenge)),
+              LimeActionBar(S.createChallenge),
               const SizedBox(height: 24),
             ],
           ),
@@ -1851,113 +1964,122 @@ class ChatScreen extends StatelessWidget {
         foregroundColor: PacerColors.ink,
         elevation: 1,
       ),
-      body: Column(
-        children: [
-          const Padding(
-            padding: EdgeInsets.all(8),
-            child: Chip(label: Text('Hari ini, 24 Oktober')),
-          ),
-          Expanded(
-            child: ListView(
-              padding: const EdgeInsets.all(16),
-              children: [
-                Container(
+      body: Center(
+        // Chat content caps at 720 on wide screens instead of stretching.
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 720),
+          child: Column(
+            children: [
+              const Padding(
+                padding: EdgeInsets.all(8),
+                child: Chip(label: Text('Hari ini, 24 Oktober')),
+              ),
+              Expanded(
+                child: ListView(
                   padding: const EdgeInsets.all(16),
-                  decoration: const BoxDecoration(
-                    color: Color(0xFFF2F3FF),
-                    borderRadius: BorderRadius.only(
-                      topLeft: Radius.circular(2),
-                      topRight: Radius.circular(16),
-                      bottomLeft: Radius.circular(16),
-                      bottomRight: Radius.circular(16),
-                    ),
-                  ),
-                  child: const Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        'Morning Warmup Run',
-                        style: TextStyle(fontWeight: FontWeight.w700),
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(16),
+                      decoration: const BoxDecoration(
+                        color: Color(0xFFF2F3FF),
+                        borderRadius: BorderRadius.only(
+                          topLeft: Radius.circular(2),
+                          topRight: Radius.circular(16),
+                          bottomLeft: Radius.circular(16),
+                          bottomRight: Radius.circular(16),
+                        ),
                       ),
-                      Text(
-                        'Garmin Sync',
-                        style: TextStyle(fontSize: 12, color: Colors.black54),
-                      ),
-                      SizedBox(height: 8),
-                      Row(
+                      child: const Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Expanded(child: Text('JARAK\n5.2 km')),
-                          Expanded(child: Text("PACE\n5'15\"/k")),
-                          Expanded(child: Text('WAKTU\n27:18')),
-                          Expanded(child: Text('DETAK\n142 bpm')),
+                          Text(
+                            'Morning Warmup Run',
+                            style: TextStyle(fontWeight: FontWeight.w700),
+                          ),
+                          Text(
+                            'Garmin Sync',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: Colors.black54,
+                            ),
+                          ),
+                          SizedBox(height: 8),
+                          Row(
+                            children: [
+                              Expanded(child: Text('JARAK\n5.2 km')),
+                              Expanded(child: Text("PACE\n5'15\"/k")),
+                              Expanded(child: Text('WAKTU\n27:18')),
+                              Expanded(child: Text('DETAK\n142 bpm')),
+                            ],
+                          ),
+                          Text('Elevasi: +18m', style: TextStyle(fontSize: 12)),
                         ],
                       ),
-                      Text('Elevasi: +18m', style: TextStyle(fontSize: 12)),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 8),
-                const Text('Dh8  D12  D4', style: TextStyle(fontSize: 12)),
-                const SizedBox(height: 8),
-                Align(
-                  alignment: Alignment.centerRight,
-                  child: Container(
-                    padding: const EdgeInsets.all(12),
-                    decoration: const BoxDecoration(
-                      color: PacerColors.chatGreen,
-                      borderRadius: BorderRadius.only(
-                        topLeft: Radius.circular(16),
-                        topRight: Radius.circular(2),
-                        bottomLeft: Radius.circular(16),
-                        bottomRight: Radius.circular(16),
+                    ),
+                    const SizedBox(height: 8),
+                    const Text('Dh8  D12  D4', style: TextStyle(fontSize: 12)),
+                    const SizedBox(height: 8),
+                    Align(
+                      alignment: Alignment.centerRight,
+                      child: Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: const BoxDecoration(
+                          color: PacerColors.chatGreen,
+                          borderRadius: BorderRadius.only(
+                            topLeft: Radius.circular(16),
+                            topRight: Radius.circular(2),
+                            bottomLeft: Radius.circular(16),
+                            bottomRight: Radius.circular(16),
+                          ),
+                        ),
+                        child: const Text(
+                          'Siap ikut Sabtu ini!',
+                          style: TextStyle(color: Color(0xFF004105)),
+                        ),
                       ),
                     ),
-                    child: const Text(
-                      'Siap ikut Sabtu ini!',
-                      style: TextStyle(color: Color(0xFF004105)),
-                    ),
-                  ),
+                  ],
                 ),
-              ],
-            ),
-          ),
-          Padding(
-            padding: const EdgeInsets.all(12),
-            child: Row(
-              children: [
-                Expanded(
-                  child: TextField(
-                    decoration: InputDecoration(
-                      hintText: S.writeMessage,
-                      border: OutlineInputBorder(
-                        borderRadius: BorderRadius.all(Radius.circular(22)),
+              ),
+              Padding(
+                padding: const EdgeInsets.all(12),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: TextField(
+                        decoration: InputDecoration(
+                          hintText: S.writeMessage,
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.all(Radius.circular(22)),
+                          ),
+                        ),
                       ),
                     ),
-                  ),
-                ),
-                const SizedBox(width: 8),
-                GestureDetector(
-                  onTap: () => ScaffoldMessenger.of(context).showSnackBar(
-                    SnackBar(content: Text(S.demoMessageSent)),
-                  ),
-                  child: Container(
-                    width: 44,
-                    height: 44,
-                    decoration: const BoxDecoration(
-                      color: PacerColors.chatGreen,
-                      shape: BoxShape.circle,
+                    const SizedBox(width: 8),
+                    GestureDetector(
+                      onTap: () => ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text(S.demoMessageSent)),
+                      ),
+                      child: Container(
+                        width: 44,
+                        height: 44,
+                        decoration: const BoxDecoration(
+                          color: PacerColors.chatGreen,
+                          shape: BoxShape.circle,
+                        ),
+                        child: const Icon(
+                          Icons.send,
+                          color: Colors.white,
+                          size: 20,
+                        ),
+                      ),
                     ),
-                    child: const Icon(
-                      Icons.send,
-                      color: Colors.white,
-                      size: 20,
-                    ),
-                  ),
+                  ],
                 ),
-              ],
-            ),
+              ),
+            ],
           ),
-        ],
+        ),
       ),
     );
   }
@@ -1977,21 +2099,18 @@ class AboutMeScreen extends StatelessWidget {
       (S.weight, '40 kg'),
     ];
     return Scaffold(
-      appBar: AppBar(
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-        leading: const BackButton(color: PacerColors.ink),
-      ),
       body: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 24),
+        child: ResponsiveScroll(
+          maxWidth: 720,
+          padding: const EdgeInsets.only(top: 16, bottom: 24),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              const PageHeader(),
+              const SizedBox(height: 16),
               Text(S.aboutMe, style: PacerText.pageTitle),
               const SizedBox(height: 12),
               Container(
-                width: 350,
                 padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(
                   borderRadius: BorderRadius.circular(16),
@@ -2028,7 +2147,7 @@ class AboutMeScreen extends StatelessWidget {
               ),
               const SizedBox(height: 16),
               SizedBox(
-                width: 350,
+                width: double.infinity,
                 height: 48,
                 child: ElevatedButton(
                   onPressed: () {},
@@ -2038,7 +2157,8 @@ class AboutMeScreen extends StatelessWidget {
                       borderRadius: BorderRadius.circular(999),
                     ),
                   ),
-                  child: Text(S.editPersonalDetails,
+                  child: Text(
+                    S.editPersonalDetails,
                     style: TextStyle(color: Colors.white),
                   ),
                 ),
@@ -2078,25 +2198,28 @@ class FiturScreen extends StatelessWidget {
       (S.profile, Icons.person_outline, (_) => const AccountScreen()),
     ];
     return Scaffold(
-      appBar: AppBar(
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-        leading: const BackButton(color: PacerColors.ink),
-      ),
       body: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 24),
+        child: ResponsiveScroll(
+          maxWidth: 720,
+          padding: const EdgeInsets.only(top: 16, bottom: 24),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              const PageHeader(),
+              const SizedBox(height: 16),
               Text('FITUR', style: PacerText.fugazBrand),
               const SizedBox(height: 12),
-              GridView.count(
-                crossAxisCount: 3,
+              // Tiles flow into a grid driven by max extent — never a
+              // hardcoded column count.
+              GridView(
                 shrinkWrap: true,
-                mainAxisSpacing: 12,
-                crossAxisSpacing: 12,
-                childAspectRatio: 1.05,
+                physics: const NeverScrollableScrollPhysics(),
+                gridDelegate: const SliverGridDelegateWithMaxCrossAxisExtent(
+                  maxCrossAxisExtent: 220,
+                  mainAxisSpacing: 12,
+                  crossAxisSpacing: 12,
+                  childAspectRatio: 1.05,
+                ),
                 children: [
                   for (final t in tiles)
                     InkWell(
@@ -2158,6 +2281,10 @@ class _LanguageSettingsScreenState extends State<LanguageSettingsScreen> {
   }
 
   Future<void> _loadRemote() async {
+    // Never let a backend read silently undo an explicit choice made
+    // this session (e.g. profile row still holds the old default because
+    // a write failed or RLS denied it).
+    if (langUserLocked) return;
     try {
       final user = supa.auth.currentUser;
       if (user == null) return;
@@ -2178,16 +2305,26 @@ class _LanguageSettingsScreenState extends State<LanguageSettingsScreen> {
   }
 
   Future<void> _setLang(Lang lang) async {
+    langUserLocked = true;
     langNotifier.value = lang;
     try {
       final user = supa.auth.currentUser;
-      if (user == null) return;
+      if (user == null) {
+        if (mounted) setState(() {});
+        return;
+      }
       await supa
           .from('users')
           .update({'language': lang == Lang.en ? 'en' : 'id'})
-          .eq('id', user.id);
+          .eq('id', user.id)
+          .timeout(const Duration(seconds: 5));
     } catch (_) {
-      // Demo mode — local toggle only.
+      // Demo mode, missing column, RLS denial, or offline: the choice
+      // still applies locally — say so instead of failing silently.
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(S.langSaveFailed)));
+      }
     }
     if (mounted) setState(() {});
   }
@@ -2197,17 +2334,15 @@ class _LanguageSettingsScreenState extends State<LanguageSettingsScreen> {
     final current = langNotifier.value;
     return Scaffold(
       backgroundColor: Colors.white,
-      appBar: AppBar(
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-        leading: const BackButton(color: PacerColors.ink),
-      ),
       body: SafeArea(
-        child: Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 24),
+        child: ResponsiveScroll(
+          maxWidth: 720,
+          padding: const EdgeInsets.only(top: 16, bottom: 24),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              const PageHeader(),
+              const SizedBox(height: 16),
               Text(S.language, style: PacerText.pageTitle),
               const SizedBox(height: 16),
               _langOption(
