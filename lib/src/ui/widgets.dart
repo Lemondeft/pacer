@@ -423,205 +423,252 @@ class InitialAvatar extends StatelessWidget {
   }
 }
 
-/// Purple streak hero card. Fills its parent width; intrinsic height.
-/// Decorative circles clip at the card bounds. [count] overrides the
-/// number when live data is available; null (signed out/offline) shows 0.
+/// Sporty streak hero card: count, live week strip, and personal-record
+/// line read as one unit on a navy surface (lime accents). Fills its parent
+/// width; intrinsic height.
+///
+/// DATA: [done] holds 7 Mon..Sun flags (true = workout that day);
+/// [todayIndex] (0..6) rings today regardless of done. Nulls render an
+/// honest empty week (offline/signed-out); null [count] shows 0.
 class StreakCard extends StatelessWidget {
   final int? count;
-  const StreakCard({super.key, this.count});
+  final List<bool>? done;
+  final int? todayIndex;
+  const StreakCard({super.key, this.count, this.done, this.todayIndex});
+
+  static const _dayLabels = ['Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab', 'Min'];
 
   @override
   Widget build(BuildContext context) {
-    const dayLabels = ['M', 'T', 'W', 'T', 'F', 'S', 'S'];
-    final circle = fluid(MediaQuery.sizeOf(context).width, 26, 32);
+    final scheme = PacerScheme.of(context);
+    final now = DateTime.now();
+    final monday = now.subtract(Duration(days: now.weekday - 1));
+    final flags = done;
+    final today = todayIndex ?? now.weekday - 1;
+    bool isDone(int i) => flags != null && i < flags.length && flags[i];
+    final circle = fluid(MediaQuery.sizeOf(context).width, 30, 36);
+    const labelWhite = Color(0xFFF8FAFC);
     return ClipRRect(
-      borderRadius: BorderRadius.circular(12),
+      borderRadius: BorderRadius.circular(16),
       child: Container(
         decoration: BoxDecoration(
-          color: PacerColors.streakBg,
-          borderRadius: BorderRadius.circular(12),
-          boxShadow: [PacerScheme.of(context).shadowBox],
+          color: scheme.streakCardBg,
+          borderRadius: BorderRadius.circular(16),
+          border: scheme.isDark
+              ? Border.all(color: Colors.white.withValues(alpha: 0.10))
+              : null,
+          boxShadow: [scheme.shadowBox],
         ),
         child: Stack(
           children: [
+            // Oversized ghost flame, clipped at the card edge.
             Positioned(
-              left: 0,
-              top: 0,
-              child: Container(
-                width: 144,
-                height: 144,
-                decoration: BoxDecoration(
-                  color: PacerColors.streakGlowA,
-                  borderRadius: BorderRadius.circular(999),
-                ),
+              right: -32,
+              top: -40,
+              child: Icon(
+                Icons.local_fire_department,
+                size: 168,
+                color: Colors.white.withValues(alpha: 0.05),
               ),
             ),
+            // Lime kick bar along the top edge.
             Positioned(
-              left: 0,
-              top: 8,
+              left: 20,
+              right: 20,
+              top: 0,
               child: Container(
-                width: 128,
-                height: 128,
+                height: 3,
                 decoration: BoxDecoration(
-                  color: PacerColors.streakGlowB,
-                  borderRadius: BorderRadius.circular(999),
+                  color: PacerColors.lime,
+                  borderRadius: BorderRadius.circular(2),
                 ),
               ),
             ),
             Padding(
-              padding: const EdgeInsets.all(20),
+              padding: const EdgeInsets.fromLTRB(20, 20, 20, 16),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 mainAxisSize: MainAxisSize.min,
                 children: [
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 8,
-                      vertical: 2,
-                    ),
-                    decoration: BoxDecoration(
-                      color: PacerColors.streakPill,
-                      borderRadius: BorderRadius.circular(999),
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Container(
-                          width: 8,
-                          height: 8,
-                          decoration: const BoxDecoration(
-                            color: PacerColors.primary,
-                            shape: BoxShape.circle,
-                          ),
-                        ),
-                        const SizedBox(width: 4),
-                        Text(
-                          S.activeStreak,
-                          style: PacerText.mono.copyWith(
-                            color: PacerColors.primary,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 12),
                   Row(
                     children: [
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 8,
+                          vertical: 4,
+                        ),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withValues(alpha: 0.10),
+                          borderRadius: BorderRadius.circular(999),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
                           children: [
-                            Row(
-                              crossAxisAlignment: CrossAxisAlignment.end,
-                              children: [
-                                Text(
-                                  '${count ?? 0}',
-                                  style: PacerText.giantNum(56)
-                                      .copyWith(color: PacerColors.streakNum),
-                                ),
-                                const SizedBox(width: 4),
-                                Expanded(
-                                  child: FittedBox(
-                                    fit: BoxFit.scaleDown,
-                                    alignment: Alignment.centerLeft,
-                                    child: Padding(
-                                      padding: const EdgeInsets.only(bottom: 8),
-                                      child: Text(
-                                        S.daysStreak,
-                                        style: const TextStyle(
-                                          fontSize: 18,
-                                          fontWeight: FontWeight.w700,
-                                          color: PacerColors.streakLabel,
-                                        ),
-                                      ),
-                                    ),
-                                  ),
-                                ),
-                              ],
+                            Container(
+                              width: 8,
+                              height: 8,
+                              decoration: const BoxDecoration(
+                                color: PacerColors.lime,
+                                shape: BoxShape.circle,
+                              ),
                             ),
-                            const SizedBox(height: 4),
-                            FittedBox(
-                              fit: BoxFit.scaleDown,
-                              alignment: Alignment.centerLeft,
-                              child: Row(
-                                mainAxisSize: MainAxisSize.min,
-                                children: [
-                                  const Icon(
-                                    Icons.local_fire_department,
-                                    size: 11,
-                                    color: PacerColors.fireYellow,
-                                  ),
-                                  const SizedBox(width: 4),
-                                  Text(
-                                    S.personalRecord,
-                                    style: const TextStyle(
-                                      fontSize: 12,
-                                      color: Colors.white,
-                                    ),
-                                  ),
-                                ],
+                            const SizedBox(width: 4),
+                            Text(
+                              S.activeStreak,
+                              style: PacerText.mono.copyWith(
+                                color: PacerColors.lime,
                               ),
                             ),
                           ],
                         ),
                       ),
-                      const SizedBox(width: 12),
+                      const Spacer(),
                       Container(
-                        width: 55,
-                        height: 56,
+                        width: 44,
+                        height: 44,
                         decoration: BoxDecoration(
-                          color: PacerColors.fireBadge,
-                          borderRadius: BorderRadius.circular(999),
+                          color: PacerColors.lime.withValues(alpha: 0.16),
+                          shape: BoxShape.circle,
+                          border: Border.all(
+                            color: PacerColors.lime.withValues(alpha: 0.45),
+                          ),
                         ),
                         child: const Icon(
                           Icons.local_fire_department,
-                          size: 36,
-                          color: Colors.deepOrange,
+                          size: 24,
+                          color: PacerColors.lime,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      Text(
+                        '${count ?? 0}',
+                        style: PacerText.giantNum(56)
+                            .copyWith(color: labelWhite),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: FittedBox(
+                          fit: BoxFit.scaleDown,
+                          alignment: Alignment.centerLeft,
+                          child: Padding(
+                            padding: const EdgeInsets.only(bottom: 8),
+                            child: Text(
+                              S.daysStreak,
+                              style: const TextStyle(
+                                fontSize: 18,
+                                fontWeight: FontWeight.w700,
+                                color: PacerColors.lime,
+                              ),
+                            ),
+                          ),
                         ),
                       ),
                     ],
                   ),
                   const SizedBox(height: 12),
                   Row(
-                    children: List.generate(7, (i) {
-                      final last = i == 6;
-                      return Expanded(
-                        child: Column(
-                          children: [
-                            Text(
-                              dayLabels[i],
-                              style: TextStyle(
-                                fontSize: 11,
-                                fontWeight: last
-                                    ? FontWeight.bold
-                                    : FontWeight.w500,
-                                color: last ? PacerColors.neon : Colors.white,
-                              ),
-                            ),
-                            const SizedBox(height: 4),
-                            Container(
-                              width: circle,
-                              height: circle,
-                              decoration: BoxDecoration(
-                                color: PacerColors.neon,
-                                shape: BoxShape.circle,
-                                boxShadow: [
-                                  BoxShadow(
-                                    color: PacerColors.neonGlow,
-                                    blurRadius: last ? 14 : 12,
+                    children: [
+                      for (var i = 0; i < 7; i++)
+                        Expanded(
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Container(
+                                width: circle,
+                                height: circle,
+                                alignment: Alignment.center,
+                                decoration: BoxDecoration(
+                                  shape: BoxShape.circle,
+                                  color: isDone(i)
+                                      ? PacerColors.lime
+                                      : Colors.white.withValues(alpha: 0.10),
+                                  border: Border.all(
+                                    color: isDone(i)
+                                        ? PacerColors.lime
+                                        : i == today
+                                        ? PacerColors.lime
+                                        : Colors.white.withValues(alpha: 0.24),
+                                    width: i == today ? 2 : 1.5,
                                   ),
-                                ],
+                                  boxShadow: i == today
+                                      ? [
+                                          BoxShadow(
+                                            color: PacerColors.lime.withValues(
+                                              alpha: 0.35,
+                                            ),
+                                            blurRadius: 12,
+                                          ),
+                                        ]
+                                      : null,
+                                ),
+                                child: isDone(i)
+                                    ? Icon(
+                                        Icons.check,
+                                        size: circle * 0.45,
+                                        color: PacerColors.navy,
+                                      )
+                                    : null,
                               ),
-                              child: Icon(
-                                Icons.check,
-                                size: circle * 0.375,
-                                color: PacerColors.checkDark,
+                              const SizedBox(height: 4),
+                              Text(
+                                _dayLabels[i],
+                                style: TextStyle(
+                                  fontSize: 10,
+                                  fontWeight: i == today
+                                      ? FontWeight.w700
+                                      : FontWeight.w500,
+                                  color: i == today
+                                      ? PacerColors.lime
+                                      : Colors.white.withValues(alpha: 0.60),
+                                ),
                               ),
-                            ),
-                          ],
+                              Text(
+                                '${DateTime(monday.year, monday.month, monday.day + i).day}',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w700,
+                                  color: i == today
+                                      ? PacerColors.lime
+                                      : labelWhite,
+                                ),
+                              ),
+                            ],
+                          ),
                         ),
-                      );
-                    }),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  Container(
+                    height: 1,
+                    color: Colors.white.withValues(alpha: 0.12),
+                  ),
+                  const SizedBox(height: 12),
+                  FittedBox(
+                    fit: BoxFit.scaleDown,
+                    alignment: Alignment.centerLeft,
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(
+                          Icons.local_fire_department,
+                          size: 14,
+                          color: PacerColors.lime,
+                        ),
+                        const SizedBox(width: 4),
+                        Text(
+                          S.personalRecord,
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: Colors.white.withValues(alpha: 0.70),
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                 ],
               ),

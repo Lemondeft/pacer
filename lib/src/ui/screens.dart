@@ -318,9 +318,16 @@ class HomeScreen extends StatefulWidget {
 class _HomeData {
   final List<Activity>? activities;
   final int? streak;
+  final DateTime? streakLast;
   final List<Team>? teams;
   final String? initials;
-  const _HomeData({this.activities, this.streak, this.teams, this.initials});
+  const _HomeData({
+    this.activities,
+    this.streak,
+    this.streakLast,
+    this.teams,
+    this.initials,
+  });
 }
 
 class _HomeScreenState extends State<HomeScreen> {
@@ -356,6 +363,7 @@ class _HomeScreenState extends State<HomeScreen> {
       return _HomeData(
         activities: activities,
         streak: streak?.berjalan,
+        streakLast: streak?.terakhir,
         teams: teams,
         initials: initialsOf(profile?.nama),
       );
@@ -399,14 +407,36 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Widget _streak() {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        SectionHeader(title: S.streaks),
-        const SizedBox(height: 8),
-        StreakCard(count: _data?.streak),
-      ],
+    // The card carries its own header pill, so no separate SectionHeader —
+    // count, week strip, and record read as one unit.
+    final count = _data?.streak ?? 0;
+    return StreakCard(
+      count: _data?.streak,
+      done: _doneWeek(count, _data?.streakLast),
+      todayIndex: DateTime.now().weekday - 1,
     );
+  }
+
+  /// Done flags for Mon..Sun: trailing [count] days ending at [lastWorkout]
+  /// (same rule as the streaks screen).
+  List<bool> _doneWeek(int count, DateTime? lastWorkout) {
+    final now = DateTime.now();
+    final monday = now.subtract(Duration(days: now.weekday - 1));
+    return [
+      for (var i = 0; i < 7; i++)
+        lastWorkout != null &&
+            count > 0 &&
+            () {
+              final day = DateTime(monday.year, monday.month, monday.day + i);
+              final last = DateTime(
+                lastWorkout.year,
+                lastWorkout.month,
+                lastWorkout.day,
+              );
+              final back = last.difference(day).inDays;
+              return back >= 0 && back < count;
+            }(),
+    ];
   }
 
   Widget _history() {

@@ -2352,45 +2352,9 @@ class _StreaksScreenState extends State<StreaksScreen> {
     ];
   }
 
-  static const _days = ['Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab', 'Min'];
-
-  /// 7-day strip; [done] flags per weekday Mon..Sun, [todayIdx] glows.
-  Widget _weekRow(List<bool> done, int todayIdx) {
-    final scheme = PacerScheme.of(context);
-    return Row(
-      mainAxisAlignment: MainAxisAlignment.spaceBetween,
-      children: List.generate(7, (i) {
-        final d = done[i];
-        final today = i == todayIdx;
-        return Column(
-          children: [
-            Container(
-              width: 36,
-              height: 36,
-              alignment: Alignment.center,
-              decoration: BoxDecoration(
-                shape: BoxShape.circle,
-                color: d ? PacerColors.streakBlue : scheme.card,
-                border: Border.all(
-                  color: d || today
-                      ? PacerColors.streakBlue
-                      : scheme.softBorder,
-                  width: 2,
-                ),
-                boxShadow: today
-                    ? [const BoxShadow(color: Color(0xFFFFE600), blurRadius: 8)]
-                    : null,
-              ),
-              child: d
-                  ? const Icon(Icons.check, size: 16, color: Colors.white)
-                  : null,
-            ),
-            Text(_days[i], style: TextStyle(fontSize: 11, color: scheme.soft)),
-          ],
-        );
-      }),
-    );
-  }
+  /// Honest empty week for offline / no-streak states (rendered inside
+  /// the card now — the strip lives in [StreakCard]).
+  static const _emptyWeek = [false, false, false, false, false, false, false];
 
   /// Figma mock strip (demo mode or no streak yet).
   @override
@@ -2426,17 +2390,11 @@ class _StreaksScreenState extends State<StreaksScreen> {
                           ),
                         ),
                         const SizedBox(height: 12),
-                        _weekRow(const [
-                          false,
-                          false,
-                          false,
-                          false,
-                          false,
-                          false,
-                          false,
-                        ], DateTime.now().weekday - 1),
-                        const SizedBox(height: 16),
-                        const StreakCard(count: 0),
+                        StreakCard(
+                          count: 0,
+                          done: _emptyWeek,
+                          todayIndex: DateTime.now().weekday - 1,
+                        ),
                       ],
                     );
                   }
@@ -2458,9 +2416,11 @@ class _StreaksScreenState extends State<StreaksScreen> {
                         ),
                       ),
                       const SizedBox(height: 12),
-                      _weekRow(done, todayIdx),
-                      const SizedBox(height: 16),
-                      StreakCard(count: d.count),
+                      StreakCard(
+                        count: d.count,
+                        done: done,
+                        todayIndex: todayIdx,
+                      ),
                     ],
                   );
                   return LayoutBuilder(

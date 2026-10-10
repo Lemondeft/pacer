@@ -219,6 +219,7 @@ class PacerDark {
   static const shadow = Color(0x59000000);
   static const navBar = Color(0xF21E293B);
   static const navIcon = Color(0xFFCBD5E1);
+  static const streakCard = Color(0xFF131C33);
 }
 
 /// Brightness-resolved semantic tokens. The light branch returns the exact
@@ -265,6 +266,7 @@ class PacerScheme {
   final Color chipSelBg;
   final Color chipSelFg;
   final Color editBg;
+  final Color streakCardBg;
 
   const PacerScheme({
     required this.brightness,
@@ -306,6 +308,7 @@ class PacerScheme {
     required this.chipSelBg,
     required this.chipSelFg,
     required this.editBg,
+    required this.streakCardBg,
   });
 
   static const light = PacerScheme(
@@ -348,6 +351,7 @@ class PacerScheme {
     chipSelBg: Colors.black,
     chipSelFg: Colors.white,
     editBg: PacerColors.navy,
+    streakCardBg: PacerColors.navy,
   );
 
   static const dark = PacerScheme(
@@ -390,6 +394,7 @@ class PacerScheme {
     chipSelBg: PacerColors.lime,
     chipSelFg: PacerColors.ink,
     editBg: PacerColors.lime,
+    streakCardBg: PacerDark.streakCard,
   );
 
   static PacerScheme of(BuildContext context) =>
