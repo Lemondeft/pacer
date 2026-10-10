@@ -403,9 +403,34 @@ class _RunTrackerScreenState extends State<RunTrackerScreen> {
     _opBusy = true;
     try {
       if (!await _recorder.ensureGps()) {
+        // No GPS (desktop/emulator): offer explicit synthetic tracking so
+        // the map and pipeline stay testable without a phone. Never implicit.
         if (mounted) {
-          ScaffoldMessenger.of(context)
-              .showSnackBar(SnackBar(content: Text(_gpsMessage())));
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(_gpsMessage()),
+              action: SnackBarAction(
+                label: 'Simulasi',
+                onPressed: () async {
+                  // Grabbed synchronously: safe to use after the awaits.
+                  final messenger = ScaffoldMessenger.of(context);
+                  try {
+                    await _recorder.simulate();
+                  } catch (_) {
+                    messenger.showSnackBar(
+                      SnackBar(content: Text(S.errSaveFailed)),
+                    );
+                    return;
+                  }
+                  if (!mounted) return;
+                  setState(() {
+                    _started = true;
+                    _running = false;
+                  });
+                },
+              ),
+            ),
+          );
         }
         return;
       }

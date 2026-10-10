@@ -22,6 +22,12 @@ class RunRecorder extends ChangeNotifier {
     : _repo = repo ?? ActivityRepository();
 
   StreamSubscription<Position>? _sub;
+
+  /// Synthetic-fix timer for GPS-less platforms; null outside sim mode.
+  /// Sim runs the full pipeline (filter → distance → persist) and is
+  /// explicit opt-in only — never engaged implicitly.
+  Timer? _simTimer;
+  bool _simMode = false;
   final Stopwatch _clock = Stopwatch();
   final List<_Fix> _fixes = [];
 
@@ -92,9 +98,58 @@ class RunRecorder extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Synthetic-fix mode for GPS-less platforms (Linux desktop): creates the
+  /// aktivitas row, then feeds drifting fixes around GBK through the real
+  /// pipeline (filter → distance → persist). Explicit opt-in only — the
+  /// tracker offers it when GPS is unavailable. Throws [StateError] signed out.
+  Future<void> simulate() async {
+    if (_started || _starting) return;
+    _starting = true;
+    try {
+      final activity = await _repo.createActivity(jenis: 'lari');
+      _aktivitasId = activity.id;
+    } finally {
+      _starting = false;
+    }
+    _jenis = 'lari';
+    _fixes.clear();
+    _distanceM = 0;
+    _started = true;
+    _simMode = true;
+    _armSimTimer();
+    _clock.start();
+    _recording = true;
+    notifyListeners();
+  }
+
+  int _simTick = 0;
+
+  void _armSimTimer() {
+    _simTimer?.cancel();
+    _simTimer = Timer.periodic(const Duration(seconds: 1), (_) {
+      _simTick++;
+      _onFix(
+        Position(
+          latitude: -6.2296 + _simTick * 0.0001,
+          longitude: 106.8294 + _simTick * 0.00007,
+          timestamp: DateTime.now(),
+          accuracy: 5,
+          altitude: 10,
+          altitudeAccuracy: 3,
+          heading: 90,
+          headingAccuracy: 5,
+          speed: 2.8,
+          speedAccuracy: 0.5,
+        ),
+      );
+    });
+  }
+
   void pause() {
     _sub?.cancel();
     _sub = null;
+    _simTimer?.cancel();
+    _simTimer = null;
     _clock.stop();
     _recording = false;
     notifyListeners();
@@ -102,6 +157,13 @@ class RunRecorder extends ChangeNotifier {
 
   void resume() {
     if (!_started || _recording) return;
+    if (_simMode) {
+      _armSimTimer();
+      _clock.start();
+      _recording = true;
+      notifyListeners();
+      return;
+    }
     _resumeStream();
     notifyListeners();
   }
@@ -154,6 +216,9 @@ class RunRecorder extends ChangeNotifier {
     final id = _aktivitasId;
     _sub?.cancel();
     _sub = null;
+    _simTimer?.cancel();
+    _simTimer = null;
+    _simMode = false;
     _clock.stop();
     _clock.reset();
     _recording = false;
@@ -177,6 +242,9 @@ class RunRecorder extends ChangeNotifier {
     if (!_started) return null;
     _sub?.cancel();
     _sub = null;
+    _simTimer?.cancel();
+    _simTimer = null;
+    _simMode = false;
     _clock.stop();
     _recording = false;
     _started = false;
@@ -230,6 +298,7 @@ class RunRecorder extends ChangeNotifier {
   @override
   void dispose() {
     _sub?.cancel();
+    _simTimer?.cancel();
     super.dispose();
   }
 }
