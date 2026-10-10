@@ -227,7 +227,7 @@ class _CreateAccountScreenState extends State<CreateAccountScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const PageHeader(),
+              PageHeader(onBack: widget.onBack),
               const SizedBox(height: 16),
               Text(S.createAccount, style: PacerText.authTitle),
               const SizedBox(height: 28),

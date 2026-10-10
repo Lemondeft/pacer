@@ -63,9 +63,14 @@ class _RootState extends State<_Root> {
       case 'create':
         return CreateAccountScreen(
           onSubmitted: () => setState(() => _route = 'main'),
+          // Root-switched screens have no route to pop: back means GetStarted.
+          onBack: () => setState(() => _route = 'getStarted'),
         );
       case 'login':
-        return LoginScreen(onLoggedIn: () => setState(() => _route = 'main'));
+        return LoginScreen(
+          onLoggedIn: () => setState(() => _route = 'main'),
+          onBack: () => setState(() => _route = 'getStarted'),
+        );
       case 'main':
         return const MainShell();
       case 'getStarted':

@@ -360,9 +360,13 @@ class SectionTitle extends StatelessWidget {
 }
 
 /// 48x48 back circle + optional Fugaz title.
+/// [onBack] overrides the default Navigator.maybePop — required on screens
+/// that are not pushed routes (root-switched auth screens), where maybePop
+/// would silently do nothing.
 class PageHeader extends StatelessWidget {
   final String? title;
-  const PageHeader({super.key, this.title});
+  final VoidCallback? onBack;
+  const PageHeader({super.key, this.title, this.onBack});
 
   @override
   Widget build(BuildContext context) {
@@ -382,7 +386,11 @@ class PageHeader extends StatelessWidget {
               ),
             ],
           ),
-          child: const BackButton(color: PacerColors.ink),
+          child: BackButton(
+            color: PacerColors.ink,
+            // Null falls back to Navigator.maybePop (correct on pushed routes).
+            onPressed: onBack,
+          ),
         ),
         if (title != null) ...[
           const SizedBox(width: 12),

@@ -94,7 +94,7 @@ class _LoginScreenState extends State<LoginScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const PageHeader(),
+              PageHeader(onBack: widget.onBack),
               const SizedBox(height: 16),
               Text(
                 S.welcomeRunners,
