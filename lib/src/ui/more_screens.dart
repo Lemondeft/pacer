@@ -7,6 +7,8 @@ import 'package:pacer/src/aktivitas/activity_repository.dart';
 import 'package:pacer/src/auth/auth_repository.dart';
 import 'package:pacer/src/challenge/challenge_model.dart';
 import 'package:pacer/src/challenge/challenge_repository.dart';
+import 'package:pacer/src/chat/chat_model.dart';
+import 'package:pacer/src/chat/chat_repository.dart';
 import 'package:pacer/src/tracking/recorder.dart';
 import 'package:pacer/src/tracking/route_map.dart';
 import 'package:pacer/src/leaderboard/leaderboard_model.dart';
@@ -1051,7 +1053,16 @@ class _TeamsScreenState extends State<TeamsScreen> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       _teamGrid([
-                        for (final t in filtered) TeamCard(name: t.nama),
+                        for (final t in filtered)
+                          GestureDetector(
+                            onTap: () => Navigator.of(context).push(
+                              MaterialPageRoute(
+                                builder: (_) =>
+                                    ChatScreen(teamId: t.id, teamName: t.nama),
+                              ),
+                            ),
+                            child: TeamCard(name: t.nama),
+                          ),
                       ]),
                       if (filtered.isEmpty)
                         PacerEmptyState(emptyMsg, icon: emptyIcon),
@@ -1105,9 +1116,38 @@ class _TeamsScreenState extends State<TeamsScreen> {
                   const SizedBox(width: 8),
                   Expanded(
                     child: OutlinedButton(
-                      onPressed: () => Navigator.of(context).push(
-                        MaterialPageRoute(builder: (_) => const ChatScreen()),
-                      ),
+                      onPressed: () async {
+                        // Opens the first joined team's channel; falls back
+                        // to the unscoped screen when signed out/offline.
+                        try {
+                          final mine = await TeamRepository().myTeams();
+                          if (!context.mounted) return;
+                          if (mine.isEmpty) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              const SnackBar(
+                                content: Text('Belum gabung tim mana pun.'),
+                              ),
+                            );
+                            return;
+                          }
+                          Navigator.of(context).push(
+                            MaterialPageRoute(
+                              builder: (_) => ChatScreen(
+                                teamId: mine.first.id,
+                                teamName: mine.first.nama,
+                              ),
+                            ),
+                          );
+                        } catch (_) {
+                          if (context.mounted) {
+                            Navigator.of(context).push(
+                              MaterialPageRoute(
+                                builder: (_) => const ChatScreen(),
+                              ),
+                            );
+                          }
+                        }
+                      },
                       style: OutlinedButton.styleFrom(
                         minimumSize: const Size(0, 48),
                       ),
@@ -1551,6 +1591,8 @@ class _HistoryScreenState extends State<HistoryScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              const PageHeader(),
+              const SizedBox(height: 16),
               Text(S.history, style: PacerText.pageTitle),
               FutureBuilder<List<Activity>>(
                 future: _future,
@@ -2929,15 +2971,148 @@ class CreateChallengeScreen extends StatelessWidget {
   }
 }
 
-/// Figma CLUBS chat: activity bubble + sent bubble + composer.
-class ChatScreen extends StatelessWidget {
-  const ChatScreen({super.key});
+/// Team channel chat (IN DEVELOPMENT — beyond the class manual).
+/// [teamId] scopes the channel ([teamName] titles the bar with a beta
+/// badge). Null teamId (demo / no team yet) shows an empty state.
+/// Live messages via initial fetch + realtime inserts; own messages right,
+/// others left with sender names.
+class ChatScreen extends StatefulWidget {
+  final String? teamId;
+  final String? teamName;
+  const ChatScreen({super.key, this.teamId, this.teamName});
+
+  @override
+  State<ChatScreen> createState() => _ChatScreenState();
+}
+
+class _ChatScreenState extends State<ChatScreen> {
+  ChatRepository? _repo;
+  List<ChatMessage> _messages = [];
+  bool _loading = true;
+  String? _uid;
+  final _composer = TextEditingController();
+  final _scroll = ScrollController();
+
+  @override
+  void initState() {
+    super.initState();
+    _open();
+  }
+
+  @override
+  void dispose() {
+    _repo?.dispose();
+    _composer.dispose();
+    _scroll.dispose();
+    super.dispose();
+  }
+
+  String? _uidOf() {
+    try {
+      return supa.auth.currentUser?.id;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<void> _open() async {
+    final teamId = widget.teamId;
+    // Lazily constructed: ChatRepository() touches supa, which throws
+    // when Supabase was never initialized (demo mode).
+    try {
+      if (teamId == null) {
+        if (mounted) setState(() => _loading = false);
+        return;
+      }
+      final repo = ChatRepository();
+      final recent = await repo.fetchRecent(teamId);
+      if (!mounted) return;
+      setState(() {
+        _repo = repo;
+        _uid = _uidOf();
+        _messages = recent;
+        _loading = false;
+      });
+      repo.watchTeam(teamId, (msg) {
+        if (!mounted) return;
+        setState(() {
+          if (_messages.any((m) => m.id == msg.id)) return;
+          _messages = [..._messages, msg];
+        });
+        _jumpToBottom();
+      });
+      _jumpToBottom();
+    } catch (_) {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  void _jumpToBottom() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (_scroll.hasClients) {
+        _scroll.jumpTo(_scroll.position.maxScrollExtent);
+      }
+    });
+  }
+
+  Future<void> _send() async {
+    final repo = _repo;
+    final text = _composer.text;
+    if (repo == null || !isSendableBody(text)) return;
+    _composer.clear();
+    try {
+      final sent = await repo.send(widget.teamId!, text);
+      if (!mounted) return;
+      setState(() {
+        if (_messages.any((m) => m.id == sent.id)) return;
+        _messages = [..._messages, sent];
+      });
+      _jumpToBottom();
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(S.errSaveFailed)));
+      }
+    }
+  }
+
+  String _clock(DateTime? t) {
+    if (t == null) return '';
+    final local = t.toLocal();
+    return '${local.hour.toString().padLeft(2, '0')}:${local.minute.toString().padLeft(2, '0')}';
+  }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
-        title: const Text('jakarta night stride'),
+        title: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Flexible(
+              child: Text(
+                widget.teamName ?? S.teamChat,
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+            const SizedBox(width: 8),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+              decoration: BoxDecoration(
+                color: PacerColors.lime,
+                borderRadius: BorderRadius.circular(999),
+              ),
+              child: const Text(
+                'BETA',
+                style: TextStyle(
+                  fontSize: 11,
+                  fontWeight: FontWeight.w800,
+                  color: PacerColors.ink,
+                ),
+              ),
+            ),
+          ],
+        ),
         backgroundColor: Colors.white,
         foregroundColor: PacerColors.ink,
         elevation: 1,
@@ -2948,116 +3123,111 @@ class ChatScreen extends StatelessWidget {
           constraints: const BoxConstraints(maxWidth: 720),
           child: Column(
             children: [
-              const Padding(
-                padding: EdgeInsets.all(8),
-                child: Chip(label: Text('Hari ini, 24 Oktober')),
-              ),
-              Expanded(
-                child: ListView(
-                  padding: const EdgeInsets.all(16),
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.all(16),
-                      decoration: const BoxDecoration(
-                        color: Color(0xFFF2F3FF),
-                        borderRadius: BorderRadius.only(
-                          topLeft: Radius.circular(2),
-                          topRight: Radius.circular(16),
-                          bottomLeft: Radius.circular(16),
-                          bottomRight: Radius.circular(16),
-                        ),
-                      ),
-                      child: const Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            'Morning Warmup Run',
-                            style: TextStyle(fontWeight: FontWeight.w700),
-                          ),
-                          Text(
-                            'Garmin Sync',
-                            style: TextStyle(
-                              fontSize: 12,
-                              color: Colors.black54,
-                            ),
-                          ),
-                          SizedBox(height: 8),
-                          Row(
-                            children: [
-                              Expanded(child: Text('JARAK\n5.2 km')),
-                              Expanded(child: Text("PACE\n5'15\"/k")),
-                              Expanded(child: Text('WAKTU\n27:18')),
-                              Expanded(child: Text('DETAK\n142 bpm')),
-                            ],
-                          ),
-                          Text('Elevasi: +18m', style: TextStyle(fontSize: 12)),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    const Text('Dh8  D12  D4', style: TextStyle(fontSize: 12)),
-                    const SizedBox(height: 8),
-                    Align(
-                      alignment: Alignment.centerRight,
-                      child: Container(
-                        padding: const EdgeInsets.all(12),
-                        decoration: const BoxDecoration(
-                          color: PacerColors.chatGreen,
-                          borderRadius: BorderRadius.only(
-                            topLeft: Radius.circular(16),
-                            topRight: Radius.circular(2),
-                            bottomLeft: Radius.circular(16),
-                            bottomRight: Radius.circular(16),
-                          ),
-                        ),
-                        child: const Text(
-                          'Siap ikut Sabtu ini!',
-                          style: TextStyle(color: Color(0xFF004105)),
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-              Padding(
-                padding: const EdgeInsets.all(12),
-                child: Row(
-                  children: [
-                    Expanded(
-                      child: TextField(
-                        decoration: InputDecoration(
-                          hintText: S.writeMessage,
-                          border: OutlineInputBorder(
-                            borderRadius: BorderRadius.all(Radius.circular(22)),
-                          ),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    GestureDetector(
-                      onTap: () => ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(content: Text(S.demoMessageSent)),
-                      ),
-                      child: Container(
-                        width: 48,
-                        height: 48,
-                        decoration: const BoxDecoration(
-                          color: PacerColors.chatGreen,
-                          shape: BoxShape.circle,
-                        ),
-                        child: const Icon(
-                          Icons.send,
-                          color: Colors.white,
-                          size: 20,
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
+              Expanded(child: _body()),
+              _composerBar(),
             ],
           ),
         ),
+      ),
+    );
+  }
+
+  Widget _body() {
+    if (widget.teamId == null) {
+      return const Center(child: Text('Pilih tim dulu.'));
+    }
+    if (_loading) {
+      return const Center(
+        child: CircularProgressIndicator(color: PacerColors.primary),
+      );
+    }
+    if (_messages.isEmpty) {
+      return const Center(child: Text('Belum ada pesan. Mulai duluan!'));
+    }
+    return ListView.builder(
+      controller: _scroll,
+      padding: const EdgeInsets.all(16),
+      itemCount: _messages.length,
+      itemBuilder: (context, i) => _bubble(_messages[i]),
+    );
+  }
+
+  Widget _bubble(ChatMessage m) {
+    final mine = _uid != null && m.userId == _uid;
+    return Align(
+      alignment: mine ? Alignment.centerRight : Alignment.centerLeft,
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 8),
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: mine ? PacerColors.chatGreen : const Color(0xFFF2F3FF),
+          borderRadius: BorderRadius.only(
+            topLeft: const Radius.circular(16),
+            topRight: mine
+                ? const Radius.circular(2)
+                : const Radius.circular(16),
+            bottomLeft: const Radius.circular(16),
+            bottomRight: mine
+                ? const Radius.circular(16)
+                : const Radius.circular(2),
+          ),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (!mine && m.userNama.isNotEmpty)
+              Text(
+                m.userNama,
+                style: const TextStyle(
+                  fontWeight: FontWeight.w700,
+                  fontSize: 12,
+                ),
+              ),
+            Text(m.body),
+            Text(
+              _clock(m.createdAt),
+              style: const TextStyle(fontSize: 10, color: Colors.black54),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _composerBar() {
+    final live = _repo != null;
+    return Padding(
+      padding: const EdgeInsets.all(12),
+      child: Row(
+        children: [
+          Expanded(
+            child: TextField(
+              controller: _composer,
+              enabled: live,
+              decoration: InputDecoration(
+                hintText: live ? S.writeMessage : 'Pilih tim dulu.',
+                border: const OutlineInputBorder(
+                  borderRadius: BorderRadius.all(Radius.circular(22)),
+                ),
+              ),
+              onSubmitted: (_) => _send(),
+            ),
+          ),
+          const SizedBox(width: 8),
+          GestureDetector(
+            onTap: live ? _send : null,
+            child: Container(
+              width: 48,
+              height: 48,
+              decoration: BoxDecoration(
+                color: live ? PacerColors.chatGreen : PacerColors.slate200,
+                shape: BoxShape.circle,
+              ),
+              child: const Icon(Icons.send, color: Colors.white, size: 20),
+            ),
+          ),
+        ],
       ),
     );
   }

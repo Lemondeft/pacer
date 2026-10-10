@@ -15,6 +15,8 @@ Apply migrations in order via the Supabase dashboard SQL editor:
 2. `supabase/migrations/20261009121500_pacer_grants.sql` — API role grants
 3. `supabase/migrations/20261009123000_pacer_hardening.sql` — `peran` escalation guards
 4. `supabase/migrations/20261009230000_users_language.sql` — `users.language` preference
+5. `supabase/migrations/20261010000000_pacer_coach_read.sql` — coach reads for grading
+6. `supabase/migrations/20261011000000_pacer_chat.sql` — team chat (in development; also enable Realtime for `chat_messages` if the migration's publication line doesn't apply)
 
 ```sh
 flutter run -d linux   # or chrome
