@@ -102,8 +102,9 @@ class _LoginScreenState extends State<LoginScreen> {
               ),
               const SizedBox(height: 32),
               AuthField(
-                hint: S.username,
-                icon: Icons.person_outline,
+                hint: S.email,
+                icon: Icons.mail_outline,
+                keyboardType: TextInputType.emailAddress,
                 controller: _email,
               ),
               const SizedBox(height: 16),
@@ -652,6 +653,7 @@ class _RunTrackerScreenState extends State<RunTrackerScreen> {
                               label: S.finish,
                               bg: PacerColors.ink,
                               fg: PacerColors.lime,
+                              labelSize: 14,
                               size: circle,
                               onTap: _finish,
                             )
@@ -925,7 +927,9 @@ class RunFinishScreen extends StatelessWidget {
                   const SizedBox(height: 12),
                   LimeActionBar(
                     S.done,
-                    onPressed: () => Navigator.of(context).pop(),
+                    // Embedded in the tracker (not a pushed route) onBack
+                    // returns to the tracker; pushed detail screens pop.
+                    onPressed: onBack ?? () => Navigator.of(context).pop(),
                   ),
                   const SizedBox(height: 24),
                 ],

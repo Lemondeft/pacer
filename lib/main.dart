@@ -57,7 +57,15 @@ class _RootState extends State<_Root> {
       case 'loading':
         return LoadingScreen(
           onDone: () {
-            if (mounted) setState(() => _route = 'getStarted');
+            if (!mounted) return;
+            // Saved session (Supabase restores it at init): skip auth.
+            var next = 'getStarted';
+            try {
+              if (supa.auth.currentUser != null) next = 'main';
+            } catch (_) {
+              // Demo mode: stay on GetStarted.
+            }
+            setState(() => _route = next);
           },
         );
       case 'create':
