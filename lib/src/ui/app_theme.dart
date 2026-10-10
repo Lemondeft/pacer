@@ -189,7 +189,7 @@ class PacerShadows {
 /// in-memory for the session (mirrors langNotifier's rebuild pattern —
 /// PacerApp listens and rebuilds the whole tree). No backend column.
 final ValueNotifier<ThemeMode> themeModeNotifier = ValueNotifier(
-  ThemeMode.system,
+  ThemeMode.dark,
 );
 
 /// Set the moment the user explicitly picks a theme mode.
