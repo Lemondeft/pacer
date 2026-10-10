@@ -48,9 +48,6 @@ class _RouteMapState extends State<RouteMap> {
   @override
   Widget build(BuildContext context) {
     final pts = widget.points;
-    // CARTO basemaps: Positron (light) / Dark Matter (dark) — clean minimal
-    // tiles, no API key. Attribution is legally required (see below).
-    final dark = Theme.of(context).brightness == Brightness.dark;
     // Minimal mode: offline canvas (grid + fitted route), no tiles.
     if (widget.minimal) {
       return SizedBox(
@@ -91,13 +88,9 @@ class _RouteMapState extends State<RouteMap> {
               ),
               children: [
                 TileLayer(
-                  // CARTO Positron / Dark Matter: minimal, label-light —
-                  // the closest keyless match to the requested Aubergine look
-                  // (roads read, labels whisper). Attribution below is required.
-                  urlTemplate: dark
-                      ? 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png'
-                      : 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',
-                  subdomains: const ['a', 'b', 'c', 'd'],
+                  urlTemplate:
+                      'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
+                  subdomains: const ['a', 'b', 'c'],
                   userAgentPackageName: 'com.example.pacer',
                 ),
                 if (pts.length > 1)
@@ -128,7 +121,7 @@ class _RouteMapState extends State<RouteMap> {
                       ),
                     ],
                   ),
-                // Attribution is legally required for OSM + CARTO tiles.
+                // Attribution is legally required for OSM tiles.
                 // Compact custom chip: the stock widget overflows narrow maps
                 // (RenderFlex +50px, see device log).
                 Positioned(
@@ -146,7 +139,7 @@ class _RouteMapState extends State<RouteMap> {
                         borderRadius: BorderRadius.circular(4),
                       ),
                       child: const Text(
-                        '© OpenStreetMap contributors © CARTO',
+                        '© OpenStreetMap contributors',
                         style: TextStyle(fontSize: 10, color: Colors.black87),
                         maxLines: 1,
                         overflow: TextOverflow.ellipsis,
