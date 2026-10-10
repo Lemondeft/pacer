@@ -1792,7 +1792,20 @@ class _ChallengeDetailSheetState extends State<ChallengeDetailSheet> {
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisSize: MainAxisSize.min,
               children: [
-                Text(S.challengeDetail, style: PacerText.pageTitleOf(context)),
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        S.challengeDetail,
+                        style: PacerText.pageTitleOf(context),
+                      ),
+                    ),
+                    IconButton(
+                      onPressed: () => Navigator.of(context).pop(),
+                      icon: const Icon(Icons.close, color: PacerColors.ink),
+                    ),
+                  ],
+                ),
                 SizedBox(
                   width: double.infinity,
                   child: FittedBox(
