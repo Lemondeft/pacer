@@ -88,9 +88,9 @@ class _RouteMapState extends State<RouteMap> {
               ),
               children: [
                 TileLayer(
-                  urlTemplate:
-                      'https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png',
-                  subdomains: const ['a', 'b', 'c'],
+                  // No subdomains: OSM policy asks plain-tile usage
+                  // (operations#737); keyless and reliable.
+                  urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
                   userAgentPackageName: 'com.example.pacer',
                 ),
                 if (pts.length > 1)

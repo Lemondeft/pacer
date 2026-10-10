@@ -948,20 +948,19 @@ class SummaryLimeCard extends StatelessWidget {
     this.pace = "0'00''",
   });
 
+  /// Overflow-proof: the outer scaleDown guarantees the column fits its
+  /// tight Expanded cell at any font scale (device log: +8px RenderFlex).
   Widget _col(String value, String label) {
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        FittedBox(
-          fit: BoxFit.scaleDown,
-          alignment: Alignment.centerLeft,
-          child: Text(value, style: PacerText.statValue),
-        ),
-        const SizedBox(height: 14),
-        FittedBox(
-          fit: BoxFit.scaleDown,
-          alignment: Alignment.centerLeft,
-          child: Text(
+    return FittedBox(
+      fit: BoxFit.scaleDown,
+      alignment: Alignment.centerLeft,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Text(value, style: PacerText.statValue),
+          const SizedBox(height: 8),
+          Text(
             label,
             style: const TextStyle(
               fontWeight: FontWeight.w400,
@@ -969,8 +968,8 @@ class SummaryLimeCard extends StatelessWidget {
               color: PacerColors.slate800,
             ),
           ),
-        ),
-      ],
+        ],
+      ),
     );
   }
 
