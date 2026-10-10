@@ -49,13 +49,7 @@ class PrimaryButton extends StatelessWidget {
       width: double.infinity,
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(5),
-        boxShadow: const [
-          BoxShadow(
-            color: Color(0x0D000000),
-            blurRadius: 2,
-            offset: Offset(0, 1),
-          ),
-        ],
+        boxShadow: [PacerScheme.of(context).shadowBox],
       ),
       child: ElevatedButton(onPressed: onPressed, child: Text(label)),
     );
@@ -81,18 +75,13 @@ class AuthField extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final scheme = PacerScheme.of(context);
     return Container(
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: scheme.authField,
         borderRadius: BorderRadius.circular(5),
-        border: Border.all(color: PacerColors.border),
-        boxShadow: const [
-          BoxShadow(
-            color: Color(0x0D000000),
-            blurRadius: 2,
-            offset: Offset(0, 1),
-          ),
-        ],
+        border: Border.all(color: scheme.border),
+        boxShadow: [scheme.shadowBox],
       ),
       child: ClipRRect(
         borderRadius: BorderRadius.circular(5),
@@ -120,12 +109,12 @@ class AuthField extends StatelessWidget {
               controller: controller,
               obscureText: obscure,
               keyboardType: keyboardType,
-              style: PacerText.button,
+              style: PacerText.button.copyWith(color: scheme.ink),
               decoration: InputDecoration(
                 hintText: hint,
-                hintStyle: PacerText.hint,
+                hintStyle: PacerText.hintOf(context),
                 border: InputBorder.none,
-                prefixIcon: Icon(icon, color: Colors.black54, size: 20),
+                prefixIcon: Icon(icon, color: scheme.subtle, size: 20),
                 suffixIcon: obscure
                     ? const Icon(Icons.visibility_off_outlined, size: 20)
                     : null,
@@ -159,17 +148,18 @@ class RunSessionCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final scheme = PacerScheme.of(context);
     return Container(
       padding: const EdgeInsets.fromLTRB(16, 24, 16, 16),
       decoration: BoxDecoration(
-        color: PacerColors.runCardBg,
+        color: scheme.runCard,
         borderRadius: BorderRadius.circular(10),
-        boxShadow: const [PacerShadows.soft],
+        boxShadow: [scheme.shadowBox],
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Icon(Icons.directions_run, size: 34, color: PacerColors.ink),
+          Icon(Icons.directions_run, size: 34, color: scheme.ink),
           const SizedBox(width: 8),
           // Left pane (3) / right pane (2): both flex so wide text can
           // never push the row past the card edge.
@@ -180,14 +170,14 @@ class RunSessionCard extends StatelessWidget {
               children: [
                 Text(
                   date,
-                  style: PacerText.cardDate,
+                  style: PacerText.cardDateOf(context),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                 ),
                 const SizedBox(height: 16),
                 Text(
                   title,
-                  style: PacerText.cardTitle,
+                  style: PacerText.cardTitleOf(context),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                 ),
@@ -202,8 +192,8 @@ class RunSessionCard extends StatelessWidget {
                         mainAxisSize: MainAxisSize.min,
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text(time, style: PacerText.cardTime),
-                          Text(S.time, style: PacerText.cardSub),
+                          Text(time, style: PacerText.cardTimeOf(context)),
+                          Text(S.time, style: PacerText.cardSubOf(context)),
                         ],
                       ),
                       const SizedBox(width: 24),
@@ -211,8 +201,8 @@ class RunSessionCard extends StatelessWidget {
                         mainAxisSize: MainAxisSize.min,
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text(pace, style: PacerText.cardPace),
-                          Text(S.pace, style: PacerText.cardSub),
+                          Text(pace, style: PacerText.cardPaceOf(context)),
+                          Text(S.pace, style: PacerText.cardSubOf(context)),
                         ],
                       ),
                     ],
@@ -230,7 +220,10 @@ class RunSessionCard extends StatelessWidget {
                 FittedBox(
                   fit: BoxFit.scaleDown,
                   alignment: Alignment.centerRight,
-                  child: Text(distance, style: PacerText.cardDistance),
+                  child: Text(
+                    distance,
+                    style: PacerText.cardDistanceOf(context),
+                  ),
                 ),
                 const SizedBox(height: 16),
                 // Pace pill spans the pane width — scales with the card.
@@ -274,7 +267,7 @@ class TeamCard extends StatelessWidget {
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(10),
         gradient: const LinearGradient(
-          colors: [Color(0xFF2B2B2B), PacerColors.streakBg],
+          colors: [PacerColors.teamShade, PacerColors.streakBg],
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
@@ -340,7 +333,7 @@ class SectionHeader extends StatelessWidget {
           ),
           child: Text(
             S.seeAll,
-            style: const TextStyle(color: PacerColors.ink, fontSize: 15),
+            style: TextStyle(color: PacerScheme.of(context).ink, fontSize: 15),
           ),
         ),
       ],
@@ -354,7 +347,8 @@ class SectionTitle extends StatelessWidget {
   const SectionTitle(this.title, {super.key});
 
   @override
-  Widget build(BuildContext context) => Text(title, style: PacerText.pageTitle);
+  Widget build(BuildContext context) =>
+      Text(title, style: PacerText.pageTitleOf(context));
 }
 
 /// 48x48 back circle + optional Fugaz title.
@@ -368,24 +362,19 @@ class PageHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final scheme = PacerScheme.of(context);
     return Row(
       children: [
         Container(
           width: 48,
           height: 48,
-          decoration: const BoxDecoration(
-            color: Colors.white,
+          decoration: BoxDecoration(
+            color: scheme.card,
             shape: BoxShape.circle,
-            boxShadow: [
-              BoxShadow(
-                color: Color(0x0D000000),
-                blurRadius: 2,
-                offset: Offset(0, 1),
-              ),
-            ],
+            boxShadow: [scheme.shadowBox],
           ),
           child: BackButton(
-            color: PacerColors.ink,
+            color: scheme.ink,
             // Null falls back to Navigator.maybePop (correct on pushed routes).
             onPressed: onBack,
           ),
@@ -395,7 +384,7 @@ class PageHeader extends StatelessWidget {
           Expanded(
             child: Text(
               title!,
-              style: PacerText.fugazBrand,
+              style: PacerText.fugazOf(context),
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
             ),
@@ -418,7 +407,7 @@ class InitialAvatar extends StatelessWidget {
       width: size,
       height: size,
       decoration: const BoxDecoration(
-        color: Color(0xFF2C2C2C),
+        color: PacerColors.avatarBg,
         shape: BoxShape.circle,
       ),
       alignment: Alignment.center,
@@ -451,13 +440,7 @@ class StreakCard extends StatelessWidget {
         decoration: BoxDecoration(
           color: PacerColors.streakBg,
           borderRadius: BorderRadius.circular(12),
-          boxShadow: const [
-            BoxShadow(
-              color: Color(0x0D000000),
-              blurRadius: 2,
-              offset: Offset(0, 1),
-            ),
-          ],
+          boxShadow: [PacerScheme.of(context).shadowBox],
         ),
         child: Stack(
           children: [
@@ -468,7 +451,7 @@ class StreakCard extends StatelessWidget {
                 width: 144,
                 height: 144,
                 decoration: BoxDecoration(
-                  color: const Color(0x1ADFE900),
+                  color: PacerColors.streakGlowA,
                   borderRadius: BorderRadius.circular(999),
                 ),
               ),
@@ -480,7 +463,7 @@ class StreakCard extends StatelessWidget {
                 width: 128,
                 height: 128,
                 decoration: BoxDecoration(
-                  color: const Color(0x1A10FFA0),
+                  color: PacerColors.streakGlowB,
                   borderRadius: BorderRadius.circular(999),
                 ),
               ),
@@ -497,7 +480,7 @@ class StreakCard extends StatelessWidget {
                       vertical: 2,
                     ),
                     decoration: BoxDecoration(
-                      color: const Color(0x99343538),
+                      color: PacerColors.streakPill,
                       borderRadius: BorderRadius.circular(999),
                     ),
                     child: Row(
@@ -566,7 +549,7 @@ class StreakCard extends StatelessWidget {
                                   const Icon(
                                     Icons.local_fire_department,
                                     size: 11,
-                                    color: Color(0xFFDFE900),
+                                    color: PacerColors.fireYellow,
                                   ),
                                   const SizedBox(width: 4),
                                   Text(
@@ -587,7 +570,7 @@ class StreakCard extends StatelessWidget {
                         width: 55,
                         height: 56,
                         decoration: BoxDecoration(
-                          color: const Color(0xCC292A2D),
+                          color: PacerColors.fireBadge,
                           borderRadius: BorderRadius.circular(999),
                         ),
                         child: const Icon(
@@ -624,7 +607,7 @@ class StreakCard extends StatelessWidget {
                                 shape: BoxShape.circle,
                                 boxShadow: [
                                   BoxShadow(
-                                    color: const Color(0x5910FFA0),
+                                    color: PacerColors.neonGlow,
                                     blurRadius: last ? 14 : 12,
                                   ),
                                 ],
@@ -632,7 +615,7 @@ class StreakCard extends StatelessWidget {
                               child: Icon(
                                 Icons.check,
                                 size: circle * 0.375,
-                                color: const Color(0xFF007144),
+                                color: PacerColors.checkDark,
                               ),
                             ),
                           ],
@@ -666,6 +649,7 @@ class BottomNavPill extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final scheme = PacerScheme.of(context);
     const icons = [
       Icons.emoji_events_outlined,
       Icons.leaderboard_outlined,
@@ -683,7 +667,7 @@ class BottomNavPill extends StatelessWidget {
           width: 377,
           height: 80.7,
           decoration: BoxDecoration(
-            color: PacerColors.bottomBar,
+            color: scheme.navBar,
             borderRadius: BorderRadius.circular(50),
           ),
           child: Row(
@@ -698,7 +682,7 @@ class BottomNavPill extends StatelessWidget {
                     icon: Icon(
                       icons[i],
                       size: 30,
-                      color: index == i ? PacerColors.lime : Colors.white,
+                      color: index == i ? PacerColors.lime : scheme.navIcon,
                     ),
                   ),
                 ),
@@ -736,7 +720,7 @@ class BottomNavPill extends StatelessWidget {
                     icon: Icon(
                       icons[i],
                       size: 30,
-                      color: index == i ? PacerColors.lime : Colors.white,
+                      color: index == i ? PacerColors.lime : scheme.navIcon,
                     ),
                   ),
                 ),
@@ -814,15 +798,22 @@ class MapCircleButton extends StatelessWidget {
       child: Container(
         width: size,
         height: size,
-        decoration: const BoxDecoration(
+        decoration: BoxDecoration(
           shape: BoxShape.circle,
           gradient: LinearGradient(
-            colors: [Color(0xFFE2E8F0), Color(0xFFF8FAFC)],
+            colors: [
+              PacerScheme.of(context).softBorder,
+              PacerScheme.of(context).mapBtnB,
+            ],
           ),
-          border: Border.fromBorderSide(BorderSide.none),
+          border: const Border.fromBorderSide(BorderSide.none),
         ),
         alignment: Alignment.center,
-        child: const Icon(Icons.map_outlined, size: 36, color: PacerColors.ink),
+        child: Icon(
+          Icons.map_outlined,
+          size: 36,
+          color: PacerScheme.of(context).ink,
+        ),
       ),
     );
   }
@@ -852,16 +843,16 @@ class TrackerStatColumn extends StatelessWidget {
         const SizedBox(height: 8),
         Text(
           value,
-          style: PacerText.statValue,
+          style: PacerText.statValueOf(context),
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
         ),
         Text(
           label,
-          style: const TextStyle(
+          style: TextStyle(
             fontWeight: FontWeight.w400,
             fontSize: 15,
-            color: PacerColors.slate700,
+            color: PacerScheme.of(context).muted,
           ),
           maxLines: 1,
           overflow: TextOverflow.ellipsis,
@@ -954,14 +945,14 @@ class SummaryLimeCard extends StatelessWidget {
                 width: 1,
                 height: 30,
                 margin: const EdgeInsets.symmetric(horizontal: 8),
-                color: const Color(0x40000000),
+                color: PacerColors.limeDivider,
               ),
               Expanded(child: _col(duration, 'Duration')),
               Container(
                 width: 1,
                 height: 30,
                 margin: const EdgeInsets.symmetric(horizontal: 8),
-                color: const Color(0x40000000),
+                color: PacerColors.limeDivider,
               ),
               Expanded(child: _col(pace, 'Avg Pace')),
             ],
@@ -988,15 +979,16 @@ class MetricCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final scheme = PacerScheme.of(context);
     return LayoutBuilder(
       builder: (context, c) {
         return Container(
-          height: fluid(c.maxWidth, 75, 96),
+          constraints: BoxConstraints(minHeight: fluid(c.maxWidth, 75, 96)),
           padding: const EdgeInsets.fromLTRB(24, 16, 24, 16),
           decoration: BoxDecoration(
-            color: const Color(0xFFFDFDFD),
+            color: scheme.card,
             borderRadius: BorderRadius.circular(30),
-            boxShadow: const [PacerShadows.soft],
+            boxShadow: [scheme.shadowBox],
           ),
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -1007,20 +999,17 @@ class MetricCard extends StatelessWidget {
                   children: [
                     Text(
                       title,
-                      style: const TextStyle(
-                        fontSize: 15,
-                        color: PacerColors.ink,
-                      ),
+                      style: TextStyle(fontSize: 15, color: scheme.ink),
                       maxLines: 1,
                       overflow: TextOverflow.ellipsis,
                     ),
                     const SizedBox(height: 8),
                     Text(
                       sub,
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontWeight: FontWeight.w400,
                         fontSize: 12,
-                        color: PacerColors.slate500,
+                        color: scheme.soft,
                       ),
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
@@ -1032,13 +1021,13 @@ class MetricCard extends StatelessWidget {
                 Column(
                   crossAxisAlignment: CrossAxisAlignment.end,
                   children: [
-                    Text(value!, style: PacerText.statValue),
+                    Text(value!, style: PacerText.statValueOf(context)),
                     Text(
                       unit ?? '',
-                      style: const TextStyle(
+                      style: TextStyle(
                         fontWeight: FontWeight.w400,
                         fontSize: 12,
-                        color: PacerColors.slate500,
+                        color: scheme.soft,
                       ),
                     ),
                   ],
@@ -1059,8 +1048,10 @@ class GoalChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final scheme = PacerScheme.of(context);
     // Visual stays a 32-tall chip; the 48-tall box guarantees a 48px
     // touch target without changing the setup screen's look.
+    // Selected chip is ink-on-light, lime-on-dark (brand in both modes).
     return SizedBox(
       height: 48,
       child: Center(
@@ -1069,10 +1060,10 @@ class GoalChip extends StatelessWidget {
           padding: const EdgeInsets.symmetric(horizontal: 23),
           alignment: Alignment.center,
           decoration: BoxDecoration(
-            color: selected ? Colors.black : Colors.white,
+            color: selected ? scheme.chipSelBg : scheme.card,
             borderRadius: BorderRadius.circular(8),
             border: Border.all(
-              color: selected ? Colors.black : const Color(0xFFC4C7C8),
+              color: selected ? scheme.chipSelBg : scheme.chipBorder,
             ),
           ),
           child: Text(
@@ -1080,7 +1071,7 @@ class GoalChip extends StatelessWidget {
             style: TextStyle(
               fontSize: 12,
               fontWeight: FontWeight.w600,
-              color: selected ? Colors.white : const Color(0xFF181C22),
+              color: selected ? scheme.chipSelFg : scheme.chipFg,
             ),
           ),
         ),
@@ -1136,26 +1127,27 @@ class SearchField extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final scheme = PacerScheme.of(context);
     return TextField(
       controller: controller,
       onChanged: onChanged,
       decoration: InputDecoration(
         hintText: hint,
-        hintStyle: const TextStyle(color: PacerColors.slate500, fontSize: 14),
-        prefixIcon: const Icon(
-          Icons.search,
-          size: 20,
-          color: PacerColors.slate500,
-        ),
+        hintStyle: TextStyle(color: scheme.soft, fontSize: 14),
+        prefixIcon: Icon(Icons.search, size: 20, color: scheme.soft),
         filled: true,
-        fillColor: PacerColors.slate50,
+        fillColor: scheme.searchBg,
         contentPadding: const EdgeInsets.symmetric(
           horizontal: 16,
           vertical: 16,
         ),
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
-          borderSide: const BorderSide(color: PacerColors.slate200),
+          borderSide: BorderSide(color: scheme.softBorder),
+        ),
+        enabledBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: BorderSide(color: scheme.softBorder),
         ),
       ),
     );
@@ -1220,17 +1212,18 @@ class PacerEmptyState extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final scheme = PacerScheme.of(context);
     return Padding(
       padding: EdgeInsets.symmetric(vertical: compact ? 8 : 48, horizontal: 24),
       child: Center(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            Icon(icon, size: compact ? 20 : 32, color: PacerColors.slate200),
+            Icon(icon, size: compact ? 20 : 32, color: scheme.emptyIcon),
             SizedBox(height: compact ? 6 : 12),
             Text(
               message,
-              style: PacerText.emptyBody,
+              style: PacerText.emptyBody.copyWith(color: scheme.soft),
               textAlign: TextAlign.center,
             ),
           ],
@@ -1246,10 +1239,10 @@ class PacerLoading extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return const Padding(
-      padding: EdgeInsets.symmetric(vertical: 48),
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 48),
       child: Center(
-        child: CircularProgressIndicator(color: PacerColors.primary),
+        child: CircularProgressIndicator(color: PacerScheme.of(context).accent),
       ),
     );
   }
@@ -1263,12 +1256,18 @@ class AuthErrorText extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final scheme = PacerScheme.of(context);
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        const Icon(Icons.error_outline, size: 20, color: PacerColors.errorRed),
+        Icon(Icons.error_outline, size: 20, color: scheme.error),
         const SizedBox(width: 8),
-        Expanded(child: Text(message, style: PacerText.errorBody)),
+        Expanded(
+          child: Text(
+            message,
+            style: PacerText.errorBody.copyWith(color: scheme.error),
+          ),
+        ),
       ],
     );
   }

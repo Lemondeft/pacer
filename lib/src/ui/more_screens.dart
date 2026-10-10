@@ -101,7 +101,7 @@ class _LoginScreenState extends State<LoginScreen> {
               const SizedBox(height: 16),
               Text(
                 S.welcomeRunners,
-                style: PacerText.authTitle.copyWith(fontSize: 34),
+                style: PacerText.authTitleOf(context).copyWith(fontSize: 34),
               ),
               const SizedBox(height: 32),
               AuthField(
@@ -124,7 +124,7 @@ class _LoginScreenState extends State<LoginScreen> {
               ],
               PrimaryButton(label: S.logIn, onPressed: _busy ? null : _submit),
               const SizedBox(height: 32),
-              const Divider(color: PacerColors.border, height: 1),
+              Divider(color: PacerScheme.of(context).border, height: 1),
               const SizedBox(height: 24),
             ],
           ),
@@ -148,6 +148,7 @@ class _RunSetupScreenState extends State<RunSetupScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final scheme = PacerScheme.of(context);
     return Scaffold(
       body: SafeArea(
         child: ResponsiveScroll(
@@ -159,18 +160,12 @@ class _RunSetupScreenState extends State<RunSetupScreen> {
               Container(
                 width: 48,
                 height: 48,
-                decoration: const BoxDecoration(
-                  color: Colors.white,
+                decoration: BoxDecoration(
+                  color: scheme.card,
                   shape: BoxShape.circle,
-                  boxShadow: [
-                    BoxShadow(
-                      color: Color(0x0D000000),
-                      blurRadius: 2,
-                      offset: Offset(0, 1),
-                    ),
-                  ],
+                  boxShadow: [scheme.shadowBox],
                 ),
-                child: const BackButton(color: PacerColors.ink),
+                child: BackButton(color: scheme.ink),
               ),
               const SizedBox(height: 16),
               Column(
@@ -182,7 +177,7 @@ class _RunSetupScreenState extends State<RunSetupScreen> {
                       fontWeight: FontWeight.w700,
                       fontSize: 24,
                       height: 32 / 24,
-                      color: const Color(0xFF181C22),
+                      color: scheme.chipFg,
                     ),
                   ),
                   const SizedBox(height: 4),
@@ -191,7 +186,7 @@ class _RunSetupScreenState extends State<RunSetupScreen> {
                     style: GoogleFonts.hankenGrotesk(
                       fontSize: 14,
                       height: 20 / 14,
-                      color: const Color(0xFF444749),
+                      color: scheme.bodyGray,
                     ),
                   ),
                 ],
@@ -200,8 +195,8 @@ class _RunSetupScreenState extends State<RunSetupScreen> {
               Container(
                 padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(
-                  color: Colors.white,
-                  border: Border.all(width: 2, color: Colors.black),
+                  color: scheme.card,
+                  border: Border.all(width: 2, color: scheme.chipSelBg),
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: Row(
@@ -210,13 +205,13 @@ class _RunSetupScreenState extends State<RunSetupScreen> {
                       width: 44,
                       height: 44,
                       decoration: BoxDecoration(
-                        color: Colors.black,
+                        color: scheme.chipSelBg,
                         borderRadius: BorderRadius.circular(8),
                       ),
-                      child: const Icon(
+                      child: Icon(
                         Icons.directions_run,
                         size: 21,
-                        color: Colors.white,
+                        color: scheme.chipSelFg,
                       ),
                     ),
                     const SizedBox(width: 12),
@@ -230,7 +225,7 @@ class _RunSetupScreenState extends State<RunSetupScreen> {
                               fontWeight: FontWeight.w600,
                               fontSize: 16,
                               height: 24 / 16,
-                              color: const Color(0xFF181C22),
+                              color: scheme.chipFg,
                             ),
                           ),
                           Text(
@@ -238,7 +233,7 @@ class _RunSetupScreenState extends State<RunSetupScreen> {
                             style: GoogleFonts.hankenGrotesk(
                               fontSize: 12,
                               height: 16 / 12,
-                              color: const Color(0xFF444749),
+                              color: scheme.bodyGray,
                             ),
                           ),
                         ],
@@ -248,14 +243,14 @@ class _RunSetupScreenState extends State<RunSetupScreen> {
                     Container(
                       width: 24,
                       height: 24,
-                      decoration: const BoxDecoration(
-                        color: Colors.black,
+                      decoration: BoxDecoration(
+                        color: scheme.chipSelBg,
                         shape: BoxShape.circle,
                       ),
-                      child: const Icon(
+                      child: Icon(
                         Icons.check,
                         size: 11,
-                        color: Colors.white,
+                        color: scheme.chipSelFg,
                       ),
                     ),
                   ],
@@ -264,8 +259,8 @@ class _RunSetupScreenState extends State<RunSetupScreen> {
               const SizedBox(height: 24),
               Container(
                 padding: const EdgeInsets.only(top: 16),
-                decoration: const BoxDecoration(
-                  border: Border(top: BorderSide(color: Color(0xFFE5E8F1))),
+                decoration: BoxDecoration(
+                  border: Border(top: BorderSide(color: scheme.hairline)),
                 ),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -278,7 +273,7 @@ class _RunSetupScreenState extends State<RunSetupScreen> {
                             fontWeight: FontWeight.w700,
                             fontSize: 12,
                             height: 16 / 12,
-                            color: const Color(0xFF444749),
+                            color: scheme.bodyGray,
                           ),
                         ),
                         const Spacer(),
@@ -286,7 +281,7 @@ class _RunSetupScreenState extends State<RunSetupScreen> {
                           '5.0 km',
                           style: GoogleFonts.hankenGrotesk(
                             fontSize: 12,
-                            color: const Color(0xFF444749),
+                            color: scheme.bodyGray,
                           ),
                         ),
                       ],
@@ -335,8 +330,8 @@ class _RunSetupScreenState extends State<RunSetupScreen> {
                 child: ElevatedButton(
                   onPressed: widget.onStart,
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.black,
-                    foregroundColor: Colors.white,
+                    backgroundColor: scheme.chipSelBg,
+                    foregroundColor: scheme.chipSelFg,
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(12),
                     ),
@@ -543,6 +538,7 @@ class _RunTrackerScreenState extends State<RunTrackerScreen> {
                     final w = c.maxWidth;
                     final hero = fluid(w, 72, 160);
                     final circle = fluid(w, 84, 112);
+                    final scheme = PacerScheme.of(context);
                     Widget header = Padding(
                       padding: const EdgeInsets.fromLTRB(32, 12, 32, 0),
                       child: Row(
@@ -550,25 +546,16 @@ class _RunTrackerScreenState extends State<RunTrackerScreen> {
                           Container(
                             width: 48,
                             height: 48,
-                            decoration: const BoxDecoration(
-                              color: Colors.white,
+                            decoration: BoxDecoration(
+                              color: scheme.card,
                               shape: BoxShape.circle,
-                              boxShadow: [
-                                BoxShadow(
-                                  color: Color(0x0D000000),
-                                  blurRadius: 2,
-                                  offset: Offset(0, 1),
-                                ),
-                              ],
+                              boxShadow: [scheme.shadowBox],
                             ),
                             child: IconButton(
                               onPressed:
                                   widget.onBack ??
                                   () => Navigator.maybePop(context),
-                              icon: const Icon(
-                                Icons.arrow_back,
-                                color: PacerColors.ink,
-                              ),
+                              icon: Icon(Icons.arrow_back, color: scheme.ink),
                             ),
                           ),
                           const Spacer(),
@@ -576,7 +563,7 @@ class _RunTrackerScreenState extends State<RunTrackerScreen> {
                             width: 83,
                             height: 10,
                             decoration: BoxDecoration(
-                              color: PacerColors.ink.withValues(alpha: 0.15),
+                              color: scheme.ink.withValues(alpha: 0.15),
                               borderRadius: BorderRadius.circular(5),
                             ),
                           ),
@@ -595,16 +582,16 @@ class _RunTrackerScreenState extends State<RunTrackerScreen> {
                             fit: BoxFit.scaleDown,
                             child: Text(
                               fmtKmNum(_recorder.distanceM),
-                              style: PacerText.giantNum(hero),
+                              style: PacerText.giantNumOf(context, hero),
                               textAlign: TextAlign.center,
                             ),
                           ),
                           Text(
                             S.distanceKm,
-                            style: const TextStyle(
+                            style: TextStyle(
                               fontWeight: FontWeight.w300,
                               fontSize: 15,
-                              color: Color(0x99000000),
+                              color: scheme.overlay,
                             ),
                           ),
                         ],
@@ -751,16 +738,19 @@ class _RunTrackerScreenState extends State<RunTrackerScreen> {
 }
 
 class _RouteGridPainter extends CustomPainter {
+  final Color line;
+  const _RouteGridPainter({this.line = const Color(0xFFCBD5E1)});
+
   @override
   void paint(Canvas canvas, Size size) {
-    final line = Paint()
-      ..color = const Color(0xFFCBD5E1)
+    final linePaint = Paint()
+      ..color = line
       ..strokeWidth = 1;
     for (double x = 0; x < size.width; x += 32) {
-      canvas.drawLine(Offset(x, 0), Offset(x, size.height), line);
+      canvas.drawLine(Offset(x, 0), Offset(x, size.height), linePaint);
     }
     for (double y = 0; y < size.height; y += 32) {
-      canvas.drawLine(Offset(0, y), Offset(size.width, y), line);
+      canvas.drawLine(Offset(0, y), Offset(size.width, y), linePaint);
     }
     final route = Paint()
       ..color = PacerColors.lime
@@ -811,6 +801,7 @@ class RunFinishScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final scheme = PacerScheme.of(context);
     final metrics = [
       (S.stepLength, S.distanceBetweenSteps, '1,00', 'ft'),
       (S.calories, S.totalEnergyBurned, '854', 'kcal'),
@@ -822,14 +813,16 @@ class RunFinishScreen extends StatelessWidget {
         children: [
           Positioned.fill(
             child: Container(
-              decoration: const BoxDecoration(
+              decoration: BoxDecoration(
                 gradient: LinearGradient(
-                  colors: [Color(0xFFF1F5F9), Color(0xFFE2E8F0)],
+                  colors: [scheme.finishTop, scheme.finishBottom],
                   begin: Alignment.topCenter,
                   end: Alignment.bottomCenter,
                 ),
               ),
-              child: CustomPaint(painter: _RouteGridPainter()),
+              child: CustomPaint(
+                painter: _RouteGridPainter(line: scheme.gridLine),
+              ),
             ),
           ),
           SafeArea(
@@ -844,10 +837,10 @@ class RunFinishScreen extends StatelessWidget {
                     children: [
                       IconButton(
                         onPressed: onBack ?? () => Navigator.maybePop(context),
-                        icon: const Icon(
+                        icon: Icon(
                           Icons.arrow_back,
                           size: 32,
-                          color: PacerColors.ink,
+                          color: scheme.ink,
                         ),
                       ),
                       const Spacer(),
@@ -855,24 +848,17 @@ class RunFinishScreen extends StatelessWidget {
                         width: 20,
                         height: 20,
                         alignment: Alignment.center,
-                        child: const Icon(
-                          Icons.edit,
-                          size: 20,
-                          color: PacerColors.ink,
-                        ),
+                        child: Icon(Icons.edit, size: 20, color: scheme.ink),
                       ),
                     ],
                   ),
                   const SizedBox(height: 15),
                   Text(
                     title ?? S.running,
-                    style: const TextStyle(
-                      fontSize: 24,
-                      color: PacerColors.ink,
-                    ),
+                    style: TextStyle(fontSize: 24, color: scheme.ink),
                   ),
                   const SizedBox(height: 24),
-                  Container(height: 1, color: PacerColors.border),
+                  Container(height: 1, color: scheme.border),
                   if (isHistoryDetail) ...[
                     const SizedBox(height: 28),
                     if (aktivitasId != null)
@@ -904,8 +890,8 @@ class RunFinishScreen extends StatelessWidget {
                         child: Container(
                           width: 20,
                           height: 20,
-                          decoration: const BoxDecoration(
-                            color: PacerColors.ink,
+                          decoration: BoxDecoration(
+                            color: scheme.ink,
                             shape: BoxShape.circle,
                           ),
                         ),
@@ -948,7 +934,8 @@ class RunFinishScreen extends StatelessWidget {
                         );
                       }
                       // medium and up: metric cards flow into a 2+ column
-                      // grid that grows with the width.
+                      // grid that grows with the width. Cells are 108 tall so
+                      // two-line Indonesian subs never overflow the card.
                       return GridView(
                         shrinkWrap: true,
                         physics: const NeverScrollableScrollPhysics(),
@@ -957,7 +944,7 @@ class RunFinishScreen extends StatelessWidget {
                               maxCrossAxisExtent: 400,
                               mainAxisSpacing: 9,
                               crossAxisSpacing: 9,
-                              mainAxisExtent: 90,
+                              mainAxisExtent: 108,
                             ),
                         children: cards,
                       );
@@ -1037,15 +1024,16 @@ class _TeamsScreenState extends State<TeamsScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final scheme = PacerScheme.of(context);
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: scheme.scaffold,
       body: SafeArea(
         child: ResponsiveScroll(
           padding: const EdgeInsets.only(top: 16, bottom: 120),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(S.findTeamsNearby, style: PacerText.pageTitle),
+              Text(S.findTeamsNearby, style: PacerText.pageTitleOf(context)),
               const SizedBox(height: 12),
               SearchField(onChanged: (v) => setState(() => _query = v)),
               const SizedBox(height: 16),
@@ -1105,16 +1093,10 @@ class _TeamsScreenState extends State<TeamsScreen> {
                   height: 58,
                   alignment: Alignment.center,
                   decoration: BoxDecoration(
-                    color: Colors.white,
+                    color: scheme.card,
                     borderRadius: BorderRadius.circular(50),
-                    border: Border.all(color: PacerColors.border),
-                    boxShadow: const [
-                      BoxShadow(
-                        color: Color(0x0D000000),
-                        blurRadius: 2,
-                        offset: Offset(0, 1),
-                      ),
-                    ],
+                    border: Border.all(color: scheme.border),
+                    boxShadow: [scheme.shadowBox],
                   ),
                   child: Text(
                     S.createTeam,
@@ -1190,7 +1172,7 @@ class _TeamsScreenState extends State<TeamsScreen> {
               Container(
                 padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(
-                  color: PacerColors.runCardBg,
+                  color: scheme.runCard,
                   borderRadius: BorderRadius.circular(12),
                 ),
                 child: const Row(
@@ -1299,14 +1281,15 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
     required String value,
     required bool mine,
   }) {
+    final scheme = PacerScheme.of(context);
     return Container(
       width: double.infinity,
       margin: const EdgeInsets.only(bottom: 8),
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 16),
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: mine ? PacerColors.lime : PacerColors.border),
-        color: mine ? PacerColors.lime.withValues(alpha: 0.1) : Colors.white,
+        border: Border.all(color: mine ? PacerColors.lime : scheme.border),
+        color: mine ? PacerColors.lime.withValues(alpha: 0.1) : scheme.card,
       ),
       child: Row(
         children: [
@@ -1339,14 +1322,14 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: PacerScheme.of(context).scaffold,
       body: SafeArea(
         child: ResponsiveScroll(
           padding: const EdgeInsets.fromLTRB(24, 16, 24, 120),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(S.teamsLeaderboard, style: PacerText.pageTitle),
+              Text(S.teamsLeaderboard, style: PacerText.pageTitleOf(context)),
               const SizedBox(height: 16),
               FutureBuilder<_BoardData>(
                 future: _future,
@@ -1609,7 +1592,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
   Widget build(BuildContext context) {
     final w = MediaQuery.sizeOf(context).width;
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: PacerScheme.of(context).scaffold,
       body: SafeArea(
         child: ResponsiveScroll(
           padding: const EdgeInsets.only(top: 16, bottom: 120),
@@ -1618,7 +1601,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
             children: [
               const PageHeader(),
               const SizedBox(height: 16),
-              Text(S.history, style: PacerText.pageTitle),
+              Text(S.history, style: PacerText.pageTitleOf(context)),
               FutureBuilder<List<Activity>>(
                 future: _future,
                 builder: (context, snap) {
@@ -1652,7 +1635,10 @@ class _HistoryScreenState extends State<HistoryScreen> {
                               // Hero number scales with width (fluid 88→140).
                               Text(
                                 fmtKmNum(totalKm),
-                                style: PacerText.giantNum(fluid(w, 88, 140)),
+                                style: PacerText.giantNumOf(
+                                  context,
+                                  fluid(w, 88, 140),
+                                ),
                               ),
                               const Text(
                                 'Kilometer',
@@ -1806,7 +1792,7 @@ class _ChallengeDetailSheetState extends State<ChallengeDetailSheet> {
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisSize: MainAxisSize.min,
               children: [
-                Text(S.challengeDetail, style: PacerText.pageTitle),
+                Text(S.challengeDetail, style: PacerText.pageTitleOf(context)),
                 SizedBox(
                   width: double.infinity,
                   child: FittedBox(
@@ -1911,10 +1897,10 @@ class _AccountScreenState extends State<AccountScreen> {
                 ),
               ),
             ),
-            const Icon(
+            Icon(
               Icons.chevron_right,
               size: 20,
-              color: PacerColors.slate500,
+              color: PacerScheme.of(context).soft,
             ),
           ],
         ),
@@ -1924,8 +1910,9 @@ class _AccountScreenState extends State<AccountScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final scheme = PacerScheme.of(context);
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: scheme.scaffold,
       body: SafeArea(
         child: ResponsiveScroll(
           maxWidth: 720,
@@ -1937,23 +1924,14 @@ class _AccountScreenState extends State<AccountScreen> {
                   Container(
                     width: 48,
                     height: 48,
-                    decoration: const BoxDecoration(
-                      color: Colors.white,
+                    decoration: BoxDecoration(
+                      color: scheme.card,
                       shape: BoxShape.circle,
-                      boxShadow: [
-                        BoxShadow(
-                          color: Color(0x0D000000),
-                          blurRadius: 2,
-                          offset: Offset(0, 1),
-                        ),
-                      ],
+                      boxShadow: [scheme.shadowBox],
                     ),
                     child: IconButton(
                       onPressed: () => Navigator.maybePop(context),
-                      icon: const Icon(
-                        Icons.arrow_back,
-                        color: PacerColors.ink,
-                      ),
+                      icon: Icon(Icons.arrow_back, color: scheme.ink),
                     ),
                   ),
                   const Spacer(),
@@ -1974,7 +1952,7 @@ class _AccountScreenState extends State<AccountScreen> {
                 padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(
                   borderRadius: BorderRadius.circular(16),
-                  border: Border.all(color: PacerColors.border),
+                  border: Border.all(color: scheme.border),
                 ),
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -1986,7 +1964,7 @@ class _AccountScreenState extends State<AccountScreen> {
                         SnackBar(content: Text(_profile?.email ?? '–')),
                       ),
                     ),
-                    const Divider(height: 1, color: PacerColors.border),
+                    Divider(height: 1, color: scheme.border),
                     _menuRow(
                       context,
                       label: S.aboutMe,
@@ -1996,7 +1974,7 @@ class _AccountScreenState extends State<AccountScreen> {
                         ),
                       ),
                     ),
-                    const Divider(height: 1, color: PacerColors.border),
+                    Divider(height: 1, color: scheme.border),
                     _menuRow(
                       context,
                       label: S.features,
@@ -2004,7 +1982,7 @@ class _AccountScreenState extends State<AccountScreen> {
                         MaterialPageRoute(builder: (_) => const FiturScreen()),
                       ),
                     ),
-                    const Divider(height: 1, color: PacerColors.border),
+                    Divider(height: 1, color: scheme.border),
                     _menuRow(
                       context,
                       label: S.language,
@@ -2014,7 +1992,19 @@ class _AccountScreenState extends State<AccountScreen> {
                         ),
                       ),
                     ),
-                    const Divider(height: 1, color: PacerColors.border),
+                    Divider(height: 1, color: scheme.border),
+                    _menuRow(
+                      context,
+                      // Theme toggle lives next to the language setting;
+                      // hardcoded label follows that screen's precedent.
+                      label: 'Tema',
+                      onTap: () => Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (_) => const ThemeSettingsScreen(),
+                        ),
+                      ),
+                    ),
+                    Divider(height: 1, color: scheme.border),
                     _menuRow(
                       context,
                       label: S.out,
@@ -2112,7 +2102,7 @@ class _StatisticScreenState extends State<StatisticScreen> {
             children: [
               const PageHeader(),
               const SizedBox(height: 16),
-              Text(S.statistic, style: PacerText.pageTitle),
+              Text(S.statistic, style: PacerText.pageTitleOf(context)),
               const SizedBox(height: 12),
               LayoutBuilder(
                 builder: (context, c) {
@@ -2137,7 +2127,7 @@ class _StatisticScreenState extends State<StatisticScreen> {
                               S.totalRunDistance,
                               style: TextStyle(
                                 fontSize: 11,
-                                color: PacerColors.slate500,
+                                color: PacerScheme.of(context).soft,
                               ),
                             ),
                             const SizedBox(height: 12),
@@ -2177,7 +2167,7 @@ class _StatisticScreenState extends State<StatisticScreen> {
                             S.totalRunDistance,
                             style: TextStyle(
                               fontSize: 11,
-                              color: PacerColors.slate500,
+                              color: PacerScheme.of(context).soft,
                             ),
                           ),
                           const SizedBox(height: 16),
@@ -2242,18 +2232,19 @@ class _StatCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final scheme = PacerScheme.of(context);
     return Container(
       padding: const EdgeInsets.all(14),
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: PacerColors.border),
+        border: Border.all(color: scheme.border),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
             label,
-            style: const TextStyle(fontSize: 11, color: PacerColors.slate500),
+            style: TextStyle(fontSize: 11, color: scheme.soft),
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
           ),
@@ -2262,16 +2253,16 @@ class _StatCard extends StatelessWidget {
             alignment: Alignment.centerLeft,
             child: Text(
               value,
-              style: const TextStyle(
+              style: TextStyle(
                 fontWeight: FontWeight.w800,
                 fontSize: 20,
-                color: PacerColors.navy,
+                color: scheme.headline,
               ),
             ),
           ),
           Text(
             unit,
-            style: const TextStyle(fontSize: 12, color: PacerColors.slate500),
+            style: TextStyle(fontSize: 12, color: scheme.soft),
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
           ),
@@ -2352,6 +2343,7 @@ class _StreaksScreenState extends State<StreaksScreen> {
 
   /// 7-day strip; [done] flags per weekday Mon..Sun, [todayIdx] glows.
   Widget _weekRow(List<bool> done, int todayIdx) {
+    final scheme = PacerScheme.of(context);
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceBetween,
       children: List.generate(7, (i) {
@@ -2365,11 +2357,11 @@ class _StreaksScreenState extends State<StreaksScreen> {
               alignment: Alignment.center,
               decoration: BoxDecoration(
                 shape: BoxShape.circle,
-                color: d ? PacerColors.streakBlue : Colors.white,
+                color: d ? PacerColors.streakBlue : scheme.card,
                 border: Border.all(
                   color: d || today
                       ? PacerColors.streakBlue
-                      : PacerColors.slate200,
+                      : scheme.softBorder,
                   width: 2,
                 ),
                 boxShadow: today
@@ -2380,10 +2372,7 @@ class _StreaksScreenState extends State<StreaksScreen> {
                   ? const Icon(Icons.check, size: 16, color: Colors.white)
                   : null,
             ),
-            Text(
-              _days[i],
-              style: const TextStyle(fontSize: 11, color: PacerColors.slate500),
-            ),
+            Text(_days[i], style: TextStyle(fontSize: 11, color: scheme.soft)),
           ],
         );
       }),
@@ -2394,7 +2383,7 @@ class _StreaksScreenState extends State<StreaksScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: PacerScheme.of(context).scaffold,
       body: SafeArea(
         child: ResponsiveScroll(
           maxWidth: 720,
@@ -2404,7 +2393,7 @@ class _StreaksScreenState extends State<StreaksScreen> {
             children: [
               const PageHeader(),
               const SizedBox(height: 16),
-              Text(S.streaks, style: PacerText.pageTitle),
+              Text(S.streaks, style: PacerText.pageTitleOf(context)),
               const SizedBox(height: 12),
               FutureBuilder<({int count, DateTime? terakhir, double totalKm})?>(
                 future: _future,
@@ -2570,7 +2559,7 @@ class _ChallengeListScreenState extends State<ChallengeListScreen> {
             children: [
               const PageHeader(),
               const SizedBox(height: 16),
-              Text(S.challenge, style: PacerText.pageTitle),
+              Text(S.challenge, style: PacerText.pageTitleOf(context)),
               const SizedBox(height: 12),
               FutureBuilder<List<Challenge>>(
                 future: _future,
@@ -2605,7 +2594,7 @@ class _ChallengeListScreenState extends State<ChallengeListScreen> {
                               borderRadius: BorderRadius.circular(20),
                               gradient: const LinearGradient(
                                 colors: [
-                                  Color(0xFF2B2B2B),
+                                  PacerColors.teamShade,
                                   PacerColors.streakBg,
                                 ],
                               ),
@@ -2699,7 +2688,7 @@ class PersyaratanScreen extends StatelessWidget {
               const SizedBox(height: 16),
               Text(
                 S.clubRequirements,
-                style: PacerText.pageTitle.copyWith(fontSize: 24),
+                style: PacerText.pageTitleOf(context).copyWith(fontSize: 24),
               ),
               const SizedBox(height: 16),
               for (final r in rows)
@@ -2723,17 +2712,17 @@ class PersyaratanScreen extends StatelessWidget {
                           children: [
                             Text(
                               r.$1,
-                              style: const TextStyle(
+                              style: TextStyle(
                                 fontWeight: FontWeight.w600,
                                 fontSize: 16,
-                                color: Color(0xFF0B1C30),
+                                color: PacerScheme.of(context).deepInk,
                               ),
                             ),
                             Text(
                               r.$2,
-                              style: const TextStyle(
+                              style: TextStyle(
                                 fontSize: 12,
-                                color: PacerColors.formText,
+                                color: PacerScheme.of(context).formMuted,
                               ),
                             ),
                           ],
@@ -2843,6 +2832,7 @@ class _CreateClubScreenState extends State<CreateClubScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final scheme = PacerScheme.of(context);
     return Scaffold(
       body: SafeArea(
         child: ResponsiveScroll(
@@ -2853,16 +2843,16 @@ class _CreateClubScreenState extends State<CreateClubScreen> {
             children: [
               const PageHeader(),
               const SizedBox(height: 16),
-              Text(S.createTeam, style: PacerText.pageTitle),
+              Text(S.createTeam, style: PacerText.pageTitleOf(context)),
               const SizedBox(height: 12),
               Container(
                 width: 80,
                 height: 80,
                 alignment: Alignment.center,
                 decoration: BoxDecoration(
-                  color: PacerColors.formBg,
+                  color: scheme.formField,
                   borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: PacerColors.formBorder, width: 2),
+                  border: Border.all(color: scheme.formEdge, width: 2),
                 ),
                 child: Text(
                   S.addLogo,
@@ -2876,7 +2866,7 @@ class _CreateClubScreenState extends State<CreateClubScreen> {
                 controller: _name,
                 decoration: InputDecoration(
                   filled: true,
-                  fillColor: PacerColors.formBg,
+                  fillColor: scheme.formField,
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(12),
                     borderSide: BorderSide.none,
@@ -2903,7 +2893,7 @@ class _CreateClubScreenState extends State<CreateClubScreen> {
               TextField(
                 decoration: InputDecoration(
                   filled: true,
-                  fillColor: PacerColors.formBg,
+                  fillColor: scheme.formField,
                   border: OutlineInputBorder(
                     borderRadius: BorderRadius.circular(12),
                     borderSide: BorderSide.none,
@@ -2955,7 +2945,7 @@ class CreateChallengeScreen extends StatelessWidget {
               const SizedBox(height: 16),
               Text(
                 'buat challenge teams',
-                style: PacerText.pageTitle.copyWith(fontSize: 26),
+                style: PacerText.pageTitleOf(context).copyWith(fontSize: 26),
               ),
               const SizedBox(height: 12),
               for (final s in [
@@ -2970,10 +2960,10 @@ class CreateChallengeScreen extends StatelessWidget {
                     children: [
                       Text(
                         s.$1,
-                        style: const TextStyle(
+                        style: TextStyle(
                           fontSize: 12,
                           fontWeight: FontWeight.w600,
-                          color: PacerColors.slate500,
+                          color: PacerScheme.of(context).soft,
                         ),
                       ),
                       const SizedBox(height: 8),
@@ -3109,6 +3099,7 @@ class _ChatScreenState extends State<ChatScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final scheme = PacerScheme.of(context);
     return Scaffold(
       appBar: AppBar(
         title: Row(
@@ -3138,8 +3129,8 @@ class _ChatScreenState extends State<ChatScreen> {
             ),
           ],
         ),
-        backgroundColor: Colors.white,
-        foregroundColor: PacerColors.ink,
+        backgroundColor: scheme.card,
+        foregroundColor: scheme.ink,
         elevation: 1,
       ),
       body: Center(
@@ -3162,8 +3153,8 @@ class _ChatScreenState extends State<ChatScreen> {
       return const Center(child: Text('Pilih tim dulu.'));
     }
     if (_loading) {
-      return const Center(
-        child: CircularProgressIndicator(color: PacerColors.primary),
+      return Center(
+        child: CircularProgressIndicator(color: PacerScheme.of(context).accent),
       );
     }
     if (_messages.isEmpty) {
@@ -3179,13 +3170,14 @@ class _ChatScreenState extends State<ChatScreen> {
 
   Widget _bubble(ChatMessage m) {
     final mine = _uid != null && m.userId == _uid;
+    final scheme = PacerScheme.of(context);
     return Align(
       alignment: mine ? Alignment.centerRight : Alignment.centerLeft,
       child: Container(
         margin: const EdgeInsets.only(bottom: 8),
         padding: const EdgeInsets.all(12),
         decoration: BoxDecoration(
-          color: mine ? PacerColors.chatGreen : const Color(0xFFF2F3FF),
+          color: mine ? PacerColors.chatGreen : scheme.chatBubble,
           borderRadius: BorderRadius.only(
             topLeft: const Radius.circular(16),
             topRight: mine
@@ -3212,7 +3204,7 @@ class _ChatScreenState extends State<ChatScreen> {
             Text(m.body),
             Text(
               _clock(m.createdAt),
-              style: const TextStyle(fontSize: 10, color: Colors.black54),
+              style: TextStyle(fontSize: 10, color: scheme.subtle),
             ),
           ],
         ),
@@ -3246,7 +3238,9 @@ class _ChatScreenState extends State<ChatScreen> {
               width: 48,
               height: 48,
               decoration: BoxDecoration(
-                color: live ? PacerColors.chatGreen : PacerColors.slate200,
+                color: live
+                    ? PacerColors.chatGreen
+                    : PacerScheme.of(context).softBorder,
                 shape: BoxShape.circle,
               ),
               child: const Icon(Icons.send, color: Colors.white, size: 20),
@@ -3281,13 +3275,13 @@ class AboutMeScreen extends StatelessWidget {
             children: [
               const PageHeader(),
               const SizedBox(height: 16),
-              Text(S.aboutMe, style: PacerText.pageTitle),
+              Text(S.aboutMe, style: PacerText.pageTitleOf(context)),
               const SizedBox(height: 12),
               Container(
                 padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(
                   borderRadius: BorderRadius.circular(16),
-                  border: Border.all(color: PacerColors.border),
+                  border: Border.all(color: PacerScheme.of(context).border),
                 ),
                 child: Column(
                   children: [
@@ -3333,14 +3327,14 @@ class AboutMeScreen extends StatelessWidget {
                 child: ElevatedButton(
                   onPressed: () {},
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: PacerColors.navy,
+                    backgroundColor: PacerScheme.of(context).editBg,
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(999),
                     ),
                   ),
                   child: Text(
                     S.editPersonalDetails,
-                    style: TextStyle(color: Colors.white),
+                    style: TextStyle(color: PacerScheme.of(context).actionFg),
                   ),
                 ),
               ),
@@ -3389,7 +3383,7 @@ class FiturScreen extends StatelessWidget {
             children: [
               const PageHeader(),
               const SizedBox(height: 16),
-              Text('FITUR', style: PacerText.fugazBrand),
+              Text('FITUR', style: PacerText.fugazOf(context)),
               const SizedBox(height: 12),
               // Tiles flow into a grid driven by max extent — never a
               // hardcoded column count.
@@ -3413,7 +3407,9 @@ class FiturScreen extends StatelessWidget {
                         padding: const EdgeInsets.all(12),
                         decoration: BoxDecoration(
                           borderRadius: BorderRadius.circular(10),
-                          border: Border.all(color: PacerColors.border),
+                          border: Border.all(
+                            color: PacerScheme.of(context).border,
+                          ),
                         ),
                         child: Column(
                           mainAxisSize: MainAxisSize.min,
@@ -3515,7 +3511,7 @@ class _LanguageSettingsScreenState extends State<LanguageSettingsScreen> {
   Widget build(BuildContext context) {
     final current = langNotifier.value;
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: PacerScheme.of(context).scaffold,
       body: SafeArea(
         child: ResponsiveScroll(
           maxWidth: 720,
@@ -3525,7 +3521,7 @@ class _LanguageSettingsScreenState extends State<LanguageSettingsScreen> {
             children: [
               const PageHeader(),
               const SizedBox(height: 16),
-              Text(S.language, style: PacerText.pageTitle),
+              Text(S.language, style: PacerText.pageTitleOf(context)),
               const SizedBox(height: 16),
               _langOption(
                 context,
@@ -3564,7 +3560,9 @@ class _LanguageSettingsScreenState extends State<LanguageSettingsScreen> {
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(12),
           border: Border.all(
-            color: selected ? PacerColors.primary : PacerColors.border,
+            color: selected
+                ? PacerScheme.of(context).accent
+                : PacerScheme.of(context).border,
             width: selected ? 2 : 1,
           ),
         ),
@@ -3583,9 +3581,9 @@ class _LanguageSettingsScreenState extends State<LanguageSettingsScreen> {
                   ),
                   Text(
                     sub,
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 12,
-                      color: PacerColors.slate500,
+                      color: PacerScheme.of(context).soft,
                     ),
                   ),
                 ],
@@ -3593,7 +3591,117 @@ class _LanguageSettingsScreenState extends State<LanguageSettingsScreen> {
             ),
             Icon(
               selected ? Icons.check_circle : Icons.radio_button_off,
-              color: selected ? PacerColors.primary : PacerColors.slate500,
+              color: selected
+                  ? PacerScheme.of(context).accent
+                  : PacerScheme.of(context).soft,
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Theme settings: system / light / dark. Session-local (no backend
+/// column); PacerApp listens to [themeModeNotifier] and rebuilds the whole
+/// tree, mirroring the language toggle. Option labels are hardcoded,
+/// following this file's language-option precedent (S.* untouched).
+class ThemeSettingsScreen extends StatelessWidget {
+  const ThemeSettingsScreen({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      backgroundColor: PacerScheme.of(context).scaffold,
+      body: SafeArea(
+        child: ResponsiveScroll(
+          maxWidth: 720,
+          padding: const EdgeInsets.only(top: 16, bottom: 24),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const PageHeader(),
+              const SizedBox(height: 16),
+              // Hardcoded label — see class doc (S.* untouched).
+              Text('Tema', style: PacerText.pageTitleOf(context)),
+              const SizedBox(height: 16),
+              ValueListenableBuilder<ThemeMode>(
+                valueListenable: themeModeNotifier,
+                builder: (context, current, _) => Column(
+                  children: [
+                    _themeOption(
+                      context,
+                      label: 'Sistem',
+                      sub: 'Ikuti tema perangkat',
+                      selected: current == ThemeMode.system,
+                      onTap: () => setThemeMode(ThemeMode.system),
+                    ),
+                    const SizedBox(height: 12),
+                    _themeOption(
+                      context,
+                      label: 'Terang',
+                      sub: 'Tampilan terang',
+                      selected: current == ThemeMode.light,
+                      onTap: () => setThemeMode(ThemeMode.light),
+                    ),
+                    const SizedBox(height: 12),
+                    _themeOption(
+                      context,
+                      label: 'Gelap',
+                      sub: 'Tampilan gelap',
+                      selected: current == ThemeMode.dark,
+                      onTap: () => setThemeMode(ThemeMode.dark),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _themeOption(
+    BuildContext context, {
+    required String label,
+    required String sub,
+    required bool selected,
+    required VoidCallback onTap,
+  }) {
+    final scheme = PacerScheme.of(context);
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(12),
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(
+            color: selected ? scheme.accent : scheme.border,
+            width: selected ? 2 : 1,
+          ),
+        ),
+        child: Row(
+          children: [
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    label,
+                    style: const TextStyle(
+                      fontWeight: FontWeight.w600,
+                      fontSize: 16,
+                    ),
+                  ),
+                  Text(sub, style: TextStyle(fontSize: 12, color: scheme.soft)),
+                ],
+              ),
+            ),
+            Icon(
+              selected ? Icons.check_circle : Icons.radio_button_off,
+              color: selected ? scheme.accent : scheme.soft,
             ),
           ],
         ),

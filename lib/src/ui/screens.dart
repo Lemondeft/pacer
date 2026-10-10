@@ -22,8 +22,9 @@ class LoadingScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final scheme = PacerScheme.of(context);
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: scheme.scaffold,
       body: SafeArea(
         child: Center(
           child: ConstrainedBox(
@@ -42,7 +43,7 @@ class LoadingScreen extends StatelessWidget {
                       width: 218,
                       height: 18,
                       decoration: BoxDecoration(
-                        color: PacerColors.slate200,
+                        color: scheme.softBorder,
                         borderRadius: BorderRadius.circular(2),
                       ),
                       alignment: Alignment.centerLeft,
@@ -50,7 +51,7 @@ class LoadingScreen extends StatelessWidget {
                         width: 218 * value,
                         height: 18,
                         decoration: BoxDecoration(
-                          color: PacerColors.primary,
+                          color: scheme.accent,
                           borderRadius: BorderRadius.circular(2),
                         ),
                       ),
@@ -117,9 +118,9 @@ class GetStartedScreen extends StatelessWidget {
                 child: OutlinedButton(
                   onPressed: onLogIn,
                   style: OutlinedButton.styleFrom(
-                    side: const BorderSide(
+                    side: BorderSide(
                       width: 2,
-                      color: PacerColors.primary,
+                      color: PacerScheme.of(context).accent,
                     ),
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(5),
@@ -229,7 +230,7 @@ class _CreateAccountScreenState extends State<CreateAccountScreen> {
             children: [
               PageHeader(onBack: widget.onBack),
               const SizedBox(height: 16),
-              Text(S.createAccount, style: PacerText.authTitle),
+              Text(S.createAccount, style: PacerText.authTitleOf(context)),
               const SizedBox(height: 28),
               AuthField(
                 hint: S.username,
@@ -264,7 +265,7 @@ class _CreateAccountScreenState extends State<CreateAccountScreen> {
               const SizedBox(height: 32),
               PrimaryButton(label: S.signIn, onPressed: _busy ? null : _submit),
               const SizedBox(height: 32),
-              const Divider(color: PacerColors.border, height: 1),
+              Divider(color: PacerScheme.of(context).border, height: 1),
               const SizedBox(height: 16),
               Center(
                 child: Text(
@@ -278,13 +279,13 @@ class _CreateAccountScreenState extends State<CreateAccountScreen> {
                   width: 38,
                   height: 38,
                   decoration: BoxDecoration(
-                    color: Colors.white,
+                    color: PacerScheme.of(context).card,
                     borderRadius: BorderRadius.circular(19),
-                    border: Border.all(color: PacerColors.border),
+                    border: Border.all(color: PacerScheme.of(context).border),
                   ),
-                  child: const Icon(
+                  child: Icon(
                     Icons.person_add_alt_outlined,
-                    color: PacerColors.ink,
+                    color: PacerScheme.of(context).ink,
                     size: 20,
                   ),
                 ),
@@ -668,7 +669,7 @@ class _PacerNavRail extends StatelessWidget {
     return NavigationRail(
       extended: true,
       minExtendedWidth: 220,
-      backgroundColor: PacerColors.bottomBar,
+      backgroundColor: PacerScheme.of(context).navBar,
       selectedIndex: index,
       onDestinationSelected: onTap,
       leading: Padding(

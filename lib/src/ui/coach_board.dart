@@ -151,7 +151,7 @@ class _CoachBoardScreenState extends State<CoachBoardScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.white,
+      backgroundColor: PacerScheme.of(context).scaffold,
       body: SafeArea(
         child: ResponsiveScroll(
           maxWidth: 720,
@@ -161,7 +161,7 @@ class _CoachBoardScreenState extends State<CoachBoardScreen> {
             children: [
               const PageHeader(),
               const SizedBox(height: 16),
-              Text(S.coachBoard, style: PacerText.pageTitle),
+              Text(S.coachBoard, style: PacerText.pageTitleOf(context)),
               const SizedBox(height: 16),
               FutureBuilder<_Gate>(
                 future: _gate,
@@ -269,21 +269,16 @@ class _CoachBoardScreenState extends State<CoachBoardScreen> {
   }
 
   Widget _rowCard(_CoachRow r) {
+    final scheme = PacerScheme.of(context);
     return Container(
       width: double.infinity,
       margin: const EdgeInsets.only(bottom: 8),
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        color: Colors.white,
+        color: scheme.card,
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: PacerColors.border),
-        boxShadow: const [
-          BoxShadow(
-            color: Color(0x0D000000),
-            blurRadius: 2,
-            offset: Offset(0, 1),
-          ),
-        ],
+        border: Border.all(color: scheme.border),
+        boxShadow: [scheme.shadowBox],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -310,14 +305,14 @@ class _CoachBoardScreenState extends State<CoachBoardScreen> {
             '${r.sessions} ${S.sessionsCol} • ${fmtKmNum(r.weekKm * 1000)} Km • streak ${r.streak}',
             maxLines: 2,
             overflow: TextOverflow.ellipsis,
-            style: const TextStyle(fontSize: 13, color: PacerColors.slate700),
+            style: TextStyle(fontSize: 13, color: scheme.muted),
           ),
           if (r.progress != null)
             Text(
               'progress ${r.progress!.toStringAsFixed(1)}${r.berhasil == true ? ' • ✓' : ''}',
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: const TextStyle(fontSize: 12, color: PacerColors.slate500),
+              style: TextStyle(fontSize: 12, color: scheme.soft),
             ),
         ],
       ),

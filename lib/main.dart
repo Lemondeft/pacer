@@ -27,15 +27,21 @@ class PacerApp extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     // Rebuild the whole tree when the language toggles so every S.* string
-    // re-resolves without per-screen listeners.
+    // re-resolves without per-screen listeners. The nested theme listener
+    // does the same for ThemeMode.system/light/dark (theme toggle only —
+    // routing below is untouched).
     return ValueListenableBuilder<Lang>(
       valueListenable: langNotifier,
-      builder: (context, _, _) => MaterialApp(
-        title: 'Pacer',
-        debugShowCheckedModeBanner: false,
-        theme: PacerTheme.light(),
-        themeMode: ThemeMode.light,
-        home: const _Root(),
+      builder: (context, _, _) => ValueListenableBuilder<ThemeMode>(
+        valueListenable: themeModeNotifier,
+        builder: (context, mode, _) => MaterialApp(
+          title: 'Pacer',
+          debugShowCheckedModeBanner: false,
+          theme: PacerTheme.light(),
+          darkTheme: PacerTheme.dark(),
+          themeMode: mode,
+          home: const _Root(),
+        ),
       ),
     );
   }

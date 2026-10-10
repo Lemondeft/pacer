@@ -1,19 +1,45 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart' hide Path;
 
-/// Offline route shape: draws [points] as a lime polyline fitted to the
-/// canvas with aspect preserved, no tiles, no network, nothing to fail.
-/// Empty points render a neutral placeholder box instead of a fake map.
-class RouteMap extends StatelessWidget {
+/// Simple Strava-like route view: OpenStreetMap tiles (no API key), lime
+/// route polyline, runner dot that the camera follows. Empty points render
+/// a neutral placeholder instead of a fake map.
+class RouteMap extends StatefulWidget {
   final List<LatLng> points;
   final double height;
   const RouteMap({super.key, required this.points, this.height = 300});
 
   @override
+  State<RouteMap> createState() => _RouteMapState();
+}
+
+class _RouteMapState extends State<RouteMap> {
+  final MapController _controller = MapController();
+
+  static const Color _route = Color(0xFFBAFF29);
+
+  @override
+  void didUpdateWidget(covariant RouteMap oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.points.isNotEmpty &&
+        widget.points.length != oldWidget.points.length) {
+      _controller.move(widget.points.last, _controller.camera.zoom);
+    }
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
   Widget build(BuildContext context) {
-    if (points.isEmpty) {
+    final pts = widget.points;
+    if (pts.isEmpty) {
       return Container(
-        height: height,
+        height: widget.height,
         decoration: BoxDecoration(
           color: const Color(0xFF0F172A),
           borderRadius: BorderRadius.circular(12),
@@ -34,86 +60,47 @@ class RouteMap extends StatelessWidget {
       );
     }
     return SizedBox(
-      height: height,
+      height: widget.height,
       child: ClipRRect(
         borderRadius: BorderRadius.circular(12),
-        child: Container(
-          color: const Color(0xFF0F172A),
-          child: CustomPaint(
-            painter: _RouteShapePainter(points),
-            child: const SizedBox.expand(),
-          ),
+        child: FlutterMap(
+          mapController: _controller,
+          options: MapOptions(initialCenter: pts.last, initialZoom: 16),
+          children: [
+            TileLayer(
+              urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+              userAgentPackageName: 'com.example.pacer',
+            ),
+            if (pts.length > 1)
+              PolylineLayer(
+                polylines: [
+                  Polyline(points: pts, strokeWidth: 5, color: _route),
+                ],
+              ),
+            MarkerLayer(
+              markers: [
+                Marker(
+                  point: pts.last,
+                  width: 40,
+                  height: 40,
+                  child: Container(
+                    decoration: BoxDecoration(
+                      color: _route,
+                      shape: BoxShape.circle,
+                      border: Border.all(color: Colors.black, width: 2),
+                    ),
+                    child: const Icon(
+                      Icons.directions_run,
+                      size: 22,
+                      color: Colors.black,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ],
         ),
       ),
     );
   }
-}
-
-class _RouteShapePainter extends CustomPainter {
-  final List<LatLng> points;
-  static const Color _route = Color(0xFFBAFF29);
-
-  _RouteShapePainter(this.points);
-
-  @override
-  void paint(Canvas canvas, Size size) {
-    if (points.isEmpty) return;
-    var minLat = points.first.latitude;
-    var maxLat = points.first.latitude;
-    var minLng = points.first.longitude;
-    var maxLng = points.first.longitude;
-    for (final p in points) {
-      if (p.latitude < minLat) minLat = p.latitude;
-      if (p.latitude > maxLat) maxLat = p.latitude;
-      if (p.longitude < minLng) minLng = p.longitude;
-      if (p.longitude > maxLng) maxLng = p.longitude;
-    }
-    // Degenerate bounds (single fix): pad so the math never divides by zero.
-    if ((maxLat - minLat).abs() < 1e-9) {
-      minLat -= 0.0005;
-      maxLat += 0.0005;
-    }
-    if ((maxLng - minLng).abs() < 1e-9) {
-      minLng -= 0.0005;
-      maxLng += 0.0005;
-    }
-    // Uniform scale + center: aspect preserved, route never clips.
-    const pad = 24.0;
-    final sx = (size.width - pad * 2) / (maxLng - minLng);
-    final sy = (size.height - pad * 2) / (maxLat - minLat);
-    final s = sx < sy ? sx : sy;
-    final dx = (size.width - (maxLng - minLng) * s) / 2;
-    final dy = (size.height - (maxLat - minLat) * s) / 2;
-    Offset map(LatLng p) =>
-        Offset(dx + (p.longitude - minLng) * s, dy + (maxLat - p.latitude) * s);
-    final path = Path()..moveTo(map(points.first).dx, map(points.first).dy);
-    for (var i = 1; i < points.length; i++) {
-      final o = map(points[i]);
-      path.lineTo(o.dx, o.dy);
-    }
-    canvas.drawPath(
-      path,
-      Paint()
-        ..color = _route
-        ..strokeWidth = 5
-        ..style = PaintingStyle.stroke
-        ..strokeJoin = StrokeJoin.round
-        ..strokeCap = StrokeCap.round,
-    );
-    // Start (white) and current-position (lime) dots.
-    canvas.drawCircle(map(points.first), 7, Paint()..color = Colors.white);
-    final last = map(points.last);
-    canvas.drawCircle(last, 8, Paint()..color = _route);
-    canvas.drawCircle(
-      last,
-      8,
-      Paint()
-        ..color = Colors.black
-        ..style = PaintingStyle.stroke
-        ..strokeWidth = 2,
-    );
-  }
-
-  @override
-  bool shouldRepaint(covariant _RouteShapePainter old) => old.points != points;
 }
