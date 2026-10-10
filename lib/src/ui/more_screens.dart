@@ -377,6 +377,9 @@ class _RunTrackerScreenState extends State<RunTrackerScreen> {
   /// True while start/finish network calls are in flight (double-tap guard).
   bool _opBusy = false;
 
+  /// Minimal map mode (offline canvas instead of OSM tiles).
+  bool _minimalMap = false;
+
   @override
   void dispose() {
     _recorder.dispose();
@@ -389,6 +392,45 @@ class _RunTrackerScreenState extends State<RunTrackerScreen> {
         return S.gpsOff;
       default:
         return S.gpsDenied;
+    }
+  }
+
+  /// Confirm-and-discard dialog shared by system-back and header-back.
+  /// Returns true when recording was discarded (or nothing was recording).
+  Future<bool> _confirmDiscard() async {
+    if (!_recorder.started) return true;
+    final discard = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(S.discardTitle),
+        content: Text(S.discardBody),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: Text(S.back),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: Text(S.discardYes),
+          ),
+        ],
+      ),
+    );
+    if (discard == true) {
+      await _recorder.discard();
+      return true;
+    }
+    return false;
+  }
+
+  /// Header back: never leaks an unfinished row, never pops the app shell.
+  Future<void> _handleBack() async {
+    if (!await _confirmDiscard()) return;
+    if (!mounted) return;
+    if (widget.onBack != null) {
+      widget.onBack!();
+    } else {
+      Navigator.of(context).maybePop();
     }
   }
 
@@ -510,7 +552,14 @@ class _RunTrackerScreenState extends State<RunTrackerScreen> {
         );
         if (discard == true) {
           await _recorder.discard();
-          if (context.mounted) Navigator.of(context).pop();
+          if (!context.mounted) return;
+          // The tracker is a tab, not a pushed route: popping here removes
+          // the whole app shell (black screen). Go home instead.
+          if (widget.onBack != null) {
+            widget.onBack!();
+          } else {
+            Navigator.of(context).pop();
+          }
         }
       },
       child: Scaffold(
@@ -523,6 +572,7 @@ class _RunTrackerScreenState extends State<RunTrackerScreen> {
                 child: RouteMap(
                   points: _recorder.points,
                   height: double.infinity,
+                  minimal: _minimalMap,
                 ),
               ),
             ),
@@ -552,9 +602,7 @@ class _RunTrackerScreenState extends State<RunTrackerScreen> {
                               boxShadow: [scheme.shadowBox],
                             ),
                             child: IconButton(
-                              onPressed:
-                                  widget.onBack ??
-                                  () => Navigator.maybePop(context),
+                              onPressed: _handleBack,
                               icon: Icon(Icons.arrow_back, color: scheme.ink),
                             ),
                           ),
@@ -646,7 +694,11 @@ class _RunTrackerScreenState extends State<RunTrackerScreen> {
                           child: Row(
                             mainAxisAlignment: MainAxisAlignment.spaceBetween,
                             children: [
-                              MapCircleButton(size: circle),
+                              MapCircleButton(
+                                size: circle,
+                                onTap: () =>
+                                    setState(() => _minimalMap = !_minimalMap),
+                              ),
                               if (!_started)
                                 CircleAction(
                                   label: S.startLabel,

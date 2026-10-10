@@ -6,10 +6,19 @@ import 'package:latlong2/latlong.dart' hide Path;
 /// immediately — even before GPS lock — with a lime route polyline and a
 /// runner dot once fixes arrive. Empty points show a small overlay chip
 /// instead of a fake map.
+///
+/// [minimal] drops the tiles for a clean offline canvas (grid + fitted
+/// route): cheaper, private, always available.
 class RouteMap extends StatefulWidget {
   final List<LatLng> points;
   final double height;
-  const RouteMap({super.key, required this.points, this.height = 300});
+  final bool minimal;
+  const RouteMap({
+    super.key,
+    required this.points,
+    this.height = 300,
+    this.minimal = false,
+  });
 
   @override
   State<RouteMap> createState() => _RouteMapState();
@@ -39,6 +48,22 @@ class _RouteMapState extends State<RouteMap> {
   @override
   Widget build(BuildContext context) {
     final pts = widget.points;
+    // Minimal mode: offline canvas (grid + fitted route), no tiles.
+    if (widget.minimal) {
+      return SizedBox(
+        height: widget.height,
+        child: ClipRRect(
+          borderRadius: BorderRadius.circular(12),
+          child: Container(
+            color: const Color(0xFFE2E8F0),
+            child: CustomPaint(
+              painter: _MinimalRoutePainter(pts),
+              child: const SizedBox.expand(),
+            ),
+          ),
+        ),
+      );
+    }
     return SizedBox(
       height: widget.height,
       child: ClipRRect(
@@ -150,4 +175,73 @@ class _GridPainter extends CustomPainter {
 
   @override
   bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
+}
+
+/// Fitted route shape for minimal mode: uniform scale + center so the
+/// route never clips, regardless of aspect.
+class _MinimalRoutePainter extends CustomPainter {
+  final List<LatLng> points;
+  static const Color _route = Color(0xFFBAFF29);
+
+  _MinimalRoutePainter(this.points);
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    if (points.isEmpty) return;
+    var minLat = points.first.latitude;
+    var maxLat = points.first.latitude;
+    var minLng = points.first.longitude;
+    var maxLng = points.first.longitude;
+    for (final p in points) {
+      if (p.latitude < minLat) minLat = p.latitude;
+      if (p.latitude > maxLat) maxLat = p.latitude;
+      if (p.longitude < minLng) minLng = p.longitude;
+      if (p.longitude > maxLng) maxLng = p.longitude;
+    }
+    if ((maxLat - minLat).abs() < 1e-9) {
+      minLat -= 0.0005;
+      maxLat += 0.0005;
+    }
+    if ((maxLng - minLng).abs() < 1e-9) {
+      minLng -= 0.0005;
+      maxLng += 0.0005;
+    }
+    const pad = 24.0;
+    final sx = (size.width - pad * 2) / (maxLng - minLng);
+    final sy = (size.height - pad * 2) / (maxLat - minLat);
+    final s = sx < sy ? sx : sy;
+    final dx = (size.width - (maxLng - minLng) * s) / 2;
+    final dy = (size.height - (maxLat - minLat) * s) / 2;
+    Offset map(LatLng p) =>
+        Offset(dx + (p.longitude - minLng) * s, dy + (maxLat - p.latitude) * s);
+    final path = Path()..moveTo(map(points.first).dx, map(points.first).dy);
+    for (var i = 1; i < points.length; i++) {
+      final o = map(points[i]);
+      path.lineTo(o.dx, o.dy);
+    }
+    canvas.drawPath(
+      path,
+      Paint()
+        ..color = _route
+        ..strokeWidth = 5
+        ..style = PaintingStyle.stroke
+        ..strokeJoin = StrokeJoin.round
+        ..strokeCap = StrokeCap.round,
+    );
+    canvas.drawCircle(map(points.first), 7, Paint()..color = Colors.white);
+    final last = map(points.last);
+    canvas.drawCircle(last, 8, Paint()..color = _route);
+    canvas.drawCircle(
+      last,
+      8,
+      Paint()
+        ..color = Colors.black
+        ..style = PaintingStyle.stroke
+        ..strokeWidth = 2,
+    );
+  }
+
+  @override
+  bool shouldRepaint(covariant _MinimalRoutePainter old) =>
+      old.points != points;
 }
