@@ -629,8 +629,8 @@ class _MainShellState extends State<MainShell> {
       // Tracker gets the full screen: nav pill hidden (it covered PAUSE),
       // back button returns to Home instead.
       RunTrackerScreen(onBack: () => _onPillTap(0)),
-      const TeamsScreen(),
-      const LeaderboardScreen(),
+      TeamsScreen(onBack: () => _onPillTap(0)),
+      LeaderboardScreen(onBack: () => _onPillTap(0)),
     ];
     final w = MediaQuery.sizeOf(context).width;
     if (w >= Breakpoints.expanded) {

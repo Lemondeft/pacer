@@ -972,7 +972,9 @@ class RunFinishScreen extends StatelessWidget {
 /// Live team list when signed in (search filters by name); Figma mock cards
 /// in demo mode.
 class TeamsScreen extends StatefulWidget {
-  const TeamsScreen({super.key});
+  /// Returns to the Home tab (tabs have no pushed route to pop).
+  final VoidCallback? onBack;
+  const TeamsScreen({super.key, this.onBack});
 
   @override
   State<TeamsScreen> createState() => _TeamsScreenState();
@@ -1033,6 +1035,10 @@ class _TeamsScreenState extends State<TeamsScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              if (widget.onBack != null) ...[
+                PageHeader(onBack: widget.onBack),
+                const SizedBox(height: 12),
+              ],
               Text(S.findTeamsNearby, style: PacerText.pageTitleOf(context)),
               const SizedBox(height: 12),
               SearchField(onChanged: (v) => setState(() => _query = v)),
@@ -1228,7 +1234,9 @@ class _JoinButton extends StatelessWidget {
 /// Live standings (first board) when signed in; Figma mock rows in demo mode.
 /// Your own row is highlighted by user id, never by name matching.
 class LeaderboardScreen extends StatefulWidget {
-  const LeaderboardScreen({super.key});
+  /// Returns to the Home tab (tabs have no pushed route to pop).
+  final VoidCallback? onBack;
+  const LeaderboardScreen({super.key, this.onBack});
 
   @override
   State<LeaderboardScreen> createState() => _LeaderboardScreenState();
@@ -1329,6 +1337,10 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              if (widget.onBack != null) ...[
+                PageHeader(onBack: widget.onBack),
+                const SizedBox(height: 12),
+              ],
               Text(S.teamsLeaderboard, style: PacerText.pageTitleOf(context)),
               const SizedBox(height: 16),
               FutureBuilder<_BoardData>(
@@ -3334,9 +3346,13 @@ class FiturScreen extends StatelessWidget {
       (
         'leaderboard',
         Icons.leaderboard_outlined,
-        (_) => const LeaderboardScreen(),
+        (ctx) => LeaderboardScreen(onBack: () => Navigator.of(ctx).pop()),
       ),
-      ('teams', Icons.groups_outlined, (_) => const TeamsScreen()),
+      (
+        'teams',
+        Icons.groups_outlined,
+        (ctx) => TeamsScreen(onBack: () => Navigator.of(ctx).pop()),
+      ),
       (
         S.streaks,
         Icons.local_fire_department_outlined,
