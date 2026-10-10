@@ -160,17 +160,11 @@ class RunSessionCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Container(
-      padding: const EdgeInsets.fromLTRB(20, 23, 20, 18),
+      padding: const EdgeInsets.fromLTRB(16, 24, 16, 16),
       decoration: BoxDecoration(
         color: PacerColors.runCardBg,
         borderRadius: BorderRadius.circular(10),
-        boxShadow: const [
-          BoxShadow(
-            color: Color(0x40000000),
-            blurRadius: 4,
-            offset: Offset(0, 4),
-          ),
-        ],
+        boxShadow: const [PacerShadows.soft],
       ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -190,14 +184,14 @@ class RunSessionCard extends StatelessWidget {
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                 ),
-                const SizedBox(height: 14),
+                const SizedBox(height: 16),
                 Text(
                   title,
                   style: PacerText.cardTitle,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                 ),
-                const SizedBox(height: 6),
+                const SizedBox(height: 8),
                 FittedBox(
                   fit: BoxFit.scaleDown,
                   alignment: Alignment.centerLeft,
@@ -227,7 +221,7 @@ class RunSessionCard extends StatelessWidget {
               ],
             ),
           ),
-          const SizedBox(width: 12),
+          const SizedBox(width: 16),
           Expanded(
             flex: 2,
             child: Column(
@@ -238,7 +232,7 @@ class RunSessionCard extends StatelessWidget {
                   alignment: Alignment.centerRight,
                   child: Text(distance, style: PacerText.cardDistance),
                 ),
-                const SizedBox(height: 12),
+                const SizedBox(height: 16),
                 // Pace pill spans the pane width — scales with the card.
                 Container(
                   height: 12.5,
@@ -340,6 +334,10 @@ class SectionHeader extends StatelessWidget {
         ),
         TextButton(
           onPressed: onSeeAll,
+          style: TextButton.styleFrom(
+            minimumSize: const Size(48, 48),
+            tapTargetSize: MaterialTapTargetSize.padded,
+          ),
           child: Text(
             S.seeAll,
             style: const TextStyle(color: PacerColors.ink, fontSize: 15),
@@ -394,7 +392,14 @@ class PageHeader extends StatelessWidget {
         ),
         if (title != null) ...[
           const SizedBox(width: 12),
-          Text(title!, style: PacerText.fugazBrand),
+          Expanded(
+            child: Text(
+              title!,
+              style: PacerText.fugazBrand,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
         ],
       ],
     );
@@ -419,7 +424,11 @@ class InitialAvatar extends StatelessWidget {
       alignment: Alignment.center,
       child: Text(
         initials,
-        style: TextStyle(color: Colors.white, fontSize: size * 0.4),
+        style: TextStyle(
+          color: Colors.white,
+          fontSize: size * 0.4,
+          fontWeight: FontWeight.w700,
+        ),
       ),
     );
   }
@@ -427,7 +436,7 @@ class InitialAvatar extends StatelessWidget {
 
 /// Purple streak hero card. Fills its parent width; intrinsic height.
 /// Decorative circles clip at the card bounds. [count] overrides the
-/// demo number when live data is available.
+/// number when live data is available; null (signed out/offline) shows 0.
 class StreakCard extends StatelessWidget {
   final int? count;
   const StreakCard({super.key, this.count});
@@ -523,7 +532,7 @@ class StreakCard extends StatelessWidget {
                               crossAxisAlignment: CrossAxisAlignment.end,
                               children: [
                                 Text(
-                                  '${count ?? 24}',
+                                  '${count ?? 0}',
                                   style: PacerText.giantNum(56)
                                       .copyWith(color: PacerColors.streakNum),
                                 ),
@@ -547,7 +556,7 @@ class StreakCard extends StatelessWidget {
                                 ),
                               ],
                             ),
-                            const SizedBox(height: 2),
+                            const SizedBox(height: 4),
                             FittedBox(
                               fit: BoxFit.scaleDown,
                               alignment: Alignment.centerLeft,
@@ -564,7 +573,7 @@ class StreakCard extends StatelessWidget {
                                     S.personalRecord,
                                     style: const TextStyle(
                                       fontSize: 12,
-                                      color: Color(0xFF090A09),
+                                      color: Colors.white,
                                     ),
                                   ),
                                 ],
@@ -603,12 +612,10 @@ class StreakCard extends StatelessWidget {
                                 fontWeight: last
                                     ? FontWeight.bold
                                     : FontWeight.w500,
-                                color: last
-                                    ? PacerColors.neon
-                                    : const Color(0xFF090A09),
+                                color: last ? PacerColors.neon : Colors.white,
                               ),
                             ),
-                            const SizedBox(height: 2),
+                            const SizedBox(height: 4),
                             Container(
                               width: circle,
                               height: circle,
@@ -775,10 +782,19 @@ class CircleAction extends StatelessWidget {
           ),
         ),
         alignment: Alignment.center,
-        child: Text(
-          label,
-          textAlign: TextAlign.center,
-          style: PacerText.fugazBrand.copyWith(color: fg, fontSize: labelSize),
+        child: Padding(
+          padding: const EdgeInsets.all(8),
+          child: FittedBox(
+            fit: BoxFit.scaleDown,
+            child: Text(
+              label,
+              textAlign: TextAlign.center,
+              style: PacerText.fugazBrand.copyWith(
+                color: fg,
+                fontSize: labelSize,
+              ),
+            ),
+          ),
         ),
       ),
     );
@@ -833,15 +849,22 @@ class TrackerStatColumn extends StatelessWidget {
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         InitialAvatar(initials, size: avatarSize),
-        const SizedBox(height: 6),
-        Text(value, style: PacerText.statValue),
+        const SizedBox(height: 8),
+        Text(
+          value,
+          style: PacerText.statValue,
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
+        ),
         Text(
           label,
           style: const TextStyle(
-            fontWeight: FontWeight.w300,
+            fontWeight: FontWeight.w400,
             fontSize: 15,
-            color: Color(0x99000000),
+            color: PacerColors.slate700,
           ),
+          maxLines: 1,
+          overflow: TextOverflow.ellipsis,
         ),
       ],
     );
@@ -866,7 +889,7 @@ class GpsPill extends StatelessWidget {
         mainAxisAlignment: MainAxisAlignment.center,
         children: [
           Icon(Icons.wifi, size: 20, color: Colors.black),
-          SizedBox(width: 6),
+          SizedBox(width: 8),
           Text('GPS', style: TextStyle(fontSize: 16, color: Colors.black)),
         ],
       ),
@@ -902,9 +925,9 @@ class SummaryLimeCard extends StatelessWidget {
           child: Text(
             label,
             style: const TextStyle(
-              fontWeight: FontWeight.w300,
+              fontWeight: FontWeight.w400,
               fontSize: 15,
-              color: Color(0x99000000),
+              color: PacerColors.slate800,
             ),
           ),
         ),
@@ -918,7 +941,7 @@ class SummaryLimeCard extends StatelessWidget {
       builder: (context, c) {
         return Container(
           height: fluid(c.maxWidth, 92, 120),
-          padding: const EdgeInsets.fromLTRB(30, 18, 30, 0),
+          padding: const EdgeInsets.fromLTRB(24, 16, 24, 16),
           decoration: BoxDecoration(
             color: PacerColors.lime,
             borderRadius: BorderRadius.circular(30),
@@ -969,17 +992,11 @@ class MetricCard extends StatelessWidget {
       builder: (context, c) {
         return Container(
           height: fluid(c.maxWidth, 75, 96),
-          padding: const EdgeInsets.fromLTRB(30, 16, 30, 0),
+          padding: const EdgeInsets.fromLTRB(24, 16, 24, 16),
           decoration: BoxDecoration(
             color: const Color(0xFFFDFDFD),
             borderRadius: BorderRadius.circular(30),
-            boxShadow: const [
-              BoxShadow(
-                color: Color(0x40000000),
-                blurRadius: 4,
-                offset: Offset(0, 2),
-              ),
-            ],
+            boxShadow: const [PacerShadows.soft],
           ),
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -994,15 +1011,19 @@ class MetricCard extends StatelessWidget {
                         fontSize: 15,
                         color: PacerColors.ink,
                       ),
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                     ),
-                    const SizedBox(height: 7),
+                    const SizedBox(height: 8),
                     Text(
                       sub,
                       style: const TextStyle(
-                        fontWeight: FontWeight.w300,
+                        fontWeight: FontWeight.w400,
                         fontSize: 12,
-                        color: Color(0x99000000),
+                        color: PacerColors.slate500,
                       ),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
                     ),
                   ],
                 ),
@@ -1015,9 +1036,9 @@ class MetricCard extends StatelessWidget {
                     Text(
                       unit ?? '',
                       style: const TextStyle(
-                        fontWeight: FontWeight.w300,
+                        fontWeight: FontWeight.w400,
                         fontSize: 12,
-                        color: Color(0x99000000),
+                        color: PacerColors.slate500,
                       ),
                     ),
                   ],
@@ -1038,23 +1059,30 @@ class GoalChip extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      height: 32,
-      padding: const EdgeInsets.symmetric(horizontal: 23),
-      alignment: Alignment.center,
-      decoration: BoxDecoration(
-        color: selected ? Colors.black : Colors.white,
-        borderRadius: BorderRadius.circular(8),
-        border: Border.all(
-          color: selected ? Colors.black : const Color(0xFFC4C7C8),
-        ),
-      ),
-      child: Text(
-        label,
-        style: TextStyle(
-          fontSize: 12,
-          fontWeight: FontWeight.w600,
-          color: selected ? Colors.white : const Color(0xFF181C22),
+    // Visual stays a 32-tall chip; the 48-tall box guarantees a 48px
+    // touch target without changing the setup screen's look.
+    return SizedBox(
+      height: 48,
+      child: Center(
+        child: Container(
+          height: 32,
+          padding: const EdgeInsets.symmetric(horizontal: 23),
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            color: selected ? Colors.black : Colors.white,
+            borderRadius: BorderRadius.circular(8),
+            border: Border.all(
+              color: selected ? Colors.black : const Color(0xFFC4C7C8),
+            ),
+          ),
+          child: Text(
+            label,
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+              color: selected ? Colors.white : const Color(0xFF181C22),
+            ),
+          ),
         ),
       ),
     );
@@ -1083,7 +1111,11 @@ class LimeActionBar extends StatelessWidget {
         ),
         child: Text(
           label,
-          style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 20),
+          style: const TextStyle(
+            fontWeight: FontWeight.w700,
+            fontSize: 20,
+            color: PacerColors.ink,
+          ),
         ),
       ),
     );
@@ -1109,10 +1141,18 @@ class SearchField extends StatelessWidget {
       onChanged: onChanged,
       decoration: InputDecoration(
         hintText: hint,
-        hintStyle: const TextStyle(color: PacerColors.slate400, fontSize: 14),
-        prefixIcon: const Icon(Icons.search, size: 14),
+        hintStyle: const TextStyle(color: PacerColors.slate500, fontSize: 14),
+        prefixIcon: const Icon(
+          Icons.search,
+          size: 20,
+          color: PacerColors.slate500,
+        ),
         filled: true,
         fillColor: PacerColors.slate50,
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: 16,
+          vertical: 16,
+        ),
         border: OutlineInputBorder(
           borderRadius: BorderRadius.circular(12),
           borderSide: const BorderSide(color: PacerColors.slate200),
@@ -1141,18 +1181,91 @@ class MapPlaceholder extends StatelessWidget {
         borderRadius: BorderRadius.circular(12),
       ),
       child: Center(
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(Icons.route, color: PacerColors.lime, size: 40),
+              const SizedBox(height: 8),
+              Text(
+                label,
+                textAlign: TextAlign.center,
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(color: Colors.white70, fontSize: 12),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// Centered empty state: muted icon + message in [PacerText.emptyBody].
+/// The message string is passed through untouched — only styled here.
+class PacerEmptyState extends StatelessWidget {
+  final String message;
+  final IconData icon;
+  const PacerEmptyState(
+    this.message, {
+    super.key,
+    this.icon = Icons.inbox_outlined,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 48, horizontal: 24),
+      child: Center(
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Icon(Icons.route, color: PacerColors.lime, size: 40),
-            const SizedBox(height: 8),
+            Icon(icon, size: 32, color: PacerColors.slate200),
+            const SizedBox(height: 12),
             Text(
-              label,
-              style: const TextStyle(color: Colors.white70, fontSize: 12),
+              message,
+              style: PacerText.emptyBody,
+              textAlign: TextAlign.center,
             ),
           ],
         ),
       ),
+    );
+  }
+}
+
+/// Centered loading spinner with consistent vertical rhythm.
+class PacerLoading extends StatelessWidget {
+  const PacerLoading({super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return const Padding(
+      padding: EdgeInsets.symmetric(vertical: 48),
+      child: Center(
+        child: CircularProgressIndicator(color: PacerColors.primary),
+      ),
+    );
+  }
+}
+
+/// Auth/form error row: error icon + message in [PacerText.errorBody].
+/// The message string is passed through untouched — only styled here.
+class AuthErrorText extends StatelessWidget {
+  final String message;
+  const AuthErrorText(this.message, {super.key});
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Icon(Icons.error_outline, size: 20, color: PacerColors.errorRed),
+        const SizedBox(width: 8),
+        Expanded(child: Text(message, style: PacerText.errorBody)),
+      ],
     );
   }
 }

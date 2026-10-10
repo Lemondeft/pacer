@@ -6,9 +6,9 @@ import 'package:google_fonts/google_fonts.dart';
 /// Fonts are SIL OFL via google_fonts; SF Pro / Abhaya Libre excluded.
 class PacerColors {
   static const ink = Color(0xFF252525);
-  static const cardLabel = Color(0xA6252525);
+  static const cardLabel = Color(0xFF334155);
   static const hintInk = Color(0xCC000000);
-  static const errorRed = Color(0xC8C60000);
+  static const errorRed = Color(0xFFBA1A1A);
   static const primary = Color(0xFF64B5F6);
   static const lime = Color(0xFFBAFF29);
   static const joinYellow = Color(0xFFCCFF00);
@@ -93,17 +93,17 @@ class PacerText {
     color: PacerColors.paceOrange,
   );
   static TextStyle get cardDate => GoogleFonts.outfit(
-    fontWeight: FontWeight.w200,
+    fontWeight: FontWeight.w400,
     fontSize: 12,
-    color: PacerColors.ink,
+    color: PacerColors.slate700,
   );
   static TextStyle get cardSub =>
       GoogleFonts.outfit(fontSize: 12, color: PacerColors.cardLabel);
   static TextStyle get teamName =>
       GoogleFonts.fugazOne(fontSize: 16, color: Colors.white);
   static TextStyle get teamLoc =>
-      GoogleFonts.lato(fontSize: 12, color: Color(0xFFFDFDFD));
-  static TextStyle get hint => GoogleFonts.lato(
+      GoogleFonts.hankenGrotesk(fontSize: 12, color: Color(0xFFFDFDFD));
+  static TextStyle get hint => GoogleFonts.outfit(
     fontWeight: FontWeight.w300,
     fontSize: 15,
     color: PacerColors.hintInk,
@@ -118,6 +118,30 @@ class PacerText {
     fontSize: 11,
     letterSpacing: 1.0,
     color: PacerColors.primary,
+  );
+  static TextStyle get emptyBody =>
+      GoogleFonts.outfit(fontSize: 14, color: PacerColors.slate500);
+  static TextStyle get errorBody => GoogleFonts.outfit(
+    fontWeight: FontWeight.w500,
+    fontSize: 15,
+    color: PacerColors.errorRed,
+  );
+}
+
+/// Shared 8pt-grid spacing steps and one soft card shadow.
+/// Screens snap odd paddings/gaps to these instead of inventing new values.
+class PacerGaps {
+  static const double xs = 8;
+  static const double sm = 16;
+  static const double md = 24;
+  static const double lg = 32;
+}
+
+class PacerShadows {
+  static const soft = BoxShadow(
+    color: Color(0x0D000000),
+    blurRadius: 2,
+    offset: Offset(0, 1),
   );
 }
 

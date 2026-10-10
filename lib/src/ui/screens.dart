@@ -258,19 +258,13 @@ class _CreateAccountScreenState extends State<CreateAccountScreen> {
                 controller: _confirm,
               ),
               if (_error != null) ...[
-                const SizedBox(height: 12),
-                Text(
-                  _error!,
-                  style: const TextStyle(
-                    color: PacerColors.errorRed,
-                    fontSize: 15,
-                  ),
-                ),
+                const SizedBox(height: 16),
+                AuthErrorText(_error!),
               ],
-              const SizedBox(height: 28),
+              const SizedBox(height: 32),
               PrimaryButton(label: S.signIn, onPressed: _busy ? null : _submit),
-              const SizedBox(height: 28),
-              const Divider(color: Colors.black, height: 1),
+              const SizedBox(height: 32),
+              const Divider(color: PacerColors.border, height: 1),
               const SizedBox(height: 16),
               Center(
                 child: Text(
@@ -324,7 +318,8 @@ class _HomeData {
   final List<Activity>? activities;
   final int? streak;
   final List<Team>? teams;
-  const _HomeData({this.activities, this.streak, this.teams});
+  final String? initials;
+  const _HomeData({this.activities, this.streak, this.teams, this.initials});
 }
 
 class _HomeScreenState extends State<HomeScreen> {
@@ -356,10 +351,12 @@ class _HomeScreenState extends State<HomeScreen> {
       final activities = await repo.listActivities(limit: 5);
       final streak = await repo.getStreak();
       final teams = await TeamRepository().myTeams();
+      final profile = await AuthRepository().getProfile();
       return _HomeData(
         activities: activities,
         streak: streak?.berjalan,
         teams: teams,
+        initials: initialsOf(profile?.nama),
       );
     } catch (_) {
       return const _HomeData();
@@ -383,10 +380,17 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
           ),
           // Logged-in user's initials (Figma spec). Tap → Account.
+          // 48px tap target around the 42px visual.
           GestureDetector(
             onTap: () => Navigator.of(context)
                 .push(MaterialPageRoute(builder: (_) => const AccountScreen())),
-            child: const InitialAvatar('RP', size: 42),
+            child: SizedBox(
+              width: 48,
+              height: 48,
+              child: Center(
+                child: InitialAvatar(_data?.initials ?? '?', size: 42),
+              ),
+            ),
           ),
         ],
       ),
@@ -413,18 +417,21 @@ class _HomeScreenState extends State<HomeScreen> {
       children: [
         GestureDetector(
           onTap: widget.onSeeHistory,
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(
-                S.history,
-                style: const TextStyle(
-                  fontWeight: FontWeight.w500,
-                  fontSize: 20,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 12),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  S.history,
+                  style: const TextStyle(
+                    fontWeight: FontWeight.w500,
+                    fontSize: 20,
+                  ),
                 ),
-              ),
-              const Icon(Icons.chevron_right, size: 20),
-            ],
+                const Icon(Icons.chevron_right, size: 20),
+              ],
+            ),
           ),
         ),
         const SizedBox(height: 8),
@@ -440,9 +447,9 @@ class _HomeScreenState extends State<HomeScreen> {
             limePill: true,
           ),
         ] else if (activities.isEmpty)
-          const Padding(
-            padding: EdgeInsets.symmetric(vertical: 24),
-            child: Text('Belum ada aktivitas. Mulai lari pertamamu!'),
+          const PacerEmptyState(
+            'Belum ada aktivitas. Mulai lari pertamamu!',
+            icon: Icons.directions_run_outlined,
           )
         else
           for (final a in activities.take(2))
@@ -490,9 +497,9 @@ class _HomeScreenState extends State<HomeScreen> {
                       width: cardW,
                     ),
                   ] else if (teams.isEmpty)
-                    const Padding(
-                      padding: EdgeInsets.symmetric(vertical: 48),
-                      child: Text('Belum gabung tim mana pun.'),
+                    const PacerEmptyState(
+                      'Belum gabung tim mana pun.',
+                      icon: Icons.groups_outlined,
                     )
                   else
                     for (var i = 0; i < teams.length; i++) ...[

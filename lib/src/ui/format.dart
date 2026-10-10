@@ -33,3 +33,17 @@ String fmtKm(double? m) =>
 /// Plain km number ('15,00') for hero displays.
 String fmtKmNum(double? m) =>
     m == null ? '' : (m / 1000).toStringAsFixed(2).replaceAll('.', ',');
+
+/// Avatar initials from a display name ('Siti Rahma' → 'SR'); '?' when empty.
+String initialsOf(String? nama) {
+  final parts = (nama ?? '')
+      .trim()
+      .split(RegExp(r'\s+'))
+      .where((s) => s.isNotEmpty)
+      .toList();
+  if (parts.isEmpty) return '?';
+  if (parts.length == 1) {
+    return parts.first.substring(0, 1).toUpperCase();
+  }
+  return (parts[0].substring(0, 1) + parts[1].substring(0, 1)).toUpperCase();
+}

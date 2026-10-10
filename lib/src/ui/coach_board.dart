@@ -162,16 +162,13 @@ class _CoachBoardScreenState extends State<CoachBoardScreen> {
               const PageHeader(),
               const SizedBox(height: 16),
               Text(S.coachBoard, style: PacerText.pageTitle),
-              const SizedBox(height: 12),
+              const SizedBox(height: 16),
               FutureBuilder<_Gate>(
                 future: _gate,
                 builder: (context, snap) {
                   final g = snap.data;
                   if (g == null) {
-                    return const Padding(
-                      padding: EdgeInsets.symmetric(vertical: 48),
-                      child: Center(child: CircularProgressIndicator()),
-                    );
+                    return const PacerLoading();
                   }
                   if (g.coach != true) return _denied(g.reason);
                   return Column(
@@ -186,16 +183,13 @@ class _CoachBoardScreenState extends State<CoachBoardScreen> {
                         builder: (context, rsnap) {
                           if (rsnap.connectionState ==
                               ConnectionState.waiting) {
-                            return const Padding(
-                              padding: EdgeInsets.symmetric(vertical: 48),
-                              child: Center(child: CircularProgressIndicator()),
-                            );
+                            return const PacerLoading();
                           }
                           final rows = rsnap.data ?? const <_CoachRow>[];
                           if (rows.isEmpty) {
-                            return Padding(
-                              padding: const EdgeInsets.symmetric(vertical: 32),
-                              child: Text(S.noMembers),
+                            return PacerEmptyState(
+                              S.noMembers,
+                              icon: Icons.groups_outlined,
                             );
                           }
                           return Column(
@@ -221,14 +215,13 @@ class _CoachBoardScreenState extends State<CoachBoardScreen> {
       'offline' => S.errSaveFailed,
       _ => S.coachOnly,
     };
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 48),
-      child: Center(child: Text(msg)),
-    );
+    return PacerEmptyState(msg, icon: Icons.lock_outline);
   }
 
   Widget _teamPicker() {
-    if (_teams.isEmpty) return Text(S.noMembers);
+    if (_teams.isEmpty) {
+      return PacerEmptyState(S.noMembers, icon: Icons.groups_outlined);
+    }
     return DropdownButtonFormField<String>(
       initialValue: _teamId,
       decoration: InputDecoration(
@@ -237,7 +230,10 @@ class _CoachBoardScreenState extends State<CoachBoardScreen> {
       ),
       items: [
         for (final t in _teams)
-          DropdownMenuItem(value: t.id, child: Text(t.nama)),
+          DropdownMenuItem(
+            value: t.id,
+            child: Text(t.nama, maxLines: 1, overflow: TextOverflow.ellipsis),
+          ),
       ],
       onChanged: (v) {
         setState(() => _teamId = v);
@@ -258,7 +254,11 @@ class _CoachBoardScreenState extends State<CoachBoardScreen> {
         for (final c in _challenges)
           DropdownMenuItem(
             value: c.id,
-            child: Text('${c.jenis} • ${c.targetNilai}'),
+            child: Text(
+              '${c.jenis} • ${c.targetNilai}',
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
           ),
       ],
       onChanged: (v) {
@@ -272,10 +272,18 @@ class _CoachBoardScreenState extends State<CoachBoardScreen> {
     return Container(
       width: double.infinity,
       margin: const EdgeInsets.only(bottom: 8),
-      padding: const EdgeInsets.all(12),
+      padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
+        color: Colors.white,
         borderRadius: BorderRadius.circular(12),
         border: Border.all(color: PacerColors.border),
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x0D000000),
+            blurRadius: 2,
+            offset: Offset(0, 1),
+          ),
+        ],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -285,6 +293,8 @@ class _CoachBoardScreenState extends State<CoachBoardScreen> {
               Expanded(
                 child: Text(
                   r.nama,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                   style: const TextStyle(
                     fontWeight: FontWeight.w700,
                     fontSize: 16,
@@ -295,15 +305,19 @@ class _CoachBoardScreenState extends State<CoachBoardScreen> {
                 const Icon(Icons.verified, color: Colors.green, size: 20),
             ],
           ),
-          const SizedBox(height: 4),
+          const SizedBox(height: 8),
           Text(
             '${r.sessions} ${S.sessionsCol} • ${fmtKmNum(r.weekKm * 1000)} Km • streak ${r.streak}',
-            style: const TextStyle(fontSize: 13),
+            maxLines: 2,
+            overflow: TextOverflow.ellipsis,
+            style: const TextStyle(fontSize: 13, color: PacerColors.slate700),
           ),
           if (r.progress != null)
             Text(
               'progress ${r.progress!.toStringAsFixed(1)}${r.berhasil == true ? ' • ✓' : ''}',
-              style: const TextStyle(fontSize: 12, color: Colors.black54),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(fontSize: 12, color: PacerColors.slate500),
             ),
         ],
       ),

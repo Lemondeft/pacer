@@ -115,20 +115,14 @@ class _LoginScreenState extends State<LoginScreen> {
                 obscure: true,
                 controller: _password,
               ),
-              const SizedBox(height: 28),
+              const SizedBox(height: 32),
               if (_error != null) ...[
-                Text(
-                  _error!,
-                  style: const TextStyle(
-                    color: PacerColors.errorRed,
-                    fontSize: 15,
-                  ),
-                ),
-                const SizedBox(height: 12),
+                AuthErrorText(_error!),
+                const SizedBox(height: 16),
               ],
               PrimaryButton(label: S.logIn, onPressed: _busy ? null : _submit),
-              const SizedBox(height: 28),
-              const Divider(color: Colors.black, height: 1),
+              const SizedBox(height: 32),
+              const Divider(color: PacerColors.border, height: 1),
               const SizedBox(height: 24),
             ],
           ),
@@ -156,7 +150,7 @@ class _RunSetupScreenState extends State<RunSetupScreen> {
       body: SafeArea(
         child: ResponsiveScroll(
           maxWidth: 720,
-          padding: const EdgeInsets.only(top: 65, bottom: 24),
+          padding: const EdgeInsets.only(top: 64, bottom: 24),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -297,7 +291,8 @@ class _RunSetupScreenState extends State<RunSetupScreen> {
                     ),
                     const SizedBox(height: 12),
                     Wrap(
-                      spacing: 4,
+                      spacing: 8,
+                      runSpacing: 8,
                       children: [
                         for (final g in const [
                           'Bebas',
@@ -563,13 +558,19 @@ class _RunTrackerScreenState extends State<RunTrackerScreen> {
                         ],
                       ),
                     );
-                    Widget heroBlock = Center(
+                    Widget heroBlock = SizedBox(
+                      width: double.infinity,
                       child: Column(
                         mainAxisSize: MainAxisSize.min,
+                        mainAxisAlignment: MainAxisAlignment.center,
                         children: [
-                          Text(
-                            fmtKmNum(_recorder.distanceM),
-                            style: PacerText.giantNum(hero),
+                          FittedBox(
+                            fit: BoxFit.scaleDown,
+                            child: Text(
+                              fmtKmNum(_recorder.distanceM),
+                              style: PacerText.giantNum(hero),
+                              textAlign: TextAlign.center,
+                            ),
                           ),
                           Text(
                             S.distanceKm,
@@ -587,80 +588,90 @@ class _RunTrackerScreenState extends State<RunTrackerScreen> {
                     final paceText = paceSecs == null
                         ? "0'00''"
                         : "${paceSecs ~/ 60}'${(paceSecs % 60).toString().padLeft(2, '0')}\"";
-                    Widget stats = Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 32),
-                      child: Row(
-                        children: [
-                          Expanded(
-                            child: TrackerStatColumn(
-                              avatarSize: 20,
-                              initials: 'A',
-                              value: paceText,
-                              label: S.avgPace,
-                            ),
+                    Widget stats = Center(
+                      child: ConstrainedBox(
+                        constraints: const BoxConstraints(maxWidth: 560),
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 32),
+                          child: Row(
+                            children: [
+                              Expanded(
+                                child: TrackerStatColumn(
+                                  avatarSize: 20,
+                                  initials: 'A',
+                                  value: paceText,
+                                  label: S.avgPace,
+                                ),
+                              ),
+                              Expanded(
+                                child: TrackerStatColumn(
+                                  avatarSize: 25,
+                                  initials: 'B',
+                                  value: fmtDurasi(_recorder.elapsed.inSeconds),
+                                  label: S.duration,
+                                ),
+                              ),
+                              Expanded(
+                                child: TrackerStatColumn(
+                                  avatarSize: 30,
+                                  initials: 'C',
+                                  value: '0 kcal',
+                                  label: S.calories,
+                                ),
+                              ),
+                            ],
                           ),
-                          Expanded(
-                            child: TrackerStatColumn(
-                              avatarSize: 25,
-                              initials: 'B',
-                              value: fmtDurasi(_recorder.elapsed.inSeconds),
-                              label: S.duration,
-                            ),
-                          ),
-                          Expanded(
-                            child: TrackerStatColumn(
-                              avatarSize: 30,
-                              initials: 'C',
-                              value: '0 kcal',
-                              label: S.calories,
-                            ),
-                          ),
-                        ],
+                        ),
                       ),
                     );
-                    Widget actions = Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 32),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          MapCircleButton(size: circle),
-                          if (!_started)
-                            CircleAction(
-                              label: S.startLabel,
-                              bg: PacerColors.lime,
-                              fg: PacerColors.ink,
-                              size: circle,
-                              onTap: _opBusy ? null : _begin,
-                            )
-                          else if (!_running)
-                            CircleAction(
-                              label: S.pause,
-                              bg: PacerColors.lime,
-                              fg: PacerColors.ink,
-                              size: circle,
-                              onTap: _pause,
-                            )
-                          else
-                            CircleAction(
-                              label: S.continueLabel,
-                              bg: Colors.white,
-                              fg: PacerColors.ink,
-                              labelSize: 14,
-                              size: circle,
-                              onTap: _resume,
-                            ),
-                          if (_started && _running)
-                            CircleAction(
-                              label: S.finish,
-                              bg: PacerColors.ink,
-                              fg: PacerColors.lime,
-                              labelSize: 14,
-                              size: circle,
-                              onTap: _finish,
-                            )
-                          else
-                            SizedBox(width: circle),
-                        ],
+                    Widget actions = Center(
+                      child: ConstrainedBox(
+                        constraints: const BoxConstraints(maxWidth: 560),
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 32),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              MapCircleButton(size: circle),
+                              if (!_started)
+                                CircleAction(
+                                  label: S.startLabel,
+                                  bg: PacerColors.lime,
+                                  fg: PacerColors.ink,
+                                  size: circle,
+                                  onTap: _opBusy ? null : _begin,
+                                )
+                              else if (!_running)
+                                CircleAction(
+                                  label: S.pause,
+                                  bg: PacerColors.lime,
+                                  fg: PacerColors.ink,
+                                  size: circle,
+                                  onTap: _pause,
+                                )
+                              else
+                                CircleAction(
+                                  label: S.continueLabel,
+                                  bg: Colors.white,
+                                  fg: PacerColors.ink,
+                                  labelSize: 14,
+                                  size: circle,
+                                  onTap: _resume,
+                                ),
+                              if (_started && _running)
+                                CircleAction(
+                                  label: S.finish,
+                                  bg: PacerColors.ink,
+                                  fg: PacerColors.lime,
+                                  labelSize: 14,
+                                  size: circle,
+                                  onTap: _finish,
+                                )
+                              else
+                                SizedBox(width: circle),
+                            ],
+                          ),
+                        ),
                       ),
                     );
                     if (w >= Breakpoints.expanded) {
@@ -834,7 +845,7 @@ class RunFinishScreen extends StatelessWidget {
                     ),
                   ),
                   const SizedBox(height: 24),
-                  Container(height: 1, color: const Color(0x40000000)),
+                  Container(height: 1, color: PacerColors.border),
                   if (isHistoryDetail) ...[
                     const SizedBox(height: 28),
                     if (aktivitasId != null)
@@ -1019,7 +1030,7 @@ class _TeamsScreenState extends State<TeamsScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(S.findTeamsNearby, style: const TextStyle(fontSize: 32)),
+              Text(S.findTeamsNearby, style: PacerText.pageTitle),
               const SizedBox(height: 12),
               SearchField(onChanged: (v) => setState(() => _query = v)),
               const SizedBox(height: 16),
@@ -1044,9 +1055,9 @@ class _TeamsScreenState extends State<TeamsScreen> {
                     return _demoGrid();
                   }
                   if (filtered.isEmpty) {
-                    return const Padding(
-                      padding: EdgeInsets.symmetric(vertical: 32),
-                      child: Text('Tidak ada tim yang cocok.'),
+                    return const PacerEmptyState(
+                      'Tidak ada tim yang cocok.',
+                      icon: Icons.search_off_outlined,
                     );
                   }
                   return _teamGrid([
@@ -1091,6 +1102,9 @@ class _TeamsScreenState extends State<TeamsScreen> {
                           builder: (_) => const ChallengeListScreen(),
                         ),
                       ),
+                      style: OutlinedButton.styleFrom(
+                        minimumSize: const Size(0, 48),
+                      ),
                       child: Text(S.challenge),
                     ),
                   ),
@@ -1099,6 +1113,9 @@ class _TeamsScreenState extends State<TeamsScreen> {
                     child: OutlinedButton(
                       onPressed: () => Navigator.of(context).push(
                         MaterialPageRoute(builder: (_) => const ChatScreen()),
+                      ),
+                      style: OutlinedButton.styleFrom(
+                        minimumSize: const Size(0, 48),
                       ),
                       child: Text(S.teamChat),
                     ),
@@ -1158,7 +1175,7 @@ class _JoinButton extends StatelessWidget {
       style: ElevatedButton.styleFrom(
         backgroundColor: PacerColors.joinYellow,
         foregroundColor: Colors.black,
-        minimumSize: const Size(90, 36),
+        minimumSize: const Size(88, 48),
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
       ),
       child: Text(S.join),
@@ -1251,11 +1268,16 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
             child: Text(
               name,
               style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 16),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
             ),
           ),
+          const SizedBox(width: 8),
           Text(
             value,
             style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 16),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
           ),
         ],
       ),
@@ -1328,9 +1350,9 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
                   // Demo/offline only: never render mock names for signed-in users.
                   if (rows == null) return _demoBoard();
                   if (rows.isEmpty) {
-                    return const Padding(
-                      padding: EdgeInsets.symmetric(vertical: 32),
-                      child: Text('Belum ada peringkat.'),
+                    return const PacerEmptyState(
+                      'Belum ada peringkat.',
+                      icon: Icons.leaderboard_outlined,
                     );
                   }
                   // Live board with fewer than 3 rows: list without podium.
@@ -1406,6 +1428,9 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
                           builder: (_) => const StatisticScreen(),
                         ),
                       ),
+                      style: OutlinedButton.styleFrom(
+                        minimumSize: const Size(0, 48),
+                      ),
                       child: const Text('Statistik'),
                     ),
                   ),
@@ -1416,6 +1441,9 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
                         MaterialPageRoute(
                           builder: (_) => const StreaksScreen(),
                         ),
+                      ),
+                      style: OutlinedButton.styleFrom(
+                        minimumSize: const Size(0, 48),
                       ),
                       child: Text(S.streaks),
                     ),
@@ -1445,13 +1473,21 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
       padding: const EdgeInsets.symmetric(horizontal: 8),
       child: Column(
         children: [
-          InitialAvatar(name.substring(0, 1)),
-          Text(
-            name,
-            style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 16),
+          InitialAvatar(initialsOf(name)),
+          SizedBox(
+            width: 88,
+            child: Text(
+              name,
+              textAlign: TextAlign.center,
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+              style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 16),
+            ),
           ),
           Text(
             '$km Km',
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
             style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14),
           ),
           Container(
@@ -1561,16 +1597,25 @@ class _HistoryScreenState extends State<HistoryScreen> {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Row(
-          crossAxisAlignment: CrossAxisAlignment.end,
-          children: [
-            // Hero number scales with width (fluid 88→140).
-            Text('46,00', style: PacerText.giantNum(fluid(w, 88, 140))),
-            const Text(
-              'Kilometer',
-              style: TextStyle(fontWeight: FontWeight.w300, fontSize: 24),
+        // Hero scales down instead of overflowing at 360px widths.
+        SizedBox(
+          width: double.infinity,
+          child: FittedBox(
+            fit: BoxFit.scaleDown,
+            alignment: Alignment.centerLeft,
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                // Hero number scales with width (fluid 88→140).
+                Text('46,00', style: PacerText.giantNum(fluid(w, 88, 140))),
+                const Text(
+                  'Kilometer',
+                  style: TextStyle(fontWeight: FontWeight.w300, fontSize: 24),
+                ),
+              ],
             ),
-          ],
+          ),
         ),
         const SizedBox(height: 8),
         // Wrap instead of a fixed Row so the summary never overflows.
@@ -1647,9 +1692,9 @@ class _HistoryScreenState extends State<HistoryScreen> {
                   // Demo (or still loading / error): Figma mock content.
                   if (_demo || activities == null) return _demoHistory(w);
                   if (activities.isEmpty) {
-                    return const Padding(
-                      padding: EdgeInsets.symmetric(vertical: 48),
-                      child: Text('Belum ada aktivitas. Mulai lari pertamamu!'),
+                    return const PacerEmptyState(
+                      'Belum ada aktivitas. Mulai lari pertamamu!',
+                      icon: Icons.directions_run_outlined,
                     );
                   }
                   final totalKm = activities.fold<double>(
@@ -1663,22 +1708,31 @@ class _HistoryScreenState extends State<HistoryScreen> {
                   return Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Row(
-                        crossAxisAlignment: CrossAxisAlignment.end,
-                        children: [
-                          // Hero number scales with width (fluid 88→140).
-                          Text(
-                            fmtKmNum(totalKm),
-                            style: PacerText.giantNum(fluid(w, 88, 140)),
+                      // Hero scales down instead of overflowing at 360px.
+                      SizedBox(
+                        width: double.infinity,
+                        child: FittedBox(
+                          fit: BoxFit.scaleDown,
+                          alignment: Alignment.centerLeft,
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            crossAxisAlignment: CrossAxisAlignment.end,
+                            children: [
+                              // Hero number scales with width (fluid 88→140).
+                              Text(
+                                fmtKmNum(totalKm),
+                                style: PacerText.giantNum(fluid(w, 88, 140)),
+                              ),
+                              const Text(
+                                'Kilometer',
+                                style: TextStyle(
+                                  fontWeight: FontWeight.w300,
+                                  fontSize: 24,
+                                ),
+                              ),
+                            ],
                           ),
-                          const Text(
-                            'Kilometer',
-                            style: TextStyle(
-                              fontWeight: FontWeight.w300,
-                              fontSize: 24,
-                            ),
-                          ),
-                        ],
+                        ),
                       ),
                       const SizedBox(height: 8),
                       // Wrap instead of a fixed Row so the summary never overflows.
@@ -1815,16 +1869,24 @@ class _ChallengeDetailSheetState extends State<ChallengeDetailSheet> {
               mainAxisSize: MainAxisSize.min,
               children: [
                 Text(S.challengeDetail, style: PacerText.pageTitle),
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.end,
-                  children: [
-                    Text(
-                      '10 ',
-                      style: PacerText.giantNum(96)
-                          .copyWith(color: PacerColors.primary),
+                SizedBox(
+                  width: double.infinity,
+                  child: FittedBox(
+                    fit: BoxFit.scaleDown,
+                    alignment: Alignment.centerLeft,
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      children: [
+                        Text(
+                          '10 ',
+                          style: PacerText.giantNum(96)
+                              .copyWith(color: PacerColors.primary),
+                        ),
+                        Text('KM', style: PacerText.kmSuffix),
+                      ],
                     ),
-                    Text('KM', style: PacerText.kmSuffix),
-                  ],
+                  ),
                 ),
                 Text(
                   S.distance,
@@ -1899,7 +1961,7 @@ class _AccountScreenState extends State<AccountScreen> {
       onTap: onTap,
       borderRadius: BorderRadius.circular(8),
       child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 4),
+        padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 4),
         child: Row(
           children: [
             Expanded(
@@ -1914,7 +1976,7 @@ class _AccountScreenState extends State<AccountScreen> {
             const Icon(
               Icons.chevron_right,
               size: 20,
-              color: PacerColors.slate400,
+              color: PacerColors.slate500,
             ),
           ],
         ),
@@ -2110,7 +2172,7 @@ class _StatisticScreenState extends State<StatisticScreen> {
         ),
         Text(
           S.totalRunDistance,
-          style: TextStyle(fontSize: 11, color: PacerColors.slate400),
+          style: TextStyle(fontSize: 11, color: PacerColors.slate500),
         ),
         Text(
           S.targetAchieved,
@@ -2119,7 +2181,7 @@ class _StatisticScreenState extends State<StatisticScreen> {
             fontWeight: FontWeight.w600,
           ),
         ),
-        const SizedBox(height: 12),
+        const SizedBox(height: 16),
         Row(
           children: [
             Expanded(child: _StatCard(S.averagePace, "5'00\"", '/km')),
@@ -2173,10 +2235,10 @@ class _StatisticScreenState extends State<StatisticScreen> {
                             S.totalRunDistance,
                             style: TextStyle(
                               fontSize: 11,
-                              color: PacerColors.slate400,
+                              color: PacerColors.slate500,
                             ),
                           ),
-                          const SizedBox(height: 12),
+                          const SizedBox(height: 16),
                           Row(
                             children: [
                               Expanded(
@@ -2202,13 +2264,15 @@ class _StatisticScreenState extends State<StatisticScreen> {
                       );
                     },
                   );
-                  if (screenSizeOf(c.maxWidth) == ScreenSize.compact) {
+                  if (screenSizeOf(c.maxWidth) != ScreenSize.expanded) {
                     return Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [map, const SizedBox(height: 12), total],
+                      children: [map, const SizedBox(height: 16), total],
                     );
                   }
-                  // medium and up: map pane beside the stats pane.
+                  // Expanded only: map pane beside the stats pane. Medium
+                  // keeps the stacked column so the 3 stat cards keep full
+                  // width instead of squeezing into half a tablet.
                   return Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
@@ -2247,17 +2311,28 @@ class _StatCard extends StatelessWidget {
         children: [
           Text(
             label,
-            style: const TextStyle(fontSize: 11, color: PacerColors.slate400),
+            style: const TextStyle(fontSize: 11, color: PacerColors.slate500),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
           ),
-          Text(
-            value,
-            style: const TextStyle(
-              fontWeight: FontWeight.w800,
-              fontSize: 20,
-              color: PacerColors.navy,
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            alignment: Alignment.centerLeft,
+            child: Text(
+              value,
+              style: const TextStyle(
+                fontWeight: FontWeight.w800,
+                fontSize: 20,
+                color: PacerColors.navy,
+              ),
             ),
           ),
-          Text(unit, style: const TextStyle(fontSize: 12)),
+          Text(
+            unit,
+            style: const TextStyle(fontSize: 12, color: PacerColors.slate500),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
         ],
       ),
     );
@@ -2365,7 +2440,7 @@ class _StreaksScreenState extends State<StreaksScreen> {
             ),
             Text(
               _days[i],
-              style: const TextStyle(fontSize: 11, color: PacerColors.slate400),
+              style: const TextStyle(fontSize: 11, color: PacerColors.slate500),
             ),
           ],
         );
@@ -2555,9 +2630,9 @@ class _ChallengeListScreenState extends State<ChallengeListScreen> {
                   // Signed in with zero challenges: honest empty state,
                   // never mock hero cards.
                   if (live != null && live.isEmpty) {
-                    return const Padding(
-                      padding: EdgeInsets.symmetric(vertical: 32),
-                      child: Text('Belum ada challenge.'),
+                    return const PacerEmptyState(
+                      'Belum ada challenge.',
+                      icon: Icons.emoji_events_outlined,
                     );
                   }
                   final cards = (live == null)
@@ -2595,11 +2670,19 @@ class _ChallengeListScreenState extends State<ChallengeListScreen> {
                             child: Row(
                               crossAxisAlignment: CrossAxisAlignment.end,
                               children: [
-                                // Hero number scales with width (fluid 96→140).
-                                Text(
-                                  c.$1,
-                                  style: PacerText.giantNum(fluid(w, 96, 140))
-                                      .copyWith(color: PacerColors.primary),
+                                // Hero number flexes and scales down so long
+                                // live values never push the date off-screen.
+                                Flexible(
+                                  child: FittedBox(
+                                    fit: BoxFit.scaleDown,
+                                    alignment: Alignment.bottomLeft,
+                                    child: Text(
+                                      c.$1,
+                                      style: PacerText.giantNum(
+                                        fluid(w, 96, 140),
+                                      ).copyWith(color: PacerColors.primary),
+                                    ),
+                                  ),
                                 ),
                                 Text(
                                   c.$2,
@@ -2607,13 +2690,17 @@ class _ChallengeListScreenState extends State<ChallengeListScreen> {
                                     fontSize: 40,
                                   ),
                                 ),
-                                const Spacer(),
-                                Text(
-                                  c.$3,
-                                  style: const TextStyle(
-                                    color: Colors.white,
-                                    fontWeight: FontWeight.w600,
-                                    fontSize: 16,
+                                const SizedBox(width: 8),
+                                Flexible(
+                                  child: Text(
+                                    c.$3,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: const TextStyle(
+                                      color: Colors.white,
+                                      fontWeight: FontWeight.w600,
+                                      fontSize: 16,
+                                    ),
                                   ),
                                 ),
                               ],
@@ -2624,9 +2711,10 @@ class _ChallengeListScreenState extends State<ChallengeListScreen> {
                   );
                 },
               ),
-              const SizedBox(height: 12),
+              const SizedBox(height: 16),
               SizedBox(
                 width: double.infinity,
+                height: 48,
                 child: OutlinedButton(
                   onPressed: () => Navigator.of(context).push(
                     MaterialPageRoute(
@@ -2721,16 +2809,21 @@ class PersyaratanScreen extends StatelessWidget {
                   ),
                   style: ElevatedButton.styleFrom(
                     backgroundColor: PacerColors.lime,
+                    foregroundColor: PacerColors.ink,
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(999),
                     ),
                   ),
-                  child: Text(S.agree),
+                  child: Text(
+                    S.agree,
+                    style: TextStyle(color: PacerColors.ink),
+                  ),
                 ),
               ),
               Center(
                 child: TextButton(
                   onPressed: () => Navigator.of(context).pop(),
+                  style: TextButton.styleFrom(minimumSize: const Size(48, 48)),
                   child: Text(S.back),
                 ),
               ),
@@ -2848,19 +2941,14 @@ class _CreateClubScreenState extends State<CreateClubScreen> {
                 ),
               ),
               if (_error != null) ...[
-                const SizedBox(height: 8),
-                Text(
-                  _error!,
-                  style: const TextStyle(
-                    color: PacerColors.errorRed,
-                    fontSize: 15,
-                  ),
-                ),
+                const SizedBox(height: 12),
+                AuthErrorText(_error!),
               ],
-              const SizedBox(height: 12),
+              const SizedBox(height: 16),
               Text(S.clubFocus),
               const Wrap(
                 spacing: 8,
+                runSpacing: 8,
                 children: [
                   Chip(label: Text('Road Run')),
                   Chip(label: Text('Trail')),
@@ -2888,11 +2976,12 @@ class _CreateClubScreenState extends State<CreateClubScreen> {
                   Chip(label: Text(S.privateLabel)),
                 ],
               ),
-              const SizedBox(height: 20),
+              const SizedBox(height: 24),
               LimeActionBar(S.createTeam, onPressed: _busy ? null : _submit),
               Center(
                 child: TextButton(
                   onPressed: () => Navigator.of(context).pop(),
+                  style: TextButton.styleFrom(minimumSize: const Size(48, 48)),
                   child: Text(S.back),
                 ),
               ),
@@ -2944,9 +3033,10 @@ class CreateChallengeScreen extends StatelessWidget {
                           color: PacerColors.slate500,
                         ),
                       ),
-                      const SizedBox(height: 6),
+                      const SizedBox(height: 8),
                       Wrap(
                         spacing: 8,
+                        runSpacing: 8,
                         children: [for (final o in s.$2) Chip(label: Text(o))],
                       ),
                     ],
@@ -3073,8 +3163,8 @@ class ChatScreen extends StatelessWidget {
                         SnackBar(content: Text(S.demoMessageSent)),
                       ),
                       child: Container(
-                        width: 44,
-                        height: 44,
+                        width: 48,
+                        height: 48,
                         decoration: const BoxDecoration(
                           color: PacerColors.chatGreen,
                           shape: BoxShape.circle,
@@ -3142,13 +3232,21 @@ class AboutMeScreen extends StatelessWidget {
                                   fontWeight: FontWeight.w500,
                                   fontSize: 14,
                                 ),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
                               ),
                             ),
-                            Text(
-                              r.$2,
-                              style: const TextStyle(
-                                fontWeight: FontWeight.w600,
-                                fontSize: 14,
+                            const SizedBox(width: 8),
+                            Flexible(
+                              child: Text(
+                                r.$2,
+                                style: const TextStyle(
+                                  fontWeight: FontWeight.w600,
+                                  fontSize: 14,
+                                ),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                textAlign: TextAlign.end,
                               ),
                             ),
                           ],
@@ -3416,7 +3514,7 @@ class _LanguageSettingsScreenState extends State<LanguageSettingsScreen> {
                     sub,
                     style: const TextStyle(
                       fontSize: 12,
-                      color: PacerColors.slate400,
+                      color: PacerColors.slate500,
                     ),
                   ),
                 ],
@@ -3424,7 +3522,7 @@ class _LanguageSettingsScreenState extends State<LanguageSettingsScreen> {
             ),
             Icon(
               selected ? Icons.check_circle : Icons.radio_button_off,
-              color: selected ? PacerColors.primary : PacerColors.slate400,
+              color: selected ? PacerColors.primary : PacerColors.slate500,
             ),
           ],
         ),
