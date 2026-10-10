@@ -72,4 +72,20 @@ class ChallengeRepository {
         PartisipasiChallenge.fromJson(Map<String, dynamic>.from(row)),
     ];
   }
+
+  /// Coach read: every participation in one challenge, newest first.
+  /// Legal under partisipasi_select (coach read-all); students see own only.
+  Future<List<PartisipasiChallenge>> participationsForChallenge(
+    String challengeId,
+  ) async {
+    final rows = await _client
+        .from('partisipasi_challenge')
+        .select()
+        .eq('challenge_id', challengeId)
+        .order('created_at', ascending: false);
+    return [
+      for (final row in rows)
+        PartisipasiChallenge.fromJson(Map<String, dynamic>.from(row)),
+    ];
+  }
 }

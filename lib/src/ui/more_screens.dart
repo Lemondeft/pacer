@@ -18,6 +18,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'app_strings.dart';
 import 'app_theme.dart';
+import 'coach_board.dart';
 import 'format.dart';
 import 'screens.dart';
 import 'widgets.dart';
@@ -1858,8 +1859,36 @@ class _ChallengeDetailSheetState extends State<ChallengeDetailSheet> {
 }
 
 /// Figma ACCOUNT + About Me (minimal faithful slice).
-class AccountScreen extends StatelessWidget {
+/// Avatar, name, and email are live (profile row + auth); About Me details
+/// have no backend columns and stay Figma-static.
+class AccountScreen extends StatefulWidget {
   const AccountScreen({super.key});
+
+  @override
+  State<AccountScreen> createState() => _AccountScreenState();
+}
+
+class _AccountScreenState extends State<AccountScreen> {
+  ({String? nama, String? email})? _profile;
+
+  @override
+  void initState() {
+    super.initState();
+    _load().then((p) {
+      if (mounted) setState(() => _profile = p);
+    });
+  }
+
+  Future<({String? nama, String? email})> _load() async {
+    try {
+      final user = supa.auth.currentUser;
+      if (user == null) return (nama: null, email: null);
+      final profile = await AuthRepository().getProfile();
+      return (nama: profile?.nama, email: user.email);
+    } catch (_) {
+      return (nama: null, email: null);
+    }
+  }
 
   Widget _menuRow(
     BuildContext context, {
@@ -1931,11 +1960,14 @@ class AccountScreen extends StatelessWidget {
                 ],
               ),
               const SizedBox(height: 12),
-              const InitialAvatar('SR', size: 99),
+              InitialAvatar(initialsOf(_profile?.nama), size: 99),
               const SizedBox(height: 8),
-              const Text(
-                'Siti Rahma',
-                style: TextStyle(fontWeight: FontWeight.w600, fontSize: 16),
+              Text(
+                _profile?.nama ?? '–',
+                style: const TextStyle(
+                  fontWeight: FontWeight.w600,
+                  fontSize: 16,
+                ),
               ),
               const SizedBox(height: 12),
               Container(
@@ -1951,9 +1983,7 @@ class AccountScreen extends StatelessWidget {
                       context,
                       label: S.email,
                       onTap: () => ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                          content: Text('Demo: sitirahma@pacer.id'),
-                        ),
+                        SnackBar(content: Text(_profile?.email ?? '–')),
                       ),
                     ),
                     const Divider(height: 1, color: PacerColors.border),
@@ -3178,6 +3208,7 @@ class FiturScreen extends StatelessWidget {
       ),
       (S.riwayat, Icons.history_outlined, (_) => const HistoryScreen()),
       (S.profile, Icons.person_outline, (_) => const AccountScreen()),
+      (S.coachBoard, Icons.school_outlined, (_) => const CoachBoardScreen()),
     ];
     return Scaffold(
       body: SafeArea(

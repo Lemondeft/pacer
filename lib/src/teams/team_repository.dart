@@ -130,6 +130,40 @@ class TeamRepository {
     ];
   }
 
+  /// Roster with display names via the team_members→users FK.
+  /// Legal under members_select (coach read-all) + users_select (public to
+  /// authenticated). Names fall back to shortened ids so UI never breaks.
+  Future<List<({String userId, String nama, String peran})>> teamRoster(
+    String teamId,
+  ) async {
+    final rows = await _client
+        .from('team_members')
+        .select('user_id, peran, users!inner(nama)')
+        .eq('team_id', teamId)
+        .order('created_at', ascending: true);
+    return [
+      for (final raw in rows)
+        () {
+          final row = Map<String, dynamic>.from(raw as Map);
+          final uid = row['user_id'] as String;
+          final nested = row['users'];
+          final candidate = nested is Map
+              ? nested['nama']
+              : (nested is List && nested.isNotEmpty
+                    ? (nested.first as Map)['nama']
+                    : null);
+          final nama = candidate is String && candidate.isNotEmpty
+              ? candidate
+              : (uid.length > 8 ? '${uid.substring(0, 8)}…' : uid);
+          return (
+            userId: uid,
+            nama: nama,
+            peran: row['peran'] as String? ?? 'anggota',
+          );
+        }(),
+    ];
+  }
+
   /// Members of one team, join order (created_at asc).
   ///
   /// RLS caveat (members_select): regular users only see their OWN

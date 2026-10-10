@@ -220,6 +220,14 @@ class S {
       _en ? 'Schedule regular runs together' : 'Jadwalkan lari bersama rutin';
   static String get agree => _en ? 'agree' : 'setuju';
 
+  // Coach board (PE grading)
+  static String get coachBoard => _en ? 'Class' : 'Kelas';
+  static String get pickTeam => _en ? 'Pick a team' : 'Pilih tim';
+  static String get pickChallenge =>
+      _en ? 'Challenge (optional)' : 'Tantangan (opsional)';
+  static String get noMembers => _en ? 'No members yet.' : 'Belum ada anggota.';
+  static String get sessionsCol => _en ? 'sessions' : 'sesi';
+
   // Demo messages
   static String get demoJoinSent =>
       _en ? 'Demo: join request sent' : 'Demo: permintaan gabung terkirim';

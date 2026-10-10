@@ -123,6 +123,58 @@ class ActivityRepository {
     ];
   }
 
+  /// Coach read: one student's workouts, newest first.
+  /// Legal under aktivitas_coach_select; students get only their own rows.
+  Future<List<Activity>> listActivitiesFor(
+    String userId, {
+    int limit = 50,
+  }) async {
+    final rows = await _client
+        .from('aktivitas')
+        .select()
+        .eq('user_id', userId)
+        .order('mulai_at', ascending: false)
+        .limit(limit);
+    return [
+      for (final row in rows) Activity.fromJson(Map<String, dynamic>.from(row)),
+    ];
+  }
+
+  /// Coach read: one student's streak row (null when never recorded).
+  Future<({int berjalan, DateTime? terakhir})?> getStreakFor(
+    String userId,
+  ) async {
+    final row = await _client
+        .from('streak')
+        .select('streak_berjalan, terakhir_olahraga_tgl')
+        .eq('user_id', userId)
+        .maybeSingle();
+    if (row == null) return null;
+    final tglRaw = row['terakhir_olahraga_tgl'] as String?;
+    return (
+      berjalan: (row['streak_berjalan'] as num?)?.toInt() ?? 0,
+      terakhir: tglRaw == null ? null : DateTime.parse(tglRaw),
+    );
+  }
+
+  /// Coach read: one student's totals for [periode] (null when none yet).
+  Future<({double jarakM, int waktuS})?> getStatistikFor(
+    String userId,
+    String periode,
+  ) async {
+    final row = await _client
+        .from('statistik')
+        .select('total_jarak_m, total_waktu_s')
+        .eq('user_id', userId)
+        .eq('periode', periode)
+        .maybeSingle();
+    if (row == null) return null;
+    return (
+      jarakM: jsonToDouble(row['total_jarak_m']) ?? 0,
+      waktuS: (row['total_waktu_s'] as num?)?.toInt() ?? 0,
+    );
+  }
+
   /// GPS & rute: all track points of one aktivitas ordered by urutan asc.
   Future<List<RutePoint>> getRoute(String aktivitasId) async {
     final rows = await _client
