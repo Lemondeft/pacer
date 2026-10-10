@@ -48,6 +48,9 @@ class _RouteMapState extends State<RouteMap> {
   @override
   Widget build(BuildContext context) {
     final pts = widget.points;
+    // CARTO basemaps: Positron (light) / Dark Matter (dark) — clean minimal
+    // tiles, no API key. Attribution is legally required (see below).
+    final dark = Theme.of(context).brightness == Brightness.dark;
     // Minimal mode: offline canvas (grid + fitted route), no tiles.
     if (widget.minimal) {
       return SizedBox(
@@ -88,7 +91,13 @@ class _RouteMapState extends State<RouteMap> {
               ),
               children: [
                 TileLayer(
-                  urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                  // CARTO Positron / Dark Matter: minimal, label-light —
+                  // the closest keyless match to the requested Aubergine look
+                  // (roads read, labels whisper). Attribution below is required.
+                  urlTemplate: dark
+                      ? 'https://{s}.basemaps.cartocdn.com/dark_all/{z}/{x}/{y}{r}.png'
+                      : 'https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png',
+                  subdomains: const ['a', 'b', 'c', 'd'],
                   userAgentPackageName: 'com.example.pacer',
                 ),
                 if (pts.length > 1)
@@ -119,6 +128,10 @@ class _RouteMapState extends State<RouteMap> {
                       ),
                     ],
                   ),
+                // Attribution is legally required for OSM + CARTO tiles.
+                SimpleAttributionWidget(
+                  source: const Text('© OpenStreetMap contributors © CARTO'),
+                ),
               ],
             ),
             // Empty route: small overlay chip over live geography.
