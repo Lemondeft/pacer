@@ -45,11 +45,21 @@ class _RouteMapState extends State<RouteMap> {
         borderRadius: BorderRadius.circular(12),
         child: Stack(
           children: [
+            // Grid paint behind the tiles: tile failure (offline, blocked
+            // UA) degrades to a route grid instead of a black box.
+            Positioned.fill(
+              child: Container(
+                color: const Color(0xFFE2E8F0),
+                child: CustomPaint(painter: _GridPainter()),
+              ),
+            ),
             FlutterMap(
               mapController: _controller,
               options: MapOptions(
                 initialCenter: pts.isEmpty ? _fallback : pts.last,
                 initialZoom: 16,
+                // Transparent so the grid fallback shows through on tile failure.
+                backgroundColor: Colors.transparent,
               ),
               children: [
                 TileLayer(
@@ -121,4 +131,23 @@ class _RouteMapState extends State<RouteMap> {
       ),
     );
   }
+}
+
+/// Light route grid: fallback paint behind the tile layer.
+class _GridPainter extends CustomPainter {
+  @override
+  void paint(Canvas canvas, Size size) {
+    final line = Paint()
+      ..color = const Color(0xFFCBD5E1)
+      ..strokeWidth = 1;
+    for (double x = 0; x <= size.width; x += 32) {
+      canvas.drawLine(Offset(x, 0), Offset(x, size.height), line);
+    }
+    for (double y = 0; y <= size.height; y += 32) {
+      canvas.drawLine(Offset(0, y), Offset(size.width, y), line);
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }

@@ -162,6 +162,10 @@ class S {
   static String get weight => _en ? 'Weight' : 'Berat';
   static String get editPersonalDetails =>
       _en ? 'Edit Personal Details' : 'Edit Detail Pribadi';
+  static String get saveLabel => _en ? 'Save' : 'Simpan';
+  static String get cancelLabel => _en ? 'Cancel' : 'Batal';
+  static String get editNameTitle => _en ? 'Edit name' : 'Ubah nama';
+  static String get nameSaved => _en ? 'Name saved.' : 'Nama tersimpan.';
 
   // Fitur tiles
   static String get streaks => _en ? 'streaks' : 'streak';

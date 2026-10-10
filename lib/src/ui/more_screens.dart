@@ -3237,14 +3237,77 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 }
 
-/// Figma About Me data card.
-class AboutMeScreen extends StatelessWidget {
+/// Figma About Me data card. The name row is live (profile row, editable
+/// via the button below); other rows have no backend columns and stay static.
+class AboutMeScreen extends StatefulWidget {
   const AboutMeScreen({super.key});
+
+  @override
+  State<AboutMeScreen> createState() => _AboutMeScreenState();
+}
+
+class _AboutMeScreenState extends State<AboutMeScreen> {
+  String? _nama;
+
+  @override
+  void initState() {
+    super.initState();
+    _load();
+  }
+
+  Future<void> _load() async {
+    try {
+      if (supa.auth.currentUser == null) return;
+      final profile = await AuthRepository().getProfile();
+      if (mounted) setState(() => _nama = profile?.nama);
+    } catch (_) {
+      /* demo: stays null */
+    }
+  }
+
+  Future<void> _editName() async {
+    final controller = TextEditingController(text: _nama ?? '');
+    final result = await showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(S.editNameTitle),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          decoration: InputDecoration(hintText: S.fullName),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: Text(S.cancelLabel),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(controller.text.trim()),
+            child: Text(S.saveLabel),
+          ),
+        ],
+      ),
+    );
+    controller.dispose();
+    if (result == null || result.isEmpty || !mounted) return;
+    try {
+      await AuthRepository().updateProfile(nama: result);
+      if (!mounted) return;
+      setState(() => _nama = result);
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(S.nameSaved)));
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(S.errSaveFailed)));
+      }
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
     final rows = [
-      (S.fullName, 'Siti Rahma'),
+      (S.fullName, _nama ?? '–'),
       (S.birth, '14 Mei 1996'),
       (S.gender, 'Perempuan'),
       (S.height, '170 cm'),
@@ -3310,7 +3373,7 @@ class AboutMeScreen extends StatelessWidget {
                 width: double.infinity,
                 height: 48,
                 child: ElevatedButton(
-                  onPressed: () {},
+                  onPressed: _editName,
                   style: ElevatedButton.styleFrom(
                     backgroundColor: PacerScheme.of(context).editBg,
                     shape: RoundedRectangleBorder(
