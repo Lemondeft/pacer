@@ -32,6 +32,16 @@ class S {
       _en ? 'Konfirmasi Password' : 'Konfirmasi Kata Sandi';
   static String get orSignUpWith =>
       _en ? 'or sign up with' : 'atau daftar dengan';
+  static String get errFillAll =>
+      _en ? 'Fill in all fields.' : 'Lengkapi semua kolom.';
+  static String get errEmail => _en ? 'Invalid email.' : 'Email tidak valid.';
+  static String get errPasswordMatch =>
+      _en ? 'Passwords do not match.' : 'Kata sandi tidak cocok.';
+  static String get errSignupFailed =>
+      _en ? 'Sign-up failed. Try again.' : 'Pendaftaran gagal. Coba lagi.';
+  static String get errLoginFailed => _en
+      ? 'Login failed. Check your details.'
+      : 'Masuk gagal. Periksa data Anda.';
 
   // Home
   static String get history => _en ? 'History' : 'Riwayat';

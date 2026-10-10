@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:pacer/core/responsive/responsive.dart';
+import 'package:pacer/src/auth/auth_repository.dart';
+import 'package:pacer/supabase.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'app_strings.dart';
 import 'app_theme.dart';
@@ -144,7 +147,68 @@ class CreateAccountScreen extends StatefulWidget {
 }
 
 class _CreateAccountScreenState extends State<CreateAccountScreen> {
+  final _name = TextEditingController();
+  final _email = TextEditingController();
+  final _password = TextEditingController();
+  final _confirm = TextEditingController();
   String? _error;
+  bool _busy = false;
+
+  @override
+  void dispose() {
+    _name.dispose();
+    _email.dispose();
+    _password.dispose();
+    _confirm.dispose();
+    super.dispose();
+  }
+
+  /// False when Supabase was never initialized (demo mode): keep pass-through.
+  bool get _backend {
+    try {
+      supa;
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  Future<void> _submit() async {
+    setState(() => _error = null);
+    final nama = _name.text.trim();
+    final email = _email.text.trim();
+    if (nama.isEmpty || email.isEmpty || _password.text.isEmpty) {
+      setState(() => _error = S.errFillAll);
+      return;
+    }
+    if (!email.contains('@')) {
+      setState(() => _error = S.errEmail);
+      return;
+    }
+    if (_password.text != _confirm.text) {
+      setState(() => _error = S.errPasswordMatch);
+      return;
+    }
+    if (!_backend) {
+      widget.onSubmitted();
+      return;
+    }
+    setState(() => _busy = true);
+    try {
+      await AuthRepository().signUp(
+        email: email,
+        password: _password.text,
+        nama: nama,
+      );
+      widget.onSubmitted();
+    } on AuthException catch (e) {
+      setState(() => _error = e.message);
+    } catch (_) {
+      setState(() => _error = S.errSignupFailed);
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -160,24 +224,31 @@ class _CreateAccountScreenState extends State<CreateAccountScreen> {
               const SizedBox(height: 16),
               Text(S.createAccount, style: PacerText.authTitle),
               const SizedBox(height: 28),
-              AuthField(hint: S.username, icon: Icons.person_outline),
+              AuthField(
+                hint: S.username,
+                icon: Icons.person_outline,
+                controller: _name,
+              ),
               const SizedBox(height: 16),
               AuthField(
                 hint: S.email,
                 icon: Icons.mail_outline,
                 keyboardType: TextInputType.emailAddress,
+                controller: _email,
               ),
               const SizedBox(height: 16),
               AuthField(
                 hint: S.password,
                 icon: Icons.lock_outline,
                 obscure: true,
+                controller: _password,
               ),
               const SizedBox(height: 16),
               AuthField(
                 hint: S.confirmPassword,
                 icon: Icons.lock_outline,
                 obscure: true,
+                controller: _confirm,
               ),
               if (_error != null) ...[
                 const SizedBox(height: 12),
@@ -190,13 +261,7 @@ class _CreateAccountScreenState extends State<CreateAccountScreen> {
                 ),
               ],
               const SizedBox(height: 28),
-              PrimaryButton(
-                label: S.signIn,
-                onPressed: () {
-                  setState(() => _error = null);
-                  widget.onSubmitted();
-                },
-              ),
+              PrimaryButton(label: S.signIn, onPressed: _busy ? null : _submit),
               const SizedBox(height: 28),
               const Divider(color: Colors.black, height: 1),
               const SizedBox(height: 16),

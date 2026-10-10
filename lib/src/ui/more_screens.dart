@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:pacer/core/responsive/responsive.dart';
+import 'package:pacer/src/auth/auth_repository.dart';
 import 'package:pacer/supabase.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'app_strings.dart';
 import 'app_theme.dart';
@@ -9,10 +11,66 @@ import 'screens.dart';
 import 'widgets.dart';
 
 /// Figma LOG IN: "Welcome runners !" single line + Username/Password + Log In + divider.
-class LoginScreen extends StatelessWidget {
+/// The first field is the email credential Supabase Auth signs in with.
+class LoginScreen extends StatefulWidget {
   final VoidCallback onLoggedIn;
   final VoidCallback? onBack;
   const LoginScreen({super.key, required this.onLoggedIn, this.onBack});
+
+  @override
+  State<LoginScreen> createState() => _LoginScreenState();
+}
+
+class _LoginScreenState extends State<LoginScreen> {
+  final _email = TextEditingController();
+  final _password = TextEditingController();
+  String? _error;
+  bool _busy = false;
+
+  @override
+  void dispose() {
+    _email.dispose();
+    _password.dispose();
+    super.dispose();
+  }
+
+  /// False when Supabase was never initialized (demo mode): keep pass-through.
+  bool get _backend {
+    try {
+      supa;
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  Future<void> _submit() async {
+    setState(() => _error = null);
+    final email = _email.text.trim();
+    if (email.isEmpty || _password.text.isEmpty) {
+      setState(() => _error = S.errFillAll);
+      return;
+    }
+    if (!email.contains('@')) {
+      setState(() => _error = S.errEmail);
+      return;
+    }
+    if (!_backend) {
+      widget.onLoggedIn();
+      return;
+    }
+    setState(() => _busy = true);
+    try {
+      await AuthRepository().signIn(email: email, password: _password.text);
+      widget.onLoggedIn();
+    } on AuthException catch (e) {
+      setState(() => _error = e.message);
+    } catch (_) {
+      setState(() => _error = S.errLoginFailed);
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -31,15 +89,30 @@ class LoginScreen extends StatelessWidget {
                 style: PacerText.authTitle.copyWith(fontSize: 34),
               ),
               const SizedBox(height: 32),
-              AuthField(hint: S.username, icon: Icons.person_outline),
+              AuthField(
+                hint: S.username,
+                icon: Icons.person_outline,
+                controller: _email,
+              ),
               const SizedBox(height: 16),
               AuthField(
                 hint: S.password,
                 icon: Icons.lock_outline,
                 obscure: true,
+                controller: _password,
               ),
               const SizedBox(height: 28),
-              PrimaryButton(label: S.logIn, onPressed: onLoggedIn),
+              if (_error != null) ...[
+                Text(
+                  _error!,
+                  style: const TextStyle(
+                    color: PacerColors.errorRed,
+                    fontSize: 15,
+                  ),
+                ),
+                const SizedBox(height: 12),
+              ],
+              PrimaryButton(label: S.logIn, onPressed: _busy ? null : _submit),
               const SizedBox(height: 28),
               const Divider(color: Colors.black, height: 1),
               const SizedBox(height: 24),
@@ -1337,27 +1410,35 @@ class AccountScreen extends StatelessWidget {
                     _menuRow(
                       context,
                       label: S.out,
-                      onTap: () => Navigator.of(context).pushAndRemoveUntil(
-                        MaterialPageRoute(
-                          builder: (_) => GetStartedScreen(
-                            onSignIn: () => Navigator.of(context)
-                                .pushAndRemoveUntil(
-                                  MaterialPageRoute(
-                                    builder: (_) => const MainShell(),
+                      onTap: () async {
+                        try {
+                          await AuthRepository().signOut();
+                        } catch (_) {
+                          // Demo mode (no backend): just leave.
+                        }
+                        if (!context.mounted) return;
+                        Navigator.of(context).pushAndRemoveUntil(
+                          MaterialPageRoute(
+                            builder: (_) => GetStartedScreen(
+                              onSignIn: () => Navigator.of(context)
+                                  .pushAndRemoveUntil(
+                                    MaterialPageRoute(
+                                      builder: (_) => const MainShell(),
+                                    ),
+                                    (route) => false,
                                   ),
-                                  (route) => false,
-                                ),
-                            onLogIn: () => Navigator.of(context)
-                                .pushAndRemoveUntil(
-                                  MaterialPageRoute(
-                                    builder: (_) => const MainShell(),
+                              onLogIn: () => Navigator.of(context)
+                                  .pushAndRemoveUntil(
+                                    MaterialPageRoute(
+                                      builder: (_) => const MainShell(),
+                                    ),
+                                    (route) => false,
                                   ),
-                                  (route) => false,
-                                ),
+                            ),
                           ),
-                        ),
-                        (route) => false,
-                      ),
+                          (route) => false,
+                        );
+                      },
                     ),
                   ],
                 ),
