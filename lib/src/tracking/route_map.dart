@@ -158,27 +158,32 @@ class _RouteMapState extends State<RouteMap> {
                 child: Center(
                   child: Container(
                     padding: const EdgeInsets.symmetric(
-                      horizontal: 12,
-                      vertical: 6,
+                      horizontal: 8,
+                      vertical: 3,
                     ),
                     decoration: BoxDecoration(
                       color: Colors.black.withValues(alpha: 0.65),
                       borderRadius: BorderRadius.circular(999),
                     ),
-                    child: const Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(Icons.route, color: Color(0xFFBAFF29), size: 16),
-                        SizedBox(width: 6),
-                        Text(
-                          'Belum ada rute',
-                          style: TextStyle(color: Colors.white70, fontSize: 12),
-                        ),
-                      ],
+                    child: const Text(
+                      'Belum ada rute',
+                      style: TextStyle(color: Colors.white70, fontSize: 12),
                     ),
                   ),
                 ),
               ),
+            // Minimal attribution: legally required, kept to one faint line.
+            Positioned(
+              right: 4,
+              bottom: 2,
+              child: Text(
+                '© OpenStreetMap contributors',
+                style: TextStyle(
+                  fontSize: 9,
+                  color: Colors.black.withValues(alpha: 0.45),
+                ),
+              ),
+            ),
           ],
         ),
       ),
