@@ -110,6 +110,16 @@ class TeamRepository {
         .eq('user_id', _requireUserId());
   }
 
+  /// Coach kick: removes any member row. RLS members_delete gates this to
+  /// coach/admin; regular users get a 42501 from the server.
+  Future<void> removeMember(String teamId, String userId) async {
+    await _client
+        .from('team_members')
+        .delete()
+        .eq('team_id', teamId)
+        .eq('user_id', userId);
+  }
+
   /// Teams the caller belongs to, newest first. Rpc-free read-then-read:
   /// own team_members rows give the team ids, then teams are fetched.
   Future<List<Team>> myTeams() async {
@@ -129,15 +139,16 @@ class TeamRepository {
     ];
   }
 
-  /// Roster with display names via the team_members→users FK.
+  /// Roster with display names + app roles via the team_members→users FK.
   /// Legal under members_select (coach read-all) + users_select (public to
   /// authenticated). Names fall back to shortened ids so UI never breaks.
-  Future<List<({String userId, String nama, String peran})>> teamRoster(
-    String teamId,
-  ) async {
+  /// [appPeran] is the global users.peran (coach/admin/user) for badges;
+  /// [peran] stays the in-team role (anggota/ketua).
+  Future<List<({String userId, String nama, String peran, String appPeran})>>
+  teamRoster(String teamId) async {
     final rows = await _client
         .from('team_members')
-        .select('user_id, peran, users!inner(nama)')
+        .select('user_id, peran, users!inner(nama,peran)')
         .eq('team_id', teamId)
         .order('created_at', ascending: true);
     return [
@@ -146,18 +157,22 @@ class TeamRepository {
           final row = Map<String, dynamic>.from(raw as Map);
           final uid = row['user_id'] as String;
           final nested = row['users'];
-          final candidate = nested is Map
-              ? nested['nama']
+          final nestedMap = nested is Map
+              ? nested
               : (nested is List && nested.isNotEmpty
-                    ? (nested.first as Map)['nama']
-                    : null);
-          final nama = candidate is String && candidate.isNotEmpty
-              ? candidate
+                    ? (nested.first as Map)
+                    : const <String, dynamic>{});
+          final nameRaw = nestedMap['nama'];
+          final roleRaw = nestedMap['peran'];
+          final nama = nameRaw is String && nameRaw.isNotEmpty
+              ? nameRaw
               : (uid.length > 8 ? '${uid.substring(0, 8)}…' : uid);
+          final appPeran = roleRaw is String ? roleRaw : 'user';
           return (
             userId: uid,
             nama: nama,
             peran: row['peran'] as String? ?? 'anggota',
+            appPeran: appPeran,
           );
         }(),
     ];

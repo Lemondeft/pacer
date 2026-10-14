@@ -69,12 +69,34 @@ class AuthRepository {
     return UserProfile.fromJson(Map<String, dynamic>.from(row));
   }
 
-  /// Updates the caller's own display name.
-  Future<void> updateProfile({required String nama}) async {
+  /// Updates the caller's own profile. Only non-null fields are written,
+  /// so partial edits (e.g. name only) leave everything else untouched.
+  /// RLS users_update_own scopes this to id == auth.uid(); peran is never
+  /// writable here (guarded by the immutability trigger regardless).
+  Future<void> updateProfile({
+    String? nama,
+    DateTime? lahir,
+    String? jenisKelamin,
+    double? tinggiCm,
+    double? beratKg,
+  }) async {
     final id = currentUserId();
     if (id == null) {
       throw StateError('No signed-in user.');
     }
-    await _client.from('users').update({'nama': nama}).eq('id', id);
+    final payload = <String, dynamic>{};
+    if (nama != null) payload['nama'] = nama;
+    if (lahir != null) {
+      final v = lahir;
+      payload['lahir'] =
+          '${v.year.toString().padLeft(4, '0')}-${v.month.toString().padLeft(2, '0')}-${v.day.toString().padLeft(2, '0')}';
+    }
+    if (jenisKelamin != null) payload['jenis_kelamin'] = jenisKelamin;
+    if (tinggiCm != null) payload['tinggi_cm'] = tinggiCm;
+    if (beratKg != null) payload['berat_kg'] = beratKg;
+    if (payload.isEmpty) {
+      throw ArgumentError('updateProfile needs at least one field to change.');
+    }
+    await _client.from('users').update(payload).eq('id', id);
   }
 }

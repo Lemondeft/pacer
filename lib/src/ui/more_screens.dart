@@ -5,6 +5,7 @@ import 'package:pacer/core/responsive/responsive.dart';
 import 'package:pacer/src/aktivitas/activity_model.dart';
 import 'package:pacer/src/aktivitas/activity_repository.dart';
 import 'package:pacer/src/auth/auth_repository.dart';
+import 'package:pacer/src/auth/user_model.dart';
 import 'package:pacer/src/challenge/challenge_model.dart';
 import 'package:pacer/src/challenge/challenge_repository.dart';
 import 'package:pacer/src/chat/chat_model.dart';
@@ -20,7 +21,6 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'app_strings.dart';
 import 'app_theme.dart';
-import 'coach_board.dart';
 import 'format.dart';
 import 'screens.dart';
 import 'widgets.dart';
@@ -1257,6 +1257,7 @@ class TeamDetailSheet extends StatefulWidget {
 class _TeamDetailSheetState extends State<TeamDetailSheet> {
   bool? _joined;
   int? _memberCount;
+  List<({String userId, String nama, String peran, String appPeran})>? _roster;
   bool _busy = false;
   Team? _team;
   bool _isCoach = false;
@@ -1308,9 +1309,41 @@ class _TeamDetailSheetState extends State<TeamDetailSheet> {
         _joined = roster.any((m) => m.userId == uid);
         // Exact for members/coaches; outsiders see only themselves.
         _memberCount = roster.length;
+        _roster = roster;
       });
     } catch (_) {
       // Stays null: join attempt reports errors via snackbar.
+    }
+  }
+
+  /// Coach kick: removes any member (server enforces coach-only).
+  Future<void> _kick(String userId, String nama) async {
+    final yes = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Keluarkan anggota?'),
+        content: Text('$nama akan dikeluarkan dari tim ini.'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(false),
+            child: Text(S.cancelLabel),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(true),
+            child: const Text('Keluarkan'),
+          ),
+        ],
+      ),
+    );
+    if (yes != true || !mounted) return;
+    try {
+      await TeamRepository().removeMember(widget.teamId, userId);
+      await _refresh();
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(S.errSaveFailed)));
+      }
     }
   }
 
@@ -1485,6 +1518,78 @@ class _TeamDetailSheetState extends State<TeamDetailSheet> {
                     '$_memberCount anggota',
                     style: const TextStyle(fontSize: 14),
                   ),
+                ],
+                // Member list: visible once joined (or to coaches, who see
+                // the full roster). Coaches/admins get a tag; a coach can
+                // kick anyone but themselves.
+                if ((_joined == true || _isCoach) && _roster != null) ...[
+                  const SizedBox(height: 12),
+                  for (final m in _roster!)
+                    Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 4),
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Row(
+                                  children: [
+                                    Flexible(
+                                      child: Text(
+                                        m.nama,
+                                        style: const TextStyle(
+                                          fontWeight: FontWeight.w600,
+                                          fontSize: 15,
+                                        ),
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                    ),
+                                    if (m.appPeran == 'coach' ||
+                                        m.appPeran == 'admin') ...[
+                                      const SizedBox(width: 6),
+                                      Container(
+                                        padding: const EdgeInsets.symmetric(
+                                          horizontal: 8,
+                                          vertical: 2,
+                                        ),
+                                        decoration: BoxDecoration(
+                                          color: PacerColors.lime,
+                                          borderRadius: BorderRadius.circular(
+                                            999,
+                                          ),
+                                        ),
+                                        child: Text(
+                                          m.appPeran.toUpperCase(),
+                                          style: const TextStyle(
+                                            fontSize: 11,
+                                            fontWeight: FontWeight.w800,
+                                            color: PacerColors.ink,
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ],
+                                ),
+                                Text(
+                                  m.peran,
+                                  style: const TextStyle(
+                                    fontSize: 12,
+                                    color: Colors.black54,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          if (_isCoach && m.userId != _uidOf())
+                            TextButton(
+                              onPressed: () => _kick(m.userId, m.nama),
+                              child: const Text('Keluarkan'),
+                            ),
+                        ],
+                      ),
+                    ),
                 ],
                 // Invite code: shown once joined (or to coaches) — never to
                 // outsiders, or the code gate would be decorative.
@@ -3261,9 +3366,143 @@ class _CreateClubScreenState extends State<CreateClubScreen> {
   }
 }
 
-/// Figma buat challenge teams form.
-class CreateChallengeScreen extends StatelessWidget {
+/// Figma buat challenge teams form (coach only — server rejects others).
+/// JARAK presets or TARGET presets define the distance (TARGET wins when
+/// touched; Lainnya/Custom open a km dialog). DURASI sets the window.
+class CreateChallengeScreen extends StatefulWidget {
   const CreateChallengeScreen({super.key});
+
+  @override
+  State<CreateChallengeScreen> createState() => _CreateChallengeScreenState();
+}
+
+class _CreateChallengeScreenState extends State<CreateChallengeScreen> {
+  int _jarak = 1; // '5 km'
+  int _durasi = 2; // week
+  int _target = -1; // untouched
+  double? _customKm;
+  bool _busy = false;
+  String? _error;
+
+  static const _jarakKm = [3.0, 5.0, 10.0];
+  static const _durasiDays = [1, 3, 7];
+  static const _targetKm = [25.0, 30.0, 45.0];
+
+  Future<double?> _askCustomKm() async {
+    final controller = TextEditingController();
+    final result = await showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Jarak custom (km)'),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          keyboardType: const TextInputType.numberWithOptions(decimal: true),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: Text(S.cancelLabel),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(controller.text.trim()),
+            child: Text(S.saveLabel),
+          ),
+        ],
+      ),
+    );
+    controller.dispose();
+    if (result == null || result.isEmpty) return null;
+    final v = double.tryParse(result.replaceAll(',', '.'));
+    return (v == null || v <= 0) ? null : v;
+  }
+
+  Future<void> _tapCustom(ValueChanged<double> apply) async {
+    final v = await _askCustomKm();
+    if (v == null || !mounted) return;
+    setState(() {
+      _customKm = v;
+      apply(v);
+    });
+  }
+
+  Future<void> _submit() async {
+    setState(() => _error = null);
+    double? targetKm;
+    if (_target >= 0 && _target < _targetKm.length) {
+      targetKm = _targetKm[_target];
+    } else if (_target == 3) {
+      targetKm = _customKm;
+    } else if (_jarak >= 0 && _jarak < _jarakKm.length) {
+      targetKm = _jarakKm[_jarak];
+    } else {
+      targetKm = _customKm;
+    }
+    if (targetKm == null) {
+      setState(() => _error = S.errFillAll);
+      return;
+    }
+    final now = DateTime.now();
+    final windowDays = _durasiDays[_durasi.clamp(0, _durasiDays.length - 1)];
+    setState(() => _busy = true);
+    try {
+      await ChallengeRepository().createChallenge(
+        jenis: 'lari',
+        targetNilai: targetKm * 1000,
+        targetSatuan: 'jarak_m',
+        waktuMulai: now,
+        waktuSelesai: now.add(Duration(days: windowDays)),
+      );
+      if (!mounted) return;
+      ScaffoldMessenger.of(context)
+          .showSnackBar(const SnackBar(content: Text('Challenge dibuat.')));
+      Navigator.of(context).pop();
+    } on PostgrestException catch (e) {
+      setState(
+        () => _error = e.code == '42501' ? S.coachOnly : S.errSaveFailed,
+      );
+    } catch (_) {
+      if (mounted) setState(() => _error = S.errSaveFailed);
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Widget _group(
+    String title,
+    List<String> options,
+    int selected,
+    ValueChanged<int> onTap,
+  ) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            title,
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+              color: PacerScheme.of(context).soft,
+            ),
+          ),
+          const SizedBox(height: 6),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: [
+              for (var i = 0; i < options.length; i++)
+                GestureDetector(
+                  onTap: () => onTap(i),
+                  child: GoalChip(label: options[i], selected: selected == i),
+                ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -3282,35 +3521,43 @@ class CreateChallengeScreen extends StatelessWidget {
                 style: PacerText.pageTitleOf(context).copyWith(fontSize: 26),
               ),
               const SizedBox(height: 12),
-              for (final s in [
-                ('JARAK', ['3 km', '5 km', '10 km', S.other]),
-                (S.durationLabel, [S.todayLabel, S.days3, S.week1]),
-                (S.target, ['25 km', '30 km', '45 km', S.custom]),
-              ])
-                Padding(
-                  padding: const EdgeInsets.only(bottom: 12),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        s.$1,
-                        style: TextStyle(
-                          fontSize: 12,
-                          fontWeight: FontWeight.w600,
-                          color: PacerScheme.of(context).soft,
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      Wrap(
-                        spacing: 8,
-                        runSpacing: 8,
-                        children: [for (final o in s.$2) Chip(label: Text(o))],
-                      ),
-                    ],
+              _group('JARAK', ['3 km', '5 km', '10 km', S.other], _jarak, (i) {
+                if (i == 3) {
+                  _tapCustom((_) => _jarak = 3);
+                } else {
+                  setState(() => _jarak = i);
+                }
+              }),
+              _group(
+                S.durationLabel,
+                [S.todayLabel, S.days3, S.week1],
+                _durasi,
+                (i) => setState(() => _durasi = i),
+              ),
+              _group(S.target, ['25 km', '30 km', '45 km', S.custom], _target, (
+                i,
+              ) {
+                if (i == 3) {
+                  _tapCustom((_) => _target = 3);
+                } else {
+                  setState(() => _target = i);
+                }
+              }),
+              if (_error != null) ...[
+                Text(
+                  _error!,
+                  style: const TextStyle(
+                    color: PacerColors.errorRed,
+                    fontSize: 15,
                   ),
                 ),
-              const SizedBox(height: 12),
-              LimeActionBar(S.createChallenge),
+                const SizedBox(height: 12),
+              ] else
+                const SizedBox(height: 12),
+              LimeActionBar(
+                S.createChallenge,
+                onPressed: _busy ? null : _submit,
+              ),
               const SizedBox(height: 24),
             ],
           ),
@@ -3596,7 +3843,7 @@ class AboutMeScreen extends StatefulWidget {
 }
 
 class _AboutMeScreenState extends State<AboutMeScreen> {
-  String? _nama;
+  UserProfile? _profile;
 
   @override
   void initState() {
@@ -3608,41 +3855,114 @@ class _AboutMeScreenState extends State<AboutMeScreen> {
     try {
       if (supa.auth.currentUser == null) return;
       final profile = await AuthRepository().getProfile();
-      if (mounted) setState(() => _nama = profile?.nama);
+      if (mounted) setState(() => _profile = profile);
     } catch (_) {
       /* demo: stays null */
     }
   }
 
-  Future<void> _editName() async {
-    final controller = TextEditingController(text: _nama ?? '');
-    final result = await showDialog<String>(
+  /// Full-stats editor. Name is required; empty optional fields are left
+  /// untouched server-side (updateProfile skips nulls).
+  Future<void> _editDetails() async {
+    final p = _profile;
+    final nama = TextEditingController(text: p?.nama ?? '');
+    final lahir = TextEditingController(
+      text: p?.lahir == null
+          ? ''
+          : '${p!.lahir!.year.toString().padLeft(4, '0')}-${p.lahir!.month.toString().padLeft(2, '0')}-${p.lahir!.day.toString().padLeft(2, '0')}',
+    );
+    String? gender = p?.jenisKelamin;
+    final tinggi = TextEditingController(
+      text: p?.tinggiCm == null ? '' : '${p!.tinggiCm}',
+    );
+    final berat = TextEditingController(
+      text: p?.beratKg == null ? '' : '${p!.beratKg}',
+    );
+    final saved = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: Text(S.editNameTitle),
-        content: TextField(
-          controller: controller,
-          autofocus: true,
-          decoration: InputDecoration(hintText: S.fullName),
+        title: Text(S.editPersonalDetails),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: nama,
+                autofocus: true,
+                decoration: InputDecoration(hintText: S.fullName),
+              ),
+              TextField(
+                controller: lahir,
+                decoration: const InputDecoration(
+                  hintText: 'Lahir (yyyy-mm-dd)',
+                ),
+              ),
+              DropdownButtonFormField<String>(
+                initialValue: gender,
+                decoration: const InputDecoration(hintText: 'Jenis kelamin'),
+                items: const [
+                  DropdownMenuItem(
+                    value: 'Laki-laki',
+                    child: Text('Laki-laki'),
+                  ),
+                  DropdownMenuItem(
+                    value: 'Perempuan',
+                    child: Text('Perempuan'),
+                  ),
+                ],
+                onChanged: (v) => gender = v,
+              ),
+              TextField(
+                controller: tinggi,
+                decoration: const InputDecoration(hintText: 'Tinggi (cm)'),
+                keyboardType: TextInputType.number,
+              ),
+              TextField(
+                controller: berat,
+                decoration: const InputDecoration(hintText: 'Berat (kg)'),
+                keyboardType: TextInputType.number,
+              ),
+            ],
+          ),
         ),
         actions: [
           TextButton(
-            onPressed: () => Navigator.of(context).pop(),
+            onPressed: () => Navigator.of(context).pop(false),
             child: Text(S.cancelLabel),
           ),
           TextButton(
-            onPressed: () => Navigator.of(context).pop(controller.text.trim()),
+            onPressed: () => Navigator.of(context).pop(true),
             child: Text(S.saveLabel),
           ),
         ],
       ),
     );
-    controller.dispose();
-    if (result == null || result.isEmpty || !mounted) return;
+    final namaVal = nama.text.trim();
+    final lahirVal = lahir.text.trim().isEmpty
+        ? null
+        : DateTime.tryParse(lahir.text.trim());
+    final tinggiVal = double.tryParse(tinggi.text.trim());
+    final beratVal = double.tryParse(berat.text.trim());
+    nama.dispose();
+    lahir.dispose();
+    tinggi.dispose();
+    berat.dispose();
+    if (saved != true || !mounted) return;
+    if (namaVal.isEmpty) {
+      ScaffoldMessenger.of(context)
+          .showSnackBar(SnackBar(content: Text(S.errFillAll)));
+      return;
+    }
     try {
-      await AuthRepository().updateProfile(nama: result);
+      await AuthRepository().updateProfile(
+        nama: namaVal,
+        lahir: lahirVal,
+        jenisKelamin: gender,
+        tinggiCm: tinggiVal,
+        beratKg: beratVal,
+      );
+      await _reloadProfile();
       if (!mounted) return;
-      setState(() => _nama = result);
       ScaffoldMessenger.of(context)
           .showSnackBar(SnackBar(content: Text(S.nameSaved)));
     } catch (_) {
@@ -3653,14 +3973,53 @@ class _AboutMeScreenState extends State<AboutMeScreen> {
     }
   }
 
+  Future<void> _reloadProfile() async {
+    try {
+      final profile = await AuthRepository().getProfile();
+      if (mounted) setState(() => _profile = profile);
+    } catch (_) {
+      /* keep stale */
+    }
+  }
+
+  String _bulan(int m) {
+    const names = [
+      'Januari',
+      'Februari',
+      'Maret',
+      'April',
+      'Mei',
+      'Juni',
+      'Juli',
+      'Agustus',
+      'September',
+      'Oktober',
+      'November',
+      'Desember',
+    ];
+    return (m >= 1 && m <= 12) ? names[m - 1] : '';
+  }
+
+  String _trimNum(double? v) {
+    if (v == null) return '–';
+    final t = v.truncateToDouble();
+    return (v - t).abs() < 1e-9 ? '${t.toInt()}' : '$v';
+  }
+
   @override
   Widget build(BuildContext context) {
+    final p = _profile;
     final rows = [
-      (S.fullName, _nama ?? '–'),
-      (S.birth, '14 Mei 1996'),
-      (S.gender, 'Perempuan'),
-      (S.height, '170 cm'),
-      (S.weight, '40 kg'),
+      (S.fullName, p?.nama ?? '–'),
+      (
+        S.birth,
+        p?.lahir == null
+            ? '–'
+            : '${p!.lahir!.day} ${_bulan(p.lahir!.month)} ${p.lahir!.year}',
+      ),
+      (S.gender, p?.jenisKelamin ?? '–'),
+      (S.height, p?.tinggiCm == null ? '–' : '${_trimNum(p?.tinggiCm)} cm'),
+      (S.weight, p?.beratKg == null ? '–' : '${_trimNum(p?.beratKg)} kg'),
     ];
     return Scaffold(
       body: SafeArea(
@@ -3722,7 +4081,7 @@ class _AboutMeScreenState extends State<AboutMeScreen> {
                 width: double.infinity,
                 height: 48,
                 child: ElevatedButton(
-                  onPressed: _editName,
+                  onPressed: _editDetails,
                   style: ElevatedButton.styleFrom(
                     backgroundColor: PacerScheme.of(context).editBg,
                     shape: RoundedRectangleBorder(
@@ -3772,7 +4131,6 @@ class FiturScreen extends StatelessWidget {
       ),
       (S.riwayat, Icons.history_outlined, (_) => const HistoryScreen()),
       (S.profile, Icons.person_outline, (_) => const AccountScreen()),
-      (S.coachBoard, Icons.school_outlined, (_) => const CoachBoardScreen()),
     ];
     return Scaffold(
       body: SafeArea(

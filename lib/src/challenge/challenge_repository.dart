@@ -73,6 +73,41 @@ class ChallengeRepository {
     ];
   }
 
+  /// Creates a challenge (coach/admin only — RLS challenge_insert rejects
+  /// regular users with 42501, which the UI maps to a "coach only" message).
+  Future<Challenge> createChallenge({
+    required String jenis,
+    required double targetNilai,
+    required String targetSatuan,
+    DateTime? waktuMulai,
+    DateTime? waktuSelesai,
+  }) async {
+    if (targetNilai <= 0) {
+      throw ArgumentError.value(targetNilai, 'targetNilai', 'must be > 0');
+    }
+    if (!targetSatuanOpsi.contains(targetSatuan)) {
+      throw ArgumentError.value(
+        targetSatuan,
+        'targetSatuan',
+        'must be one of $targetSatuanOpsi',
+      );
+    }
+    final row = await _client
+        .from('challenge')
+        .insert({
+          'dibuat_oleh': _requireUserId(),
+          'jenis': jenis,
+          'target_nilai': targetNilai,
+          'target_satuan': targetSatuan,
+          'waktu_mulai': waktuMulai?.toUtc().toIso8601String(),
+          'waktu_selesai': waktuSelesai?.toUtc().toIso8601String(),
+          'diumumkan': true,
+        })
+        .select()
+        .single();
+    return Challenge.fromJson(Map<String, dynamic>.from(row));
+  }
+
   /// Coach read: every participation in one challenge, newest first.
   /// Legal under partisipasi_select (coach read-all); students see own only.
   Future<List<PartisipasiChallenge>> participationsForChallenge(
