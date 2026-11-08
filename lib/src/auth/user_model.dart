@@ -10,6 +10,7 @@ class UserProfile {
   final String? jenisKelamin;
   final double? tinggiCm;
   final double? beratKg;
+  final String? region;
 
   const UserProfile({
     required this.id,
@@ -19,6 +20,7 @@ class UserProfile {
     this.jenisKelamin,
     this.tinggiCm,
     this.beratKg,
+    this.region,
   });
 
   factory UserProfile.fromJson(Map<String, dynamic> json) {
@@ -31,6 +33,7 @@ class UserProfile {
       jenisKelamin: json['jenis_kelamin'] as String?,
       tinggiCm: jsonToDouble(json['tinggi_cm']),
       beratKg: jsonToDouble(json['berat_kg']),
+      region: json['region'] as String?,
     );
   }
 
@@ -42,6 +45,7 @@ class UserProfile {
     'jenis_kelamin': jenisKelamin,
     'tinggi_cm': tinggiCm,
     'berat_kg': beratKg,
+    'region': region,
   };
 }
 

@@ -67,6 +67,20 @@ class LeaderboardRepository {
     ];
   }
 
+  /// User ids inside a leaderboard scope: 'team' (people sharing a team with
+  /// the caller), 'region' (same users.region), or 'global' (everyone).
+  /// Server-side rpc, so rosters of other teams are never exposed.
+  Future<Set<String>> scopeUserIds(String scope) async {
+    final rows = await _client.rpc(
+      'leaderboard_scope_user_ids',
+      params: {'p_scope': scope},
+    );
+    return {
+      for (final r in (rows as List))
+        r is String ? r : '${(r as Map).values.first}',
+    };
+  }
+
   String _displayName(Map<String, dynamic> row, String userId) {
     final nested = row['users'];
     final candidate = nested is Map

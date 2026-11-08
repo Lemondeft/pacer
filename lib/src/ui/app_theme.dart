@@ -36,6 +36,7 @@ class PacerColors {
   static const formText = Color(0xFF565E74);
   static const chipGreen = Color(0xFF059669);
   static const streakBlue = Color(0xFF0066FF);
+  static const streakAmber = Color(0xFFFFB020);
   static const gpsPill = Color(0xFFE5F0C5);
   static const postBg = Color(0xFFE3FFA8);
   static const medalGold = Color(0xFFFFD700);

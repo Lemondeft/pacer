@@ -79,6 +79,11 @@ class AuthRepository {
     String? jenisKelamin,
     double? tinggiCm,
     double? beratKg,
+    String? region,
+
+    /// Column names to reset to NULL (lahir, jenis_kelamin, tinggi_cm,
+    /// berat_kg, region). Needed because null args mean "leave unchanged".
+    Set<String> clear = const {},
   }) async {
     final id = currentUserId();
     if (id == null) {
@@ -94,6 +99,17 @@ class AuthRepository {
     if (jenisKelamin != null) payload['jenis_kelamin'] = jenisKelamin;
     if (tinggiCm != null) payload['tinggi_cm'] = tinggiCm;
     if (beratKg != null) payload['berat_kg'] = beratKg;
+    if (region != null) payload['region'] = region;
+    const clearable = {
+      'lahir',
+      'jenis_kelamin',
+      'tinggi_cm',
+      'berat_kg',
+      'region',
+    };
+    for (final c in clear) {
+      if (clearable.contains(c)) payload[c] = null;
+    }
     if (payload.isEmpty) {
       throw ArgumentError('updateProfile needs at least one field to change.');
     }

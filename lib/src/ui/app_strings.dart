@@ -66,6 +66,18 @@ class S {
   static String get seeAll => _en ? 'See all' : 'Lihat semua';
   static String get activeStreak => _en ? 'ACTIVE STREAK' : 'STREAK AKTIF';
   static String get daysStreak => _en ? 'DAYS STREAK' : 'HARI BERUNTUN';
+  static String get streakAtRisk => _en ? 'STREAK AT RISK' : 'STREAK TERANCAM';
+  static String get noStreak => _en ? 'NO ACTIVE STREAK' : 'BELUM ADA STREAK';
+  static String get streakActiveMsg => _en
+      ? 'You ran today. Keep it going!'
+      : 'Kamu sudah lari hari ini. Pertahankan!';
+  static String streakAtRiskMsg(int n) => _en
+      ? 'Run today to keep your $n-day streak'
+      : 'Lari hari ini agar streak $n hari tetap jalan';
+  static String get streakInactiveMsg => _en
+      ? 'Start a run today to begin a new streak'
+      : 'Mulai lari hari ini untuk memulai streak baru';
+  static String daysOf7(int n) => _en ? '$n of 7 Days' : '$n dari 7 Hari';
   static String get personalRecord => _en
       ? 'Personal Record • Best since Nov 2024'
       : 'Rekor Pribadi • Terbaik sejak Nov 2024';
@@ -110,12 +122,42 @@ class S {
   static String get setupSubtitle => _en
       ? 'Choose an activity to record your session metrics.'
       : 'Pilih aktivitas untuk mencatat metrik sesi Anda.';
-  static String get outdoorRun => _en ? 'Outdoor Run' : 'Lari Luar';
+  static String get outdoorRun => _en ? 'Outdoor Run' : 'Lari';
+  static String get jogging => _en ? 'Jogging' : 'Joging';
+  static String get cycling => _en ? 'Cycling' : 'Bersepeda';
+  static String get walking => _en ? 'Walking' : 'Berjalan';
+  static String get runSubtitle =>
+      _en ? 'GPS, distance & tempo' : 'GPS, jarak & tempo';
+  static String get jogSubtitle =>
+      _en ? 'Light endurance pace' : 'Tempo sedang & daya tahan';
+  static String get cyclingSubtitle =>
+      _en ? 'Speed, elevation & route' : 'Kecepatan, elevasi & rute';
+  static String get walkingSubtitle =>
+      _en ? 'Step rhythm & distance' : 'Irama langkah & jarak tempuh';
   static String get gpsDistanceTempo =>
       _en ? 'GPS, distance & tempo' : 'GPS, jarak & tempo';
   static String get sessionGoal => _en ? 'SESSION GOAL' : 'SASARAN SESI';
   static String get free => _en ? 'Free' : 'Bebas';
-  static String get startRun => _en ? 'Start Run' : 'Mulai Lari';
+  static String get startRun => _en ? 'Start Activity' : 'Mulai Olahraga';
+
+  // Leaderboard filters (per manual DFD 2.4 & PDM)
+  static String get filterMetric => _en ? 'Metric' : 'Kriteria';
+  static String get metricDistance => _en ? 'Distance' : 'Jarak';
+  static String get metricCalories => _en ? 'Calories' : 'Kalori';
+  static String get metricDuration => _en ? 'Duration' : 'Durasi';
+  static String get filterPeriod => _en ? 'Period' : 'Periode';
+  static String get periodDaily => _en ? 'Daily' : 'Harian';
+  static String get periodWeekly => _en ? 'Weekly' : 'Mingguan';
+  static String get periodMonthly => _en ? 'Monthly' : 'Bulanan';
+  static String get allTime => _en ? 'All Time' : 'Semua';
+
+  // Notifications (per context diagram)
+  static String get notifications => _en ? 'Notifications' : 'Notifikasi';
+  static String get reminderTitle =>
+      _en ? 'Activity Reminder' : 'Pengingat Aktivitas';
+  static String get reminderBody => _en
+      ? 'Time for your daily workout! Keep your streak burning 🔥'
+      : 'Saatnya olahraga hari ini! Pertahankan streak-mu 🔥';
 
   // Teams
   static String get findTeamsNearby =>
@@ -198,6 +240,31 @@ class S {
       _en ? 'Community Privacy' : 'Privasi Komunitas';
   static String get publicLabel => _en ? 'Public' : 'Publik';
   static String get privateLabel => _en ? 'Private' : 'Privat';
+  static String get publicTeamHint => _en
+      ? 'Listed in Find Teams. Anyone can join without a code.'
+      : 'Tampil di Temukan Tim. Siapa saja bisa gabung tanpa kode.';
+  static String get privateTeamHint => _en
+      ? 'Hidden from the directory. Join only with the secret code from the coach.'
+      : 'Tidak tampil di direktori. Gabung hanya dengan kode rahasia dari coach.';
+  static String get region => _en ? 'Region' : 'Wilayah';
+  static String get regionNotSet =>
+      _en ? 'Your region is not set' : 'Wilayahmu belum diatur';
+  static String get regionPrompt => _en
+      ? 'Set your region to see how you rank against runners nearby.'
+      : 'Atur wilayahmu untuk melihat peringkat pelari di daerahmu.';
+  static String get setRegion => _en ? 'Set region' : 'Atur wilayah';
+  static String get notSet => _en ? 'Not set' : 'Belum diatur';
+  static String get pickDate => _en ? 'Pick date' : 'Pilih tanggal';
+  static String get invalidHeight =>
+      _en ? 'Height must be between 1 and 299 cm' : 'Tinggi harus 1–299 cm';
+  static String get invalidWeight =>
+      _en ? 'Weight must be between 1 and 999 kg' : 'Berat harus 1–999 kg';
+  static String get scopeMyTeam => _en ? 'My Team' : 'Tim Saya';
+  static String get scopeRegion => _en ? 'Region' : 'Wilayah';
+  static String get scopeGlobal => _en ? 'Global' : 'Global';
+  static String get joinByCode => _en ? 'Join with code' : 'Gabung lewat kode';
+  static String get teamCodeLabel => _en ? 'Team code' : 'Kode tim';
+  static String get regenerateCode => _en ? 'New code' : 'Kode baru';
   static String get addLogo => _en ? 'Add Logo' : 'Tambah Logo';
   static String get back => _en ? 'Back' : 'Kembali';
   static String get durationLabel => _en ? 'DURATION' : 'DURASI';

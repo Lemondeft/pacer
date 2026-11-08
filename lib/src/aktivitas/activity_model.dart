@@ -137,6 +137,61 @@ int streakNext({
   return 1;
 }
 
+/// Display state of a streak relative to [now].
+/// - [active]: worked out today.
+/// - [atRisk]: last workout was yesterday — run today to keep it.
+/// - [inactive]: no workout yesterday or today (streak is broken / none).
+enum StreakStatus { active, atRisk, inactive }
+
+DateTime _day(DateTime d) => DateTime(d.year, d.month, d.day);
+
+/// Status of a stored streak row. The DB count is only recomputed on the
+/// next workout, so a gap must be detected client-side.
+StreakStatus streakStatusOf({
+  required int count,
+  required DateTime? last,
+  required DateTime now,
+}) {
+  if (count <= 0 || last == null) return StreakStatus.inactive;
+  final gap = _day(now).difference(_day(last)).inDays;
+  if (gap <= 0) return StreakStatus.active;
+  if (gap == 1) return StreakStatus.atRisk;
+  return StreakStatus.inactive;
+}
+
+/// Streak count to display: the stored count while still alive, 0 once
+/// a full day has been missed.
+int effectiveStreak({
+  required int count,
+  required DateTime? last,
+  required DateTime now,
+}) =>
+    streakStatusOf(count: count, last: last, now: now) == StreakStatus.inactive
+    ? 0
+    : count;
+
+/// Mon..Sun done flags for the week containing [now]: the trailing [count]
+/// days ending at [last]. Pass the effective count so broken streaks
+/// don't paint stale days.
+List<bool> streakWeek({
+  required int count,
+  required DateTime? last,
+  required DateTime now,
+}) {
+  final monday = _day(now).subtract(Duration(days: now.weekday - 1));
+  return [
+    for (var i = 0; i < 7; i++)
+      last != null &&
+          count > 0 &&
+          () {
+            final back = _day(last)
+                .difference(DateTime(monday.year, monday.month, monday.day + i))
+                .inDays;
+            return back >= 0 && back < count;
+          }(),
+  ];
+}
+
 DateTime? _parseDate(dynamic value) =>
     value == null ? null : DateTime.parse(value as String);
 

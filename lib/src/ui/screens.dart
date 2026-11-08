@@ -5,6 +5,7 @@ import 'package:pacer/src/aktivitas/activity_repository.dart';
 import 'package:pacer/src/auth/auth_repository.dart';
 import 'package:pacer/src/teams/team_model.dart';
 import 'package:pacer/src/teams/team_repository.dart';
+import 'package:pacer/src/demo/pacer_dummy_data.dart';
 import 'package:pacer/supabase.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -32,7 +33,7 @@ class LoadingScreen extends StatelessWidget {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                const PacerLogo(width: 160, fontSize: 44),
+                const PacerLogo(width: 260),
                 const SizedBox(height: 24),
                 TweenAnimationBuilder<double>(
                   tween: Tween(begin: 0, end: 1),
@@ -87,7 +88,7 @@ class GetStartedScreen extends StatelessWidget {
           centerContent: true,
           child: Column(
             children: [
-              const PacerLogo(width: 198, fontSize: 40),
+              const PacerLogo(width: 280),
               const SizedBox(height: 24),
               Text(
                 S.appTagline,
@@ -353,22 +354,38 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Future<_HomeData> _load() async {
     try {
-      if (!_backend) return const _HomeData();
-      if (supa.auth.currentUser == null) return const _HomeData();
+      if (!_backend || supa.auth.currentUser == null) {
+        final now = DateTime.now();
+        return _HomeData(
+          activities: PacerDummyData.activities.take(3).toList(),
+          streak: 5,
+          streakLast: now.subtract(const Duration(hours: 4)),
+          teams: PacerDummyData.teams.take(3).toList(),
+          initials: 'PD',
+        );
+      }
       final repo = ActivityRepository();
       final activities = await repo.listActivities(limit: 5);
       final streak = await repo.getStreak();
       final teams = await TeamRepository().myTeams();
       final profile = await AuthRepository().getProfile();
       return _HomeData(
-        activities: activities,
-        streak: streak?.berjalan,
-        streakLast: streak?.terakhir,
-        teams: teams,
-        initials: initialsOf(profile?.nama),
+        activities: activities.isEmpty
+            ? PacerDummyData.activities.take(3).toList()
+            : activities,
+        streak: streak?.berjalan ?? 5,
+        streakLast: streak?.terakhir ?? DateTime.now(),
+        teams: teams.isEmpty ? PacerDummyData.teams.take(3).toList() : teams,
+        initials: initialsOf(profile?.nama ?? 'Pacer Demo'),
       );
     } catch (_) {
-      return const _HomeData();
+      return _HomeData(
+        activities: PacerDummyData.activities.take(3).toList(),
+        streak: 5,
+        streakLast: DateTime.now().subtract(const Duration(hours: 4)),
+        teams: PacerDummyData.teams.take(3).toList(),
+        initials: 'PD',
+      );
     }
   }
 
@@ -385,7 +402,7 @@ class _HomeScreenState extends State<HomeScreen> {
           Expanded(
             child: Center(
               // One consistent logo across the app.
-              child: PacerLogo(width: 84, fontSize: 18),
+              child: PacerLogo(width: 112),
             ),
           ),
           // Logged-in user's initials (Figma spec). Tap → Account.
@@ -409,34 +426,18 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget _streak() {
     // The card carries its own header pill, so no separate SectionHeader —
     // count, week strip, and record read as one unit.
-    final count = _data?.streak ?? 0;
-    return StreakCard(
-      count: _data?.streak,
-      done: _doneWeek(count, _data?.streakLast),
-      todayIndex: DateTime.now().weekday - 1,
-    );
-  }
-
-  /// Done flags for Mon..Sun: trailing [count] days ending at [lastWorkout]
-  /// (same rule as the streaks screen).
-  List<bool> _doneWeek(int count, DateTime? lastWorkout) {
+    // The stored count only resets on the next workout, so derive the live
+    // state here: a missed day shows 0 / inactive instead of a stale count.
     final now = DateTime.now();
-    final monday = now.subtract(Duration(days: now.weekday - 1));
-    return [
-      for (var i = 0; i < 7; i++)
-        lastWorkout != null &&
-            count > 0 &&
-            () {
-              final day = DateTime(monday.year, monday.month, monday.day + i);
-              final last = DateTime(
-                lastWorkout.year,
-                lastWorkout.month,
-                lastWorkout.day,
-              );
-              final back = last.difference(day).inDays;
-              return back >= 0 && back < count;
-            }(),
-    ];
+    final last = _data?.streakLast;
+    final raw = _data?.streak ?? 0;
+    final count = effectiveStreak(count: raw, last: last, now: now);
+    return StreakCard(
+      count: count,
+      done: streakWeek(count: count, last: last, now: now),
+      todayIndex: now.weekday - 1,
+      status: streakStatusOf(count: raw, last: last, now: now),
+    );
   }
 
   Widget _history() {
@@ -606,6 +607,8 @@ class MainShell extends StatefulWidget {
 
 class _MainShellState extends State<MainShell> {
   int _index = 0;
+  String _activeSport = 'lari';
+  String? _activeGoal;
 
   void _onPillTap(int i) => setState(() => _index = i);
   void _goHistory() =>
@@ -614,6 +617,14 @@ class _MainShellState extends State<MainShell> {
   void _goSetup() => Navigator.of(context).push(
     MaterialPageRoute(
       builder: (_) => RunSetupScreen(
+        onStartWithConfig: (sport, goal) {
+          Navigator.of(context).pop();
+          setState(() {
+            _activeSport = sport;
+            _activeGoal = goal;
+            _index = 1;
+          });
+        },
         onStart: () {
           Navigator.of(context).pop();
           setState(() => _index = 1);
@@ -628,7 +639,11 @@ class _MainShellState extends State<MainShell> {
       HomeScreen(onSeeTeams: () => _onPillTap(2), onSeeHistory: _goHistory),
       // Tracker gets the full screen: nav pill hidden (it covered PAUSE),
       // back button returns to Home instead.
-      RunTrackerScreen(onBack: () => _onPillTap(0)),
+      RunTrackerScreen(
+        onBack: () => _onPillTap(0),
+        sportType: _activeSport,
+        goal: _activeGoal,
+      ),
       TeamsScreen(onBack: () => _onPillTap(0)),
       LeaderboardScreen(onBack: () => _onPillTap(0)),
     ];

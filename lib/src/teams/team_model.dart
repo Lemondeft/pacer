@@ -11,8 +11,12 @@ class Team {
   final double? targetNilai;
   final String? dibuatOleh;
 
-  /// Shareable join code (invite_code, 8-char). Null on rows read before
-  /// the invite-code migration.
+  /// Private teams are hidden from the directory and join by secret code.
+  final bool isPrivate;
+
+  /// Join code. NOT part of the teams row anymore (it lives in
+  /// team_secrets; managers fetch it via TeamRepository.getInviteCode).
+  /// Only used for local/demo data.
   final String? inviteCode;
   final DateTime? createdAt;
 
@@ -21,6 +25,7 @@ class Team {
     required this.nama,
     this.targetNilai,
     this.dibuatOleh,
+    this.isPrivate = true,
     this.inviteCode,
     this.createdAt,
   });
@@ -30,6 +35,7 @@ class Team {
     nama: json['nama'] as String,
     targetNilai: jsonToDouble(json['target_nilai']),
     dibuatOleh: json['dibuat_oleh'] as String?,
+    isPrivate: json['is_private'] as bool? ?? true,
     inviteCode: json['invite_code'] as String?,
     createdAt: _parseDate(json['created_at']),
   );
@@ -39,6 +45,7 @@ class Team {
     'nama': nama,
     'target_nilai': targetNilai,
     'dibuat_oleh': dibuatOleh,
+    'is_private': isPrivate,
     'invite_code': inviteCode,
     'created_at': createdAt?.toIso8601String(),
   };

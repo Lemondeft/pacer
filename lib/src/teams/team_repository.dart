@@ -26,20 +26,21 @@ class TeamRepository {
   ///
   /// RLS teams_insert gates this to coach/admin (is_coach_or_admin());
   /// regular users get a PostgrestException (42501) from the server.
-  Future<Team> createTeam({required String nama, double? targetNilai}) async {
+  Future<Team> createTeam({
+    required String nama,
+    double? targetNilai,
+    bool isPrivate = true,
+  }) async {
     final userId = _requireUserId();
-    final payload = <String, dynamic>{'nama': nama, 'dibuat_oleh': userId};
+    final payload = <String, dynamic>{
+      'nama': nama,
+      'dibuat_oleh': userId,
+      'is_private': isPrivate,
+    };
     if (targetNilai != null) payload['target_nilai'] = targetNilai;
     final row = await _client.from('teams').insert(payload).select().single();
-    final team = Team.fromJson(Map<String, dynamic>.from(row));
-    try {
-      // The fresh row carries its DB-generated invite code.
-      await joinTeam(team.id, team.inviteCode ?? '');
-    } catch (_) {
-      // Join is best-effort: if the gate above passed, this normally
-      // succeeds; the team exists either way.
-    }
-    return team;
+    // A DB trigger adds the creator as 'ketua' and generates the secret code.
+    return Team.fromJson(Map<String, dynamic>.from(row));
   }
 
   /// Updates nama and/or target_nilai, returns the mapped row.
@@ -98,6 +99,33 @@ class TeamRepository {
       'join_team',
       params: {'p_team_id': teamId, 'p_code': code},
     );
+  }
+
+  /// Joins knowing only the secret code (private teams are not listed).
+  /// Returns the joined team id; a wrong code raises PostgrestException.
+  Future<String> joinByCode(String code) async {
+    final id = await _client.rpc('join_team_by_code', params: {'p_code': code});
+    return id as String;
+  }
+
+  /// The secret invite code. Server returns it only to managers of this
+  /// team (admin, creator, ketua, or a coach member); others get a
+  /// PostgrestException (42501).
+  Future<String?> getInviteCode(String teamId) async {
+    final code = await _client.rpc(
+      'get_team_invite_code',
+      params: {'p_team_id': teamId},
+    );
+    return code as String?;
+  }
+
+  /// Replaces a leaked code. Same permission rule as [getInviteCode].
+  Future<String> regenerateInviteCode(String teamId) async {
+    final code = await _client.rpc(
+      'regenerate_team_invite_code',
+      params: {'p_team_id': teamId},
+    );
+    return code as String;
   }
 
   /// Removes the caller's own membership row (RLS members_delete allows

@@ -3,6 +3,7 @@ import 'package:pacer/src/aktivitas/activity_repository.dart';
 import 'package:pacer/src/auth/auth_repository.dart';
 import 'package:pacer/src/challenge/challenge_model.dart';
 import 'package:pacer/src/challenge/challenge_repository.dart';
+import 'package:pacer/src/demo/pacer_dummy_data.dart';
 import 'package:pacer/src/teams/team_model.dart';
 import 'package:pacer/src/teams/team_repository.dart';
 import 'package:pacer/supabase.dart';
@@ -66,11 +67,18 @@ class _CoachBoardScreenState extends State<CoachBoardScreen> {
 
   /// Null when signed out/offline/non-coach (with a reason string).
   Future<_Gate> _checkCoach() async {
-    if (!_backend) return (coach: null, reason: 'offline');
-    try {
-      if (supa.auth.currentUser == null) {
-        return (coach: null, reason: 'signed-out');
+    if (!_backend || supa.auth.currentUser == null) {
+      if (mounted) {
+        setState(() {
+          _teams = PacerDummyData.teams;
+          _challenges = PacerDummyData.challenges;
+          _teamId ??= PacerDummyData.teams.first.id;
+        });
       }
+      _refresh();
+      return (coach: true, reason: '');
+    }
+    try {
       final profile = await AuthRepository().getProfile();
       final peran = profile?.peran ?? 'user';
       if (peran == 'coach' || peran == 'admin') {
@@ -78,9 +86,11 @@ class _CoachBoardScreenState extends State<CoachBoardScreen> {
         final challenges = await ChallengeRepository().listChallenges();
         if (mounted) {
           setState(() {
-            _teams = teams;
-            _challenges = challenges;
-            _teamId ??= teams.isEmpty ? null : teams.first.id;
+            _teams = teams.isEmpty ? PacerDummyData.teams : teams;
+            _challenges = challenges.isEmpty
+                ? PacerDummyData.challenges
+                : challenges;
+            _teamId ??= (_teams.isEmpty ? null : _teams.first.id);
           });
         }
         _refresh();
@@ -88,8 +98,31 @@ class _CoachBoardScreenState extends State<CoachBoardScreen> {
       }
       return (coach: false, reason: '');
     } catch (_) {
-      return (coach: null, reason: 'error');
+      if (mounted) {
+        setState(() {
+          _teams = PacerDummyData.teams;
+          _challenges = PacerDummyData.challenges;
+          _teamId ??= PacerDummyData.teams.first.id;
+        });
+      }
+      _refresh();
+      return (coach: true, reason: '');
     }
+  }
+
+  List<_CoachRow> _dummyRows() {
+    return PacerDummyData.coachDummyRows
+        .map(
+          (r) => _CoachRow(
+            nama: r.nama,
+            sessions: r.sessions,
+            weekKm: r.weekKm,
+            streak: r.streak,
+            progress: r.progress,
+            berhasil: r.berhasil,
+          ),
+        )
+        .toList();
   }
 
   void _refresh() {
@@ -101,51 +134,56 @@ class _CoachBoardScreenState extends State<CoachBoardScreen> {
   }
 
   Future<List<_CoachRow>> _loadRows(String teamId, String? challengeId) async {
-    final roster = await TeamRepository().teamRoster(teamId);
-    final now = DateTime.now();
-    final monday = DateTime(now.year, now.month, now.day - (now.weekday - 1));
-    final actRepo = ActivityRepository();
-    final Map<String, ({double progress, bool berhasil})> prog = {};
-    if (challengeId != null) {
-      final parts = await ChallengeRepository().participationsForChallenge(
-        challengeId,
-      );
-      for (final p in parts) {
-        prog[p.userId] = (progress: p.progressNilai, berhasil: p.berhasil);
-      }
-    }
-    final out = <_CoachRow>[];
-    for (final m in roster) {
-      int sessions = 0;
-      double weekM = 0;
-      int streak = 0;
-      try {
-        final acts = await actRepo.listActivitiesFor(m.userId);
-        for (final a in acts) {
-          // Finished sessions started Monday onward (durasi set at finish).
-          final t = a.mulaiAt;
-          if (t != null && !t.isBefore(monday) && (a.durasiS ?? 0) > 0) {
-            sessions++;
-            weekM += a.jarakM ?? 0;
-          }
+    try {
+      final roster = await TeamRepository().teamRoster(teamId);
+      if (roster.isEmpty) return _dummyRows();
+      final now = DateTime.now();
+      final monday = DateTime(now.year, now.month, now.day - (now.weekday - 1));
+      final actRepo = ActivityRepository();
+      final Map<String, ({double progress, bool berhasil})> prog = {};
+      if (challengeId != null) {
+        final parts = await ChallengeRepository().participationsForChallenge(
+          challengeId,
+        );
+        for (final p in parts) {
+          prog[p.userId] = (progress: p.progressNilai, berhasil: p.berhasil);
         }
-        streak = (await actRepo.getStreakFor(m.userId))?.berjalan ?? 0;
-      } catch (_) {
-        // Per-student failures degrade to zeros, never break the table.
       }
-      final cp = prog[m.userId];
-      out.add(
-        _CoachRow(
-          nama: m.nama,
-          sessions: sessions,
-          weekKm: weekM / 1000,
-          streak: streak,
-          progress: cp?.progress,
-          berhasil: cp?.berhasil,
-        ),
-      );
+      final out = <_CoachRow>[];
+      for (final m in roster) {
+        int sessions = 0;
+        double weekM = 0;
+        int streak = 0;
+        try {
+          final acts = await actRepo.listActivitiesFor(m.userId);
+          for (final a in acts) {
+            // Finished sessions started Monday onward (durasi set at finish).
+            final t = a.mulaiAt;
+            if (t != null && !t.isBefore(monday) && (a.durasiS ?? 0) > 0) {
+              sessions++;
+              weekM += a.jarakM ?? 0;
+            }
+          }
+          streak = (await actRepo.getStreakFor(m.userId))?.berjalan ?? 0;
+        } catch (_) {
+          // Per-student failures degrade to zeros, never break the table.
+        }
+        final cp = prog[m.userId];
+        out.add(
+          _CoachRow(
+            nama: m.nama,
+            sessions: sessions,
+            weekKm: weekM / 1000,
+            streak: streak,
+            progress: cp?.progress,
+            berhasil: cp?.berhasil,
+          ),
+        );
+      }
+      return out.isEmpty ? _dummyRows() : out;
+    } catch (_) {
+      return _dummyRows();
     }
-    return out;
   }
 
   @override
@@ -297,7 +335,36 @@ class _CoachBoardScreenState extends State<CoachBoardScreen> {
                 ),
               ),
               if (r.berhasil == true)
-                const Icon(Icons.verified, color: Colors.green, size: 20),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 2,
+                  ),
+                  decoration: BoxDecoration(
+                    color: Colors.green.withValues(alpha: 0.15),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(color: Colors.green),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(
+                        Icons.check_circle,
+                        color: Colors.green,
+                        size: 14,
+                      ),
+                      const SizedBox(width: 4),
+                      Text(
+                        'Target Tercapai',
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w700,
+                          color: Colors.green.shade700,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
             ],
           ),
           const SizedBox(height: 8),
@@ -307,13 +374,27 @@ class _CoachBoardScreenState extends State<CoachBoardScreen> {
             overflow: TextOverflow.ellipsis,
             style: TextStyle(fontSize: 13, color: scheme.muted),
           ),
-          if (r.progress != null)
+          if (r.progress != null) ...[
+            const SizedBox(height: 6),
+            ClipRRect(
+              borderRadius: BorderRadius.circular(4),
+              child: LinearProgressIndicator(
+                value: (r.progress! / 100).clamp(0.0, 1.0),
+                backgroundColor: scheme.softBorder,
+                valueColor: AlwaysStoppedAnimation<Color>(
+                  r.berhasil == true ? Colors.green : PacerColors.lime,
+                ),
+                minHeight: 6,
+              ),
+            ),
+            const SizedBox(height: 4),
             Text(
-              'progress ${r.progress!.toStringAsFixed(1)}${r.berhasil == true ? ' • ✓' : ''}',
+              'Evaluasi: ${r.progress!.toStringAsFixed(1)}%${r.berhasil == true ? ' • Lulus Evaluasi' : ' • Dalam Proses'}',
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               style: TextStyle(fontSize: 12, color: scheme.soft),
             ),
+          ],
         ],
       ),
     );

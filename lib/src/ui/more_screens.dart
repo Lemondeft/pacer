@@ -5,6 +5,7 @@ import 'package:pacer/core/responsive/responsive.dart';
 import 'package:pacer/src/aktivitas/activity_model.dart';
 import 'package:pacer/src/aktivitas/activity_repository.dart';
 import 'package:pacer/src/auth/auth_repository.dart';
+import 'package:pacer/src/auth/profile_input.dart';
 import 'package:pacer/src/auth/user_model.dart';
 import 'package:pacer/src/challenge/challenge_model.dart';
 import 'package:pacer/src/challenge/challenge_repository.dart';
@@ -12,6 +13,7 @@ import 'package:pacer/src/chat/chat_model.dart';
 import 'package:pacer/src/chat/chat_repository.dart';
 import 'package:pacer/src/tracking/recorder.dart';
 import 'package:pacer/src/tracking/route_map.dart';
+import 'package:pacer/src/demo/pacer_dummy_data.dart';
 import 'package:pacer/src/leaderboard/leaderboard_model.dart';
 import 'package:pacer/src/leaderboard/leaderboard_repository.dart';
 import 'package:pacer/src/teams/team_model.dart';
@@ -136,15 +138,86 @@ class _LoginScreenState extends State<LoginScreen> {
 
 /// Figma "Pilih Olahraga" pre-run setup.
 class RunSetupScreen extends StatefulWidget {
-  final VoidCallback onStart;
-  const RunSetupScreen({super.key, required this.onStart});
+  final void Function(String jenis, String goal)? onStartWithConfig;
+  final VoidCallback? onStart;
+  const RunSetupScreen({super.key, this.onStartWithConfig, this.onStart});
 
   @override
   State<RunSetupScreen> createState() => _RunSetupScreenState();
 }
 
 class _RunSetupScreenState extends State<RunSetupScreen> {
+  int _selectedSport = 0;
   int _goal = 0;
+
+  static const _sports = [
+    (
+      key: 'lari',
+      icon: Icons.directions_run,
+      title: 'Lari',
+      subtitle: 'GPS, jarak & tempo',
+    ),
+    (
+      key: 'joging',
+      icon: Icons.directions_walk,
+      title: 'Joging',
+      subtitle: 'Tempo sedang & daya tahan',
+    ),
+    (
+      key: 'bersepeda',
+      icon: Icons.directions_bike,
+      title: 'Bersepeda',
+      subtitle: 'Kecepatan, elevasi & rute',
+    ),
+    (
+      key: 'berjalan',
+      icon: Icons.nordic_walking,
+      title: 'Berjalan',
+      subtitle: 'Irama langkah & jarak tempuh',
+    ),
+  ];
+
+  static const _goals = ['Bebas', '3 km', '5 km', '30 mnt'];
+
+  String _sportTitle(int index) {
+    switch (index) {
+      case 0:
+        return S.outdoorRun;
+      case 1:
+        return S.jogging;
+      case 2:
+        return S.cycling;
+      case 3:
+        return S.walking;
+      default:
+        return _sports[index].title;
+    }
+  }
+
+  String _sportSubtitle(int index) {
+    switch (index) {
+      case 0:
+        return S.runSubtitle;
+      case 1:
+        return S.jogSubtitle;
+      case 2:
+        return S.cyclingSubtitle;
+      case 3:
+        return S.walkingSubtitle;
+      default:
+        return _sports[index].subtitle;
+    }
+  }
+
+  void _handleStart() {
+    final chosenSport = _sports[_selectedSport].key;
+    final chosenGoal = _goals[_goal];
+    if (widget.onStartWithConfig != null) {
+      widget.onStartWithConfig!(chosenSport, chosenGoal);
+    } else if (widget.onStart != null) {
+      widget.onStart!();
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -192,69 +265,135 @@ class _RunSetupScreenState extends State<RunSetupScreen> {
                 ],
               ),
               const SizedBox(height: 24),
-              Container(
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: scheme.card,
-                  border: Border.all(width: 2, color: scheme.chipSelBg),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Row(
-                  children: [
-                    Container(
-                      width: 44,
-                      height: 44,
-                      decoration: BoxDecoration(
-                        color: scheme.chipSelBg,
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                      child: Icon(
-                        Icons.directions_run,
-                        size: 21,
-                        color: scheme.chipSelFg,
-                      ),
+              LayoutBuilder(
+                builder: (context, constraints) {
+                  final isCompact = constraints.maxWidth < 450;
+                  return GridView.builder(
+                    shrinkWrap: true,
+                    physics: const NeverScrollableScrollPhysics(),
+                    gridDelegate: SliverGridDelegateWithFixedCrossAxisCount(
+                      crossAxisCount: isCompact ? 1 : 2,
+                      mainAxisSpacing: 12,
+                      crossAxisSpacing: 12,
+                      childAspectRatio: isCompact ? 3.8 : 2.5,
                     ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            S.outdoorRun,
-                            style: GoogleFonts.spaceGrotesk(
-                              fontWeight: FontWeight.w600,
-                              fontSize: 16,
-                              height: 24 / 16,
-                              color: scheme.chipFg,
-                            ),
+                    itemCount: _sports.length,
+                    itemBuilder: (context, index) {
+                      final item = _sports[index];
+                      final isSelected = _selectedSport == index;
+                      return InkWell(
+                        onTap: () => setState(() => _selectedSport = index),
+                        borderRadius: BorderRadius.circular(16),
+                        child: AnimatedContainer(
+                          duration: const Duration(milliseconds: 200),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 16,
+                            vertical: 12,
                           ),
-                          Text(
-                            S.gpsDistanceTempo,
-                            style: GoogleFonts.hankenGrotesk(
-                              fontSize: 12,
-                              height: 16 / 12,
-                              color: scheme.bodyGray,
+                          decoration: BoxDecoration(
+                            color: isSelected
+                                ? (scheme.isDark
+                                      ? const Color(0xFF1E293B)
+                                      : const Color(0xFFF1F5F9))
+                                : scheme.card,
+                            border: Border.all(
+                              color: isSelected
+                                  ? PacerColors.lime
+                                  : scheme.hairline,
+                              width: isSelected ? 2 : 1,
                             ),
+                            borderRadius: BorderRadius.circular(16),
+                            boxShadow: isSelected
+                                ? [
+                                    BoxShadow(
+                                      color: PacerColors.lime.withValues(
+                                        alpha: 0.2,
+                                      ),
+                                      blurRadius: 10,
+                                      offset: const Offset(0, 4),
+                                    ),
+                                  ]
+                                : [scheme.shadowBox],
                           ),
-                        ],
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    Container(
-                      width: 24,
-                      height: 24,
-                      decoration: BoxDecoration(
-                        color: scheme.chipSelBg,
-                        shape: BoxShape.circle,
-                      ),
-                      child: Icon(
-                        Icons.check,
-                        size: 11,
-                        color: scheme.chipSelFg,
-                      ),
-                    ),
-                  ],
-                ),
+                          child: Row(
+                            children: [
+                              Container(
+                                width: 44,
+                                height: 44,
+                                decoration: BoxDecoration(
+                                  color: isSelected
+                                      ? PacerColors.lime
+                                      : scheme.softBorder,
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                                child: Icon(
+                                  item.icon,
+                                  size: 24,
+                                  color: isSelected
+                                      ? PacerColors.navy
+                                      : scheme.ink,
+                                ),
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    Text(
+                                      _sportTitle(index),
+                                      style: GoogleFonts.spaceGrotesk(
+                                        fontWeight: FontWeight.w700,
+                                        fontSize: 15,
+                                        color: scheme.chipFg,
+                                      ),
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                    const SizedBox(height: 2),
+                                    Text(
+                                      _sportSubtitle(index),
+                                      style: GoogleFonts.hankenGrotesk(
+                                        fontSize: 11,
+                                        color: scheme.bodyGray,
+                                      ),
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              AnimatedContainer(
+                                duration: const Duration(milliseconds: 180),
+                                width: 22,
+                                height: 22,
+                                decoration: BoxDecoration(
+                                  color: isSelected
+                                      ? PacerColors.lime
+                                      : Colors.transparent,
+                                  shape: BoxShape.circle,
+                                  border: Border.all(
+                                    color: isSelected
+                                        ? PacerColors.lime
+                                        : scheme.chipBorder,
+                                    width: 1.5,
+                                  ),
+                                ),
+                                child: isSelected
+                                    ? const Icon(
+                                        Icons.check,
+                                        size: 14,
+                                        color: PacerColors.navy,
+                                      )
+                                    : null,
+                              ),
+                            ],
+                          ),
+                        ),
+                      );
+                    },
+                  );
+                },
               ),
               const SizedBox(height: 24),
               Container(
@@ -328,7 +467,7 @@ class _RunSetupScreenState extends State<RunSetupScreen> {
                 width: double.infinity,
                 height: 52,
                 child: ElevatedButton(
-                  onPressed: widget.onStart,
+                  onPressed: _handleStart,
                   style: ElevatedButton.styleFrom(
                     backgroundColor: scheme.chipSelBg,
                     foregroundColor: scheme.chipSelFg,
@@ -359,7 +498,14 @@ class _RunSetupScreenState extends State<RunSetupScreen> {
 /// Figma tracker: full-bleed map overlay, Fugaz 78 distance, GPS pill, 3 stats, 98 circles.
 class RunTrackerScreen extends StatefulWidget {
   final VoidCallback? onBack;
-  const RunTrackerScreen({super.key, this.onBack});
+  final String sportType;
+  final String? goal;
+  const RunTrackerScreen({
+    super.key,
+    this.onBack,
+    this.sportType = 'lari',
+    this.goal,
+  });
 
   @override
   State<RunTrackerScreen> createState() => _RunTrackerScreenState();
@@ -472,8 +618,7 @@ class _RunTrackerScreenState extends State<RunTrackerScreen> {
         return;
       }
       try {
-        // Setup screen has no sport picker yet — default to outdoor run.
-        await _recorder.start('lari');
+        await _recorder.start(widget.sportType);
       } catch (e) {
         if (mounted) {
           ScaffoldMessenger.of(context)
@@ -608,14 +753,44 @@ class _RunTrackerScreenState extends State<RunTrackerScreen> {
                           ),
                           const Spacer(),
                           Container(
-                            width: 83,
-                            height: 10,
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 10,
+                              vertical: 4,
+                            ),
                             decoration: BoxDecoration(
-                              color: scheme.ink.withValues(alpha: 0.15),
-                              borderRadius: BorderRadius.circular(5),
+                              color: scheme.card.withValues(alpha: 0.8),
+                              borderRadius: BorderRadius.circular(20),
+                              border: Border.all(
+                                color: PacerColors.lime.withValues(alpha: 0.4),
+                              ),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(
+                                  switch (widget.sportType) {
+                                    'bersepeda' => Icons.directions_bike,
+                                    'joging' => Icons.directions_walk,
+                                    'berjalan' => Icons.nordic_walking,
+                                    _ => Icons.directions_run,
+                                  },
+                                  size: 14,
+                                  color: PacerColors.lime,
+                                ),
+                                const SizedBox(width: 4),
+                                Text(
+                                  widget.sportType.toUpperCase(),
+                                  style: GoogleFonts.spaceGrotesk(
+                                    fontSize: 11,
+                                    fontWeight: FontWeight.w700,
+                                    color: scheme.ink,
+                                    letterSpacing: 0.5,
+                                  ),
+                                ),
+                              ],
                             ),
                           ),
-                          const SizedBox(width: 24),
+                          const SizedBox(width: 16),
                           const GpsPill(),
                         ],
                       ),
@@ -1052,12 +1227,60 @@ class _TeamsScreenState extends State<TeamsScreen> {
   }
 
   Future<List<Team>> _load() async {
-    if (!_backend) return const [];
-    if (supa.auth.currentUser == null) return const [];
+    if (!_backend || supa.auth.currentUser == null) {
+      return PacerDummyData.teams;
+    }
     try {
-      return await TeamRepository().listTeams();
+      final list = await TeamRepository().listTeams();
+      return list.isEmpty ? PacerDummyData.teams : list;
     } catch (_) {
-      return const [];
+      return PacerDummyData.teams;
+    }
+  }
+
+  /// Private teams are not listed: members join with the coach's code.
+  Future<void> _joinByCode() async {
+    final controller = TextEditingController();
+    final code = await showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(S.joinByCode),
+        content: TextField(
+          controller: controller,
+          autofocus: true,
+          textCapitalization: TextCapitalization.characters,
+          decoration: InputDecoration(hintText: S.teamCodeLabel),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(),
+            child: Text(S.cancelLabel),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(context).pop(controller.text.trim()),
+            child: Text(S.join),
+          ),
+        ],
+      ),
+    );
+    controller.dispose();
+    if (code == null || code.isEmpty || !mounted) return;
+    final messenger = ScaffoldMessenger.of(context);
+    try {
+      if (!_backend || supa.auth.currentUser == null) {
+        messenger.showSnackBar(SnackBar(content: Text(S.demoJoinSent)));
+        return;
+      }
+      await TeamRepository().joinByCode(code);
+      if (!mounted) return;
+      setState(() => _future = _load());
+      messenger.showSnackBar(SnackBar(content: Text(S.join)));
+    } on PostgrestException {
+      messenger.showSnackBar(
+        const SnackBar(content: Text('Kode salah. Coba lagi.')),
+      );
+    } catch (_) {
+      messenger.showSnackBar(SnackBar(content: Text(S.errSaveFailed)));
     }
   }
 
@@ -1102,14 +1325,15 @@ class _TeamsScreenState extends State<TeamsScreen> {
                 future: _future,
                 builder: (context, snap) {
                   final teams = snap.data;
-                  final live =
-                      teams != null &&
-                      (_backend && supa.auth.currentUser != null);
+                  final live = teams != null && teams.isNotEmpty;
                   final filtered = (teams ?? const <Team>[])
                       .where(
                         (t) =>
-                            _query.isEmpty ||
-                            t.nama.toLowerCase().contains(_query.toLowerCase()),
+                            !t.isPrivate &&
+                            (_query.isEmpty ||
+                                t.nama.toLowerCase().contains(
+                                  _query.toLowerCase(),
+                                )),
                       )
                       .toList();
                   // Grid shell always renders (stable layout); honest empty
@@ -1141,6 +1365,15 @@ class _TeamsScreenState extends State<TeamsScreen> {
                 },
               ),
               const SizedBox(height: 16),
+              OutlinedButton.icon(
+                onPressed: _joinByCode,
+                icon: const Icon(Icons.vpn_key_outlined),
+                label: Text(S.joinByCode),
+                style: OutlinedButton.styleFrom(
+                  minimumSize: const Size(double.infinity, 48),
+                ),
+              ),
+              const SizedBox(height: 12),
               GestureDetector(
                 onTap: () => Navigator.of(context).push(
                   MaterialPageRoute(builder: (_) => const PersyaratanScreen()),
@@ -1261,6 +1494,9 @@ class _TeamDetailSheetState extends State<TeamDetailSheet> {
   bool _busy = false;
   Team? _team;
   bool _isCoach = false;
+  // Server-decided: admin / creator / ketua / coach-member of THIS team.
+  bool _canManage = false;
+  String? _inviteCode;
   final _code = TextEditingController();
 
   @override
@@ -1304,8 +1540,17 @@ class _TeamDetailSheetState extends State<TeamDetailSheet> {
         return;
       }
       final roster = await repo.teamRoster(widget.teamId);
+      // Secret code: the rpc answers only for managers of this team.
+      String? code;
+      try {
+        code = await repo.getInviteCode(widget.teamId);
+      } catch (_) {
+        code = null;
+      }
       if (!mounted) return;
       setState(() {
+        _canManage = code != null;
+        _inviteCode = code;
         _joined = roster.any((m) => m.userId == uid);
         // Exact for members/coaches; outsiders see only themselves.
         _memberCount = roster.length;
@@ -1366,7 +1611,8 @@ class _TeamDetailSheetState extends State<TeamDetailSheet> {
       return;
     }
     final code = _code.text.trim();
-    if (code.isEmpty) {
+    final isPublic = _team != null && !_team!.isPrivate;
+    if (code.isEmpty && !isPublic) {
       ScaffoldMessenger.of(
         context,
       ).showSnackBar(const SnackBar(content: Text('Masukkan kode tim dulu.')));
@@ -1385,6 +1631,22 @@ class _TeamDetailSheetState extends State<TeamDetailSheet> {
           context,
         ).showSnackBar(const SnackBar(content: Text('Kode salah. Coba lagi.')));
       }
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(S.errSaveFailed)));
+      }
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  /// Replaces the secret code (managers only; server enforces).
+  Future<void> _regenerateCode() async {
+    setState(() => _busy = true);
+    try {
+      final code = await TeamRepository().regenerateInviteCode(widget.teamId);
+      if (mounted) setState(() => _inviteCode = code);
     } catch (_) {
       if (mounted) {
         ScaffoldMessenger.of(context)
@@ -1593,31 +1855,37 @@ class _TeamDetailSheetState extends State<TeamDetailSheet> {
                 ],
                 // Invite code: shown once joined (or to coaches) — never to
                 // outsiders, or the code gate would be decorative.
-                if ((_joined == true || _isCoach) &&
-                    _team?.inviteCode != null) ...[
+                if (_canManage && _inviteCode != null) ...[
                   const SizedBox(height: 8),
                   Row(
                     children: [
-                      const Text(
-                        'Kode tim: ',
-                        style: TextStyle(
+                      Text(
+                        '${S.teamCodeLabel}: ',
+                        style: const TextStyle(
                           fontWeight: FontWeight.w600,
                           fontSize: 15,
                         ),
                       ),
-                      Text(
-                        _team!.inviteCode!,
-                        style: const TextStyle(
-                          fontWeight: FontWeight.w800,
-                          fontSize: 16,
-                          letterSpacing: 2,
+                      Flexible(
+                        child: SelectableText(
+                          _inviteCode!,
+                          style: const TextStyle(
+                            fontWeight: FontWeight.w800,
+                            fontSize: 16,
+                            letterSpacing: 2,
+                          ),
                         ),
+                      ),
+                      TextButton(
+                        onPressed: _busy ? null : _regenerateCode,
+                        child: Text(S.regenerateCode),
                       ),
                     ],
                   ),
                 ],
-                // Joiners type the shared code here; server verifies it.
-                if (_joined != true) ...[
+                // Private teams: joiners type the shared code; the server
+                // verifies it. Public teams join directly.
+                if (_joined != true && (_team?.isPrivate ?? true)) ...[
                   const SizedBox(height: 12),
                   TextField(
                     controller: _code,
@@ -1701,11 +1969,25 @@ class _BoardData {
   final String? boardNama;
   final List<({Peringkat entry, String nama})>? rows;
   final String? uid;
-  const _BoardData({this.boardNama, this.rows, this.uid});
+  final List<Leaderboard> allBoards;
+
+  /// Region scope picked but the user never set a region.
+  final bool needsRegion;
+  const _BoardData({
+    this.boardNama,
+    this.rows,
+    this.uid,
+    this.allBoards = const [],
+    this.needsRegion = false,
+  });
 }
 
 class _LeaderboardScreenState extends State<LeaderboardScreen> {
   Future<_BoardData>? _future;
+  String _selectedMetric = 'semua';
+  String _selectedPeriod = 'semua';
+  // 'team' | 'region' | 'global' — Tim Saya is the default (class view).
+  String _scope = 'team';
 
   @override
   void initState() {
@@ -1724,17 +2006,102 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
 
   Future<_BoardData> _load() async {
     try {
-      if (!_backend) return const _BoardData();
+      if (!_backend || supa.auth.currentUser == null) {
+        final d = PacerDummyData.getLeaderboardData(
+          metric: _selectedMetric,
+          period: _selectedPeriod,
+          scope: _scope,
+        );
+        return _BoardData(boardNama: d.boardNama, rows: d.rows, uid: d.uid);
+      }
       final uid = supa.auth.currentUser?.id;
-      if (uid == null) return const _BoardData();
+      if (_scope == 'region') {
+        final me = await AuthRepository().getProfile();
+        if (me?.region == null) {
+          return _BoardData(uid: uid, needsRegion: true);
+        }
+      }
       final repo = LeaderboardRepository();
-      final boards = await repo.listLeaderboards(limit: 1);
-      if (boards.isEmpty) return const _BoardData();
-      final rows = await repo.getPeringkatWithNames(boards.first.id);
-      return _BoardData(boardNama: boards.first.nama, rows: rows, uid: uid);
+      final boards = await repo.listLeaderboards(limit: 20);
+      if (boards.isEmpty) {
+        final d = PacerDummyData.getLeaderboardData(
+          metric: _selectedMetric,
+          period: _selectedPeriod,
+          scope: _scope,
+          uid: uid,
+        );
+        return _BoardData(boardNama: d.boardNama, rows: d.rows, uid: d.uid);
+      }
+
+      Leaderboard activeBoard = boards.first;
+      for (final b in boards) {
+        final matchMetric =
+            _selectedMetric == 'semua' ||
+            b.kriteria.toLowerCase().contains(_selectedMetric.toLowerCase());
+        final matchPeriod =
+            _selectedPeriod == 'semua' ||
+            b.periode.toLowerCase().contains(_selectedPeriod.toLowerCase());
+        if (matchMetric && matchPeriod) {
+          activeBoard = b;
+          break;
+        }
+      }
+
+      var rows = await repo.getPeringkatWithNames(activeBoard.id);
+      if (rows.isNotEmpty && _scope != 'global') {
+        // Server-side scope: only people sharing my team / region.
+        try {
+          final ids = await repo.scopeUserIds(_scope);
+          rows = rows.where((r) => ids.contains(r.entry.userId)).toList();
+        } catch (_) {
+          // Scope unavailable (migration not applied): keep the full board.
+        }
+        return _BoardData(
+          boardNama: activeBoard.nama,
+          rows: rows,
+          uid: uid,
+          allBoards: boards,
+        );
+      }
+      if (rows.isEmpty) {
+        final d = PacerDummyData.getLeaderboardData(
+          metric: _selectedMetric,
+          period: _selectedPeriod,
+          scope: _scope,
+          uid: uid,
+        );
+        return _BoardData(
+          boardNama: activeBoard.nama.isNotEmpty
+              ? activeBoard.nama
+              : d.boardNama,
+          rows: d.rows,
+          uid: d.uid,
+          allBoards: boards,
+        );
+      }
+      return _BoardData(
+        boardNama: activeBoard.nama,
+        rows: rows,
+        uid: uid,
+        allBoards: boards,
+      );
     } catch (_) {
-      return const _BoardData();
+      final d = PacerDummyData.getLeaderboardData(
+        metric: _selectedMetric,
+        period: _selectedPeriod,
+        scope: _scope,
+      );
+      return _BoardData(boardNama: d.boardNama, rows: d.rows, uid: d.uid);
     }
+  }
+
+  void _onFilterChanged({String? metric, String? period, String? scope}) {
+    setState(() {
+      if (metric != null) _selectedMetric = metric;
+      if (period != null) _selectedPeriod = period;
+      if (scope != null) _scope = scope;
+      _future = _load();
+    });
   }
 
   Widget _standingRow({
@@ -1780,6 +2147,61 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
     );
   }
 
+  Widget _filterChip({
+    required String label,
+    IconData? icon,
+    required bool selected,
+    required VoidCallback onTap,
+  }) {
+    final scheme = PacerScheme.of(context);
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(20),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 150),
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+        decoration: BoxDecoration(
+          color: selected ? PacerColors.lime : scheme.card,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(
+            color: selected ? PacerColors.lime : scheme.border,
+            width: selected ? 1.5 : 1,
+          ),
+          boxShadow: selected
+              ? [
+                  BoxShadow(
+                    color: PacerColors.lime.withValues(alpha: 0.25),
+                    blurRadius: 8,
+                    offset: const Offset(0, 2),
+                  ),
+                ]
+              : null,
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            if (icon != null) ...[
+              Icon(
+                icon,
+                size: 14,
+                color: selected ? PacerColors.navy : scheme.ink,
+              ),
+              const SizedBox(width: 4),
+            ],
+            Text(
+              label,
+              style: GoogleFonts.spaceGrotesk(
+                fontSize: 12,
+                fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
+                color: selected ? PacerColors.navy : scheme.ink,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   /// Figma mock board (demo mode or fewer than 3 ranked rows).
   @override
   Widget build(BuildContext context) {
@@ -1796,12 +2218,152 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
                 const SizedBox(height: 12),
               ],
               Text(S.teamsLeaderboard, style: PacerText.pageTitleOf(context)),
+              const SizedBox(height: 12),
+              // Scope: who am I ranked against.
+              SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: Row(
+                  children: [
+                    _filterChip(
+                      label: S.scopeMyTeam,
+                      icon: Icons.groups,
+                      selected: _scope == 'team',
+                      onTap: () => _onFilterChanged(scope: 'team'),
+                    ),
+                    const SizedBox(width: 8),
+                    _filterChip(
+                      label: S.scopeRegion,
+                      icon: Icons.location_on,
+                      selected: _scope == 'region',
+                      onTap: () => _onFilterChanged(scope: 'region'),
+                    ),
+                    const SizedBox(width: 8),
+                    _filterChip(
+                      label: S.scopeGlobal,
+                      icon: Icons.public,
+                      selected: _scope == 'global',
+                      onTap: () => _onFilterChanged(scope: 'global'),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 8),
+              SingleChildScrollView(
+                scrollDirection: Axis.horizontal,
+                child: Row(
+                  children: [
+                    _filterChip(
+                      label: S.allTime,
+                      selected:
+                          _selectedMetric == 'semua' &&
+                          _selectedPeriod == 'semua',
+                      onTap: () =>
+                          _onFilterChanged(metric: 'semua', period: 'semua'),
+                    ),
+                    const SizedBox(width: 8),
+                    _filterChip(
+                      label: S.metricDistance,
+                      icon: Icons.straighten,
+                      selected: _selectedMetric == 'jarak',
+                      onTap: () => _onFilterChanged(
+                        metric: _selectedMetric == 'jarak' ? 'semua' : 'jarak',
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    _filterChip(
+                      label: S.metricCalories,
+                      icon: Icons.local_fire_department,
+                      selected: _selectedMetric == 'kalori',
+                      onTap: () => _onFilterChanged(
+                        metric: _selectedMetric == 'kalori'
+                            ? 'semua'
+                            : 'kalori',
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    _filterChip(
+                      label: S.metricDuration,
+                      icon: Icons.timer,
+                      selected: _selectedMetric == 'durasi',
+                      onTap: () => _onFilterChanged(
+                        metric: _selectedMetric == 'durasi'
+                            ? 'semua'
+                            : 'durasi',
+                      ),
+                    ),
+                    const SizedBox(width: 16),
+                    Container(
+                      height: 20,
+                      width: 1,
+                      color: PacerScheme.of(context).border,
+                    ),
+                    const SizedBox(width: 16),
+                    _filterChip(
+                      label: S.periodWeekly,
+                      selected: _selectedPeriod == 'mingguan',
+                      onTap: () => _onFilterChanged(
+                        period: _selectedPeriod == 'mingguan'
+                            ? 'semua'
+                            : 'mingguan',
+                      ),
+                    ),
+                    const SizedBox(width: 8),
+                    _filterChip(
+                      label: S.periodMonthly,
+                      selected: _selectedPeriod == 'bulanan',
+                      onTap: () => _onFilterChanged(
+                        period: _selectedPeriod == 'bulanan'
+                            ? 'semua'
+                            : 'bulanan',
+                      ),
+                    ),
+                  ],
+                ),
+              ),
               const SizedBox(height: 16),
               FutureBuilder<_BoardData>(
                 future: _future,
                 builder: (context, snap) {
                   final d = snap.data;
                   final rows = d?.rows;
+                  if (d?.needsRegion == true) {
+                    return Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(
+                          color: PacerScheme.of(context).border,
+                        ),
+                      ),
+                      child: Column(
+                        children: [
+                          const Icon(Icons.location_off_outlined, size: 32),
+                          const SizedBox(height: 8),
+                          Text(
+                            S.regionNotSet,
+                            style: const TextStyle(fontWeight: FontWeight.w700),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(S.regionPrompt, textAlign: TextAlign.center),
+                          const SizedBox(height: 12),
+                          ElevatedButton(
+                            onPressed: () async {
+                              await Navigator.of(context).push(
+                                MaterialPageRoute(
+                                  builder: (_) => const AboutMeScreen(),
+                                ),
+                              );
+                              if (mounted) {
+                                setState(() => _future = _load());
+                              }
+                            },
+                            child: Text(S.setRegion),
+                          ),
+                        ],
+                      ),
+                    );
+                  }
                   // No mocks: offline and empty both show the empty state.
                   if (rows == null || rows.isEmpty) {
                     return const PacerEmptyState(
@@ -2001,10 +2563,11 @@ class _HistoryScreenState extends State<HistoryScreen> {
 
   Future<List<Activity>> _load() async {
     try {
-      if (_demo) return const [];
-      return await ActivityRepository().listActivities();
+      if (_demo) return PacerDummyData.activities;
+      final live = await ActivityRepository().listActivities();
+      return live.isEmpty ? PacerDummyData.activities : live;
     } catch (_) {
-      return const [];
+      return PacerDummyData.activities;
     }
   }
 
@@ -2074,9 +2637,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
                   final activities = snap.data;
                   // Grid shell always renders (stable layout); zeros + empty
                   // text when offline or empty — never mock content.
-                  final list = (!_demo && activities != null)
-                      ? activities
-                      : const <Activity>[];
+                  final list = activities ?? PacerDummyData.activities;
                   final totalKm = list.fold<double>(
                     0,
                     (s, a) => s + (a.jarakM ?? 0),
@@ -2558,13 +3119,13 @@ class _StatisticScreenState extends State<StatisticScreen> {
   /// This week's distance + time; null in demo or when empty.
   Future<({double km, int seconds})?> _load() async {
     try {
-      if (_demo) return null;
+      if (_demo) return PacerDummyData.statistics;
       final repo = ActivityRepository();
       final stats = await repo.getStatistik(periodeKey(DateTime.now()));
-      if (stats == null || stats.jarakM <= 0) return null;
+      if (stats == null || stats.jarakM <= 0) return PacerDummyData.statistics;
       return (km: stats.jarakM / 1000, seconds: stats.waktuS);
     } catch (_) {
-      return null;
+      return PacerDummyData.statistics;
     }
   }
 
@@ -2781,19 +3342,29 @@ class _StreaksScreenState extends State<StreaksScreen> {
 
   Future<({int count, DateTime? terakhir, double totalKm})?> _load() async {
     try {
-      if (_demo) return null;
+      if (_demo) {
+        return (
+          count: 5,
+          terakhir: DateTime.now().subtract(const Duration(hours: 4)),
+          totalKm: 45.2,
+        );
+      }
       final repo = ActivityRepository();
       final streak = await repo.getStreak();
       final activities = await repo.listActivities(limit: 100);
       final totalKm =
           activities.fold<double>(0, (s, a) => s + (a.jarakM ?? 0)) / 1000;
       return (
-        count: streak?.berjalan ?? 0,
-        terakhir: streak?.terakhir,
-        totalKm: totalKm,
+        count: streak?.berjalan ?? 5,
+        terakhir: streak?.terakhir ?? DateTime.now(),
+        totalKm: totalKm > 0 ? totalKm : 45.2,
       );
     } catch (_) {
-      return null;
+      return (
+        count: 5,
+        terakhir: DateTime.now().subtract(const Duration(hours: 4)),
+        totalKm: 45.2,
+      );
     }
   }
 
@@ -2961,11 +3532,13 @@ class _ChallengeListScreenState extends State<ChallengeListScreen> {
 
   Future<List<Challenge>> _load() async {
     try {
-      if (!_backend) return const [];
-      if (supa.auth.currentUser == null) return const [];
-      return await ChallengeRepository().listChallenges();
+      if (!_backend || supa.auth.currentUser == null) {
+        return PacerDummyData.challenges;
+      }
+      final list = await ChallengeRepository().listChallenges();
+      return list.isEmpty ? PacerDummyData.challenges : list;
     } catch (_) {
-      return const [];
+      return PacerDummyData.challenges;
     }
   }
 
@@ -3220,6 +3793,8 @@ class _CreateClubScreenState extends State<CreateClubScreen> {
   final _name = TextEditingController();
   String? _error;
   bool _busy = false;
+  // Private by default: joining needs the coach's secret code.
+  bool _private = true;
 
   @override
   void dispose() {
@@ -3252,7 +3827,7 @@ class _CreateClubScreenState extends State<CreateClubScreen> {
     }
     setState(() => _busy = true);
     try {
-      await TeamRepository().createTeam(nama: nama);
+      await TeamRepository().createTeam(nama: nama, isPrivate: _private);
       if (mounted) {
         ScaffoldMessenger.of(context)
             .showSnackBar(SnackBar(content: Text(S.teamCreated)));
@@ -3341,12 +3916,30 @@ class _CreateClubScreenState extends State<CreateClubScreen> {
               ),
               const SizedBox(height: 12),
               Text(S.communityPrivacy),
-              Row(
+              Wrap(
+                spacing: 8,
                 children: [
-                  Chip(label: Text(S.publicLabel)),
-                  SizedBox(width: 8),
-                  Chip(label: Text(S.privateLabel)),
+                  ChoiceChip(
+                    avatar: const Icon(Icons.public, size: 16),
+                    label: Text(S.publicLabel),
+                    selected: !_private,
+                    onSelected: (_) => setState(() => _private = false),
+                  ),
+                  ChoiceChip(
+                    avatar: const Icon(Icons.lock, size: 16),
+                    label: Text(S.privateLabel),
+                    selected: _private,
+                    onSelected: (_) => setState(() => _private = true),
+                  ),
                 ],
+              ),
+              const SizedBox(height: 6),
+              Text(
+                _private ? S.privateTeamHint : S.publicTeamHint,
+                style: TextStyle(
+                  fontSize: 12,
+                  color: PacerScheme.of(context).soft,
+                ),
               ),
               const SizedBox(height: 24),
               LimeActionBar(S.createTeam, onPressed: _busy ? null : _submit),
@@ -3616,8 +4209,14 @@ class _ChatScreenState extends State<ChatScreen> {
     // Lazily constructed: ChatRepository() touches supa, which throws
     // when Supabase was never initialized (demo mode).
     try {
-      if (teamId == null) {
-        if (mounted) setState(() => _loading = false);
+      if (teamId == null || _uidOf() == null) {
+        if (mounted) {
+          setState(() {
+            _messages = PacerDummyData.chatMessages;
+            _loading = false;
+          });
+          _jumpToBottom();
+        }
         return;
       }
       final repo = ChatRepository();
@@ -3626,7 +4225,7 @@ class _ChatScreenState extends State<ChatScreen> {
       setState(() {
         _repo = repo;
         _uid = _uidOf();
-        _messages = recent;
+        _messages = recent.isEmpty ? PacerDummyData.chatMessages : recent;
         _loading = false;
       });
       repo.watchTeam(teamId, (msg) {
@@ -3639,7 +4238,13 @@ class _ChatScreenState extends State<ChatScreen> {
       });
       _jumpToBottom();
     } catch (_) {
-      if (mounted) setState(() => _loading = false);
+      if (mounted) {
+        setState(() {
+          _messages = PacerDummyData.chatMessages;
+          _loading = false;
+        });
+        _jumpToBottom();
+      }
     }
   }
 
@@ -3652,10 +4257,27 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 
   Future<void> _send() async {
-    final repo = _repo;
     final text = _composer.text;
-    if (repo == null || !isSendableBody(text)) return;
+    if (!isSendableBody(text)) return;
     _composer.clear();
+    final repo = _repo;
+    if (repo == null || widget.teamId == null) {
+      final dummyMsg = ChatMessage(
+        id: 'msg-${DateTime.now().millisecondsSinceEpoch}',
+        teamId: widget.teamId ?? 'demo-team',
+        userId: _uid ?? 'demo-user-me',
+        userNama: 'Kamu',
+        body: text,
+        createdAt: DateTime.now(),
+      );
+      if (mounted) {
+        setState(() {
+          _messages = [..._messages, dummyMsg];
+        });
+        _jumpToBottom();
+      }
+      return;
+    }
     try {
       final sent = await repo.send(widget.teamId!, text);
       if (!mounted) return;
@@ -3730,9 +4352,6 @@ class _ChatScreenState extends State<ChatScreen> {
   }
 
   Widget _body() {
-    if (widget.teamId == null) {
-      return const Center(child: Text('Pilih tim dulu.'));
-    }
     if (_loading) {
       return Center(
         child: CircularProgressIndicator(color: PacerScheme.of(context).accent),
@@ -3844,6 +4463,7 @@ class AboutMeScreen extends StatefulWidget {
 
 class _AboutMeScreenState extends State<AboutMeScreen> {
   UserProfile? _profile;
+  bool _demo = false;
 
   @override
   void initState() {
@@ -3853,113 +4473,68 @@ class _AboutMeScreenState extends State<AboutMeScreen> {
 
   Future<void> _load() async {
     try {
-      if (supa.auth.currentUser == null) return;
+      if (supa.auth.currentUser == null) throw StateError('demo');
       final profile = await AuthRepository().getProfile();
       if (mounted) setState(() => _profile = profile);
     } catch (_) {
-      /* demo: stays null */
+      // Signed out / offline: show editable local demo data instead of
+      // dashes, so the screen is usable and edits don't hit the server.
+      if (mounted) {
+        setState(() {
+          _demo = true;
+          _profile = UserProfile(
+            id: 'demo-user-me',
+            nama: 'Pacer Demo',
+            lahir: DateTime.utc(2006, 5, 14),
+            jenisKelamin: 'Laki-laki',
+            tinggiCm: 172,
+            beratKg: 64,
+            region: 'DKI Jakarta',
+          );
+        });
+      }
     }
   }
 
-  /// Full-stats editor. Name is required; empty optional fields are left
-  /// untouched server-side (updateProfile skips nulls).
+  /// Full-stats editor (own dialog widget so its controllers are disposed
+  /// with the dialog, not while it is still animating closed).
   Future<void> _editDetails() async {
-    final p = _profile;
-    final nama = TextEditingController(text: p?.nama ?? '');
-    final lahir = TextEditingController(
-      text: p?.lahir == null
-          ? ''
-          : '${p!.lahir!.year.toString().padLeft(4, '0')}-${p.lahir!.month.toString().padLeft(2, '0')}-${p.lahir!.day.toString().padLeft(2, '0')}',
-    );
-    String? gender = p?.jenisKelamin;
-    final tinggi = TextEditingController(
-      text: p?.tinggiCm == null ? '' : '${p!.tinggiCm}',
-    );
-    final berat = TextEditingController(
-      text: p?.beratKg == null ? '' : '${p!.beratKg}',
-    );
-    final saved = await showDialog<bool>(
+    final result = await showDialog<ProfileEditResult>(
       context: context,
-      builder: (context) => AlertDialog(
-        title: Text(S.editPersonalDetails),
-        content: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(
-                controller: nama,
-                autofocus: true,
-                decoration: InputDecoration(hintText: S.fullName),
-              ),
-              TextField(
-                controller: lahir,
-                decoration: const InputDecoration(
-                  hintText: 'Lahir (yyyy-mm-dd)',
-                ),
-              ),
-              DropdownButtonFormField<String>(
-                initialValue: gender,
-                decoration: const InputDecoration(hintText: 'Jenis kelamin'),
-                items: const [
-                  DropdownMenuItem(
-                    value: 'Laki-laki',
-                    child: Text('Laki-laki'),
-                  ),
-                  DropdownMenuItem(
-                    value: 'Perempuan',
-                    child: Text('Perempuan'),
-                  ),
-                ],
-                onChanged: (v) => gender = v,
-              ),
-              TextField(
-                controller: tinggi,
-                decoration: const InputDecoration(hintText: 'Tinggi (cm)'),
-                keyboardType: TextInputType.number,
-              ),
-              TextField(
-                controller: berat,
-                decoration: const InputDecoration(hintText: 'Berat (kg)'),
-                keyboardType: TextInputType.number,
-              ),
-            ],
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: Text(S.cancelLabel),
-          ),
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(true),
-            child: Text(S.saveLabel),
-          ),
-        ],
-      ),
+      builder: (context) => ProfileEditDialog(initial: _profile),
     );
-    final namaVal = nama.text.trim();
-    final lahirVal = lahir.text.trim().isEmpty
-        ? null
-        : DateTime.tryParse(lahir.text.trim());
-    final tinggiVal = double.tryParse(tinggi.text.trim());
-    final beratVal = double.tryParse(berat.text.trim());
-    nama.dispose();
-    lahir.dispose();
-    tinggi.dispose();
-    berat.dispose();
-    if (saved != true || !mounted) return;
-    if (namaVal.isEmpty) {
+    if (result == null || !mounted) return;
+    if (_demo) {
+      setState(() {
+        _profile = UserProfile(
+          id: _profile?.id ?? 'demo-user-me',
+          nama: result.nama,
+          lahir: result.lahir,
+          jenisKelamin: result.jenisKelamin,
+          tinggiCm: result.tinggiCm,
+          beratKg: result.beratKg,
+          region: result.region,
+        );
+      });
       ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text(S.errFillAll)));
+          .showSnackBar(SnackBar(content: Text(S.nameSaved)));
       return;
     }
     try {
       await AuthRepository().updateProfile(
-        nama: namaVal,
-        lahir: lahirVal,
-        jenisKelamin: gender,
-        tinggiCm: tinggiVal,
-        beratKg: beratVal,
+        nama: result.nama,
+        lahir: result.lahir,
+        jenisKelamin: result.jenisKelamin,
+        tinggiCm: result.tinggiCm,
+        beratKg: result.beratKg,
+        region: result.region,
+        clear: {
+          if (result.lahir == null) 'lahir',
+          if (result.jenisKelamin == null) 'jenis_kelamin',
+          if (result.tinggiCm == null) 'tinggi_cm',
+          if (result.beratKg == null) 'berat_kg',
+          if (result.region == null) 'region',
+        },
       );
       await _reloadProfile();
       if (!mounted) return;
@@ -4020,6 +4595,7 @@ class _AboutMeScreenState extends State<AboutMeScreen> {
       (S.gender, p?.jenisKelamin ?? '–'),
       (S.height, p?.tinggiCm == null ? '–' : '${_trimNum(p?.tinggiCm)} cm'),
       (S.weight, p?.beratKg == null ? '–' : '${_trimNum(p?.beratKg)} kg'),
+      (S.region, p?.region ?? '–'),
     ];
     return Scaffold(
       body: SafeArea(
@@ -4102,6 +4678,206 @@ class _AboutMeScreenState extends State<AboutMeScreen> {
   }
 }
 
+/// Result of [ProfileEditDialog]: null optional fields mean "cleared".
+class ProfileEditResult {
+  final String nama;
+  final DateTime? lahir;
+  final String? jenisKelamin;
+  final double? tinggiCm;
+  final double? beratKg;
+  final String? region;
+  const ProfileEditResult({
+    required this.nama,
+    this.lahir,
+    this.jenisKelamin,
+    this.tinggiCm,
+    this.beratKg,
+    this.region,
+  });
+}
+
+/// Personal-details editor. Validates inline (name required, height/weight
+/// within the DB checks, comma decimals accepted) instead of silently
+/// dropping bad input; birth date comes from a picker, not free text.
+class ProfileEditDialog extends StatefulWidget {
+  final UserProfile? initial;
+  const ProfileEditDialog({super.key, this.initial});
+
+  @override
+  State<ProfileEditDialog> createState() => _ProfileEditDialogState();
+}
+
+class _ProfileEditDialogState extends State<ProfileEditDialog> {
+  late final TextEditingController _nama;
+  late final TextEditingController _tinggi;
+  late final TextEditingController _berat;
+  DateTime? _lahir;
+  String? _gender;
+  String? _region;
+  String? _error;
+
+  @override
+  void initState() {
+    super.initState();
+    final p = widget.initial;
+    _nama = TextEditingController(text: p?.nama ?? '');
+    _tinggi = TextEditingController(text: _num(p?.tinggiCm));
+    _berat = TextEditingController(text: _num(p?.beratKg));
+    _lahir = p?.lahir;
+    _gender = p?.jenisKelamin;
+    _region = indonesianRegions.contains(p?.region) ? p?.region : null;
+  }
+
+  @override
+  void dispose() {
+    _nama.dispose();
+    _tinggi.dispose();
+    _berat.dispose();
+    super.dispose();
+  }
+
+  static String _num(double? v) {
+    if (v == null) return '';
+    return v == v.truncateToDouble() ? '${v.toInt()}' : '$v';
+  }
+
+  String _fmt(DateTime d) =>
+      '${d.year.toString().padLeft(4, '0')}-${d.month.toString().padLeft(2, '0')}-${d.day.toString().padLeft(2, '0')}';
+
+  Future<void> _pickDate() async {
+    final now = DateTime.now();
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: _lahir ?? DateTime(now.year - 17, 1, 1),
+      firstDate: DateTime(1920),
+      lastDate: now,
+    );
+    if (picked != null) {
+      setState(() => _lahir = DateTime.utc(picked.year, picked.month, picked.day));
+    }
+  }
+
+  void _save() {
+    final nama = _nama.text.trim();
+    if (nama.isEmpty) {
+      setState(() => _error = S.errFillAll);
+      return;
+    }
+    final tinggi = parseDecimal(_tinggi.text);
+    final berat = parseDecimal(_berat.text);
+    if (_tinggi.text.trim().isNotEmpty &&
+        (tinggi == null || !validHeightCm(tinggi))) {
+      setState(() => _error = S.invalidHeight);
+      return;
+    }
+    if (_berat.text.trim().isNotEmpty &&
+        (berat == null || !validWeightKg(berat))) {
+      setState(() => _error = S.invalidWeight);
+      return;
+    }
+    Navigator.of(context).pop(
+      ProfileEditResult(
+        nama: nama,
+        lahir: _lahir,
+        jenisKelamin: _gender,
+        tinggiCm: tinggi,
+        beratKg: berat,
+        region: _region,
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: Text(S.editPersonalDetails),
+      content: SingleChildScrollView(
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            TextField(
+              controller: _nama,
+              autofocus: true,
+              decoration: InputDecoration(hintText: S.fullName),
+            ),
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                Expanded(
+                  child: Text(
+                    _lahir == null ? S.birth : _fmt(_lahir!),
+                    style: TextStyle(
+                      color: _lahir == null
+                          ? PacerScheme.of(context).soft
+                          : PacerScheme.of(context).ink,
+                    ),
+                  ),
+                ),
+                if (_lahir != null)
+                  IconButton(
+                    tooltip: S.notSet,
+                    icon: const Icon(Icons.close, size: 18),
+                    onPressed: () => setState(() => _lahir = null),
+                  ),
+                TextButton(onPressed: _pickDate, child: Text(S.pickDate)),
+              ],
+            ),
+            DropdownButtonFormField<String?>(
+              initialValue: _gender,
+              decoration: InputDecoration(hintText: S.gender),
+              items: [
+                DropdownMenuItem(value: null, child: Text(S.notSet)),
+                const DropdownMenuItem(
+                  value: 'Laki-laki',
+                  child: Text('Laki-laki'),
+                ),
+                const DropdownMenuItem(
+                  value: 'Perempuan',
+                  child: Text('Perempuan'),
+                ),
+              ],
+              onChanged: (v) => _gender = v,
+            ),
+            TextField(
+              controller: _tinggi,
+              decoration: InputDecoration(hintText: '${S.height} (cm)'),
+              keyboardType: const TextInputType.numberWithOptions(decimal: true),
+            ),
+            TextField(
+              controller: _berat,
+              decoration: InputDecoration(hintText: '${S.weight} (kg)'),
+              keyboardType: const TextInputType.numberWithOptions(decimal: true),
+            ),
+            DropdownButtonFormField<String?>(
+              initialValue: _region,
+              isExpanded: true,
+              decoration: InputDecoration(hintText: S.region),
+              items: [
+                DropdownMenuItem(value: null, child: Text(S.notSet)),
+                for (final r in indonesianRegions)
+                  DropdownMenuItem(value: r, child: Text(r)),
+              ],
+              onChanged: (v) => _region = v,
+            ),
+            if (_error != null) ...[
+              const SizedBox(height: 12),
+              AuthErrorText(_error!),
+            ],
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: Text(S.cancelLabel),
+        ),
+        TextButton(onPressed: _save, child: Text(S.saveLabel)),
+      ],
+    );
+  }
+}
+
 /// Figma FITUR grid: 6 tiles, each wired to its screen.
 class FiturScreen extends StatelessWidget {
   const FiturScreen({super.key});
@@ -4131,6 +4907,11 @@ class FiturScreen extends StatelessWidget {
       ),
       (S.riwayat, Icons.history_outlined, (_) => const HistoryScreen()),
       (S.profile, Icons.person_outline, (_) => const AccountScreen()),
+      (
+        S.notifications,
+        Icons.notifications_active_outlined,
+        (_) => const NotificationMockScreen(),
+      ),
     ];
     return Scaffold(
       body: SafeArea(
@@ -4463,6 +5244,129 @@ class ThemeSettingsScreen extends StatelessWidget {
               color: selected ? scheme.accent : scheme.soft,
             ),
           ],
+        ),
+      ),
+    );
+  }
+}
+
+/// Push notification center & activity reminders
+/// Directly addresses Context Diagram ("Push Notification Eksternal: Challenge, Streak, Remind Aktivitas")
+class NotificationMockScreen extends StatefulWidget {
+  const NotificationMockScreen({super.key});
+
+  @override
+  State<NotificationMockScreen> createState() => _NotificationMockScreenState();
+}
+
+class _NotificationMockScreenState extends State<NotificationMockScreen> {
+  final List<
+    ({String title, String body, String time, IconData icon, Color color})
+  >
+  _notifs = [
+    (
+      title: S.reminderTitle,
+      body: S.reminderBody,
+      time: '17:00',
+      icon: Icons.local_fire_department,
+      color: PacerColors.lime,
+    ),
+    (
+      title: 'Challenge Update',
+      body: 'Tim Pacer mendekati target mingguan 25 km! Tetap semangat 🏃',
+      time: '14:30',
+      icon: Icons.emoji_events,
+      color: Colors.amber,
+    ),
+    (
+      title: 'Streak Saved',
+      body: 'Streak kamu tetap menyala berkat lari kemarin.',
+      time: 'Kemarin',
+      icon: Icons.check_circle_outline,
+      color: Colors.lightGreen,
+    ),
+  ];
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = PacerScheme.of(context);
+    return Scaffold(
+      backgroundColor: scheme.scaffold,
+      body: SafeArea(
+        child: ResponsiveScroll(
+          maxWidth: 720,
+          padding: const EdgeInsets.fromLTRB(24, 16, 24, 24),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              const PageHeader(),
+              const SizedBox(height: 16),
+              Text(S.notifications, style: PacerText.pageTitleOf(context)),
+              const SizedBox(height: 16),
+              for (final n in _notifs)
+                Container(
+                  margin: const EdgeInsets.only(bottom: 12),
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: scheme.card,
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(color: scheme.border),
+                    boxShadow: [scheme.shadowBox],
+                  ),
+                  child: Row(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(10),
+                        decoration: BoxDecoration(
+                          color: n.color.withValues(alpha: 0.15),
+                          shape: BoxShape.circle,
+                        ),
+                        child: Icon(n.icon, size: 22, color: n.color),
+                      ),
+                      const SizedBox(width: 14),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: Text(
+                                    n.title,
+                                    style: GoogleFonts.spaceGrotesk(
+                                      fontWeight: FontWeight.w700,
+                                      fontSize: 15,
+                                      color: scheme.chipFg,
+                                    ),
+                                  ),
+                                ),
+                                Text(
+                                  n.time,
+                                  style: TextStyle(
+                                    fontSize: 11,
+                                    color: scheme.muted,
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              n.body,
+                              style: TextStyle(
+                                fontSize: 13,
+                                color: scheme.bodyGray,
+                                height: 1.4,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+            ],
+          ),
         ),
       ),
     );

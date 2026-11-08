@@ -2,39 +2,24 @@ import 'dart:ui';
 
 import 'package:flutter/material.dart';
 import 'package:pacer/core/responsive/responsive.dart';
+import 'package:pacer/src/aktivitas/activity_model.dart';
 
 import 'app_theme.dart';
 import 'app_strings.dart';
+import 'pacer_logo.dart';
 
-/// The ONE app logo: rounded gradient tile + PACER wordmark (Fugaz One).
-/// Used on Loading, GetStarted, and the Home header at different sizes.
+/// The ONE app logo: skewed "p" mark with speed cuts + italic "acer"
+/// wordmark, in Pacer's brand gradient (sky blue → lime). Used on Loading,
+/// GetStarted, and the Home header at different sizes; wordmark colour
+/// follows the theme unless [style] is given. See pacer_logo.dart.
 class PacerLogo extends StatelessWidget {
   final double width;
-  final double fontSize;
-  const PacerLogo({super.key, this.width = 198, this.fontSize = 40});
+  final PacerLogoStyle? style;
+  const PacerLogo({super.key, this.width = 198, this.style});
 
   @override
-  Widget build(BuildContext context) {
-    final height = width * 108 / 198;
-    return Container(
-      width: width,
-      height: height,
-      decoration: BoxDecoration(
-        gradient: const LinearGradient(
-          colors: [PacerColors.primary, PacerColors.lime],
-        ),
-        borderRadius: BorderRadius.circular(16),
-      ),
-      alignment: Alignment.center,
-      child: Text(
-        'PACER',
-        style: PacerText.fugazBrand.copyWith(
-          fontSize: fontSize,
-          color: Colors.white,
-        ),
-      ),
-    );
-  }
+  Widget build(BuildContext context) =>
+      PacerLogoLockup(width: width, style: style);
 }
 
 /// Blue primary CTA. Full shell width; subtle shadow per dump (no heavy drop).
@@ -423,20 +408,41 @@ class InitialAvatar extends StatelessWidget {
   }
 }
 
-/// Sporty streak hero card: count, live week strip, and personal-record
-/// line read as one unit on a navy surface (lime accents). Fills its parent
-/// width; intrinsic height.
+/// Sporty streak hero card: count, live week strip, and a status line read
+/// as one unit on a navy surface. Fills its parent width; intrinsic height.
+///
+/// The accent follows the streak state and animates between them:
+/// - active (ran today): lime, glowing flame.
+/// - at risk (ran yesterday, not yet today): amber, outlined flame.
+/// - inactive (no streak / broken): muted slate.
 ///
 /// DATA: [done] holds 7 Mon..Sun flags (true = workout that day);
-/// [todayIndex] (0..6) rings today regardless of done. Nulls render an
-/// honest empty week (offline/signed-out); null [count] shows 0.
+/// [todayIndex] (0..6) marks today. [count] must be the *effective* streak
+/// (see `effectiveStreak`). [status] is derived from [done]/[count] when
+/// omitted. Nulls render an honest empty week.
 class StreakCard extends StatelessWidget {
   final int? count;
   final List<bool>? done;
   final int? todayIndex;
-  const StreakCard({super.key, this.count, this.done, this.todayIndex});
+  final StreakStatus? status;
+  const StreakCard({
+    super.key,
+    this.count,
+    this.done,
+    this.todayIndex,
+    this.status,
+  });
 
-  static const _dayLabels = ['Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab', 'Min'];
+  static const _dayLabelsId = ['Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab', 'Min'];
+  static const _dayLabelsEn = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+  static const _anim = Duration(milliseconds: 350);
+
+  /// Accent color for a streak state (exposed for tests and callers).
+  static Color accentFor(StreakStatus s) => switch (s) {
+    StreakStatus.active => PacerColors.lime,
+    StreakStatus.atRisk => PacerColors.streakAmber,
+    StreakStatus.inactive => PacerColors.slate400,
+  };
 
   @override
   Widget build(BuildContext context) {
@@ -445,244 +451,337 @@ class StreakCard extends StatelessWidget {
     final monday = now.subtract(Duration(days: now.weekday - 1));
     final flags = done;
     final today = todayIndex ?? now.weekday - 1;
+    final n = count ?? 0;
     bool isDone(int i) => flags != null && i < flags.length && flags[i];
+    final s =
+        status ??
+        (isDone(today)
+            ? StreakStatus.active
+            : n > 0
+            ? StreakStatus.atRisk
+            : StreakStatus.inactive);
+    final accent = accentFor(s);
+    final live = s != StreakStatus.inactive;
     final circle = fluid(MediaQuery.sizeOf(context).width, 30, 36);
     const labelWhite = Color(0xFFF8FAFC);
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(16),
-      child: Container(
-        decoration: BoxDecoration(
-          color: scheme.streakCardBg,
-          borderRadius: BorderRadius.circular(16),
-          border: scheme.isDark
-              ? Border.all(color: Colors.white.withValues(alpha: 0.10))
-              : null,
-          boxShadow: [scheme.shadowBox],
-        ),
-        child: Stack(
-          children: [
-            // Oversized ghost flame, clipped at the card edge.
-            Positioned(
-              right: -32,
-              top: -40,
-              child: Icon(
-                Icons.local_fire_department,
-                size: 168,
-                color: Colors.white.withValues(alpha: 0.05),
-              ),
+    final labels = langNotifier.value == Lang.en ? _dayLabelsEn : _dayLabelsId;
+    final (pillText, message) = switch (s) {
+      StreakStatus.active => (S.activeStreak, S.streakActiveMsg),
+      StreakStatus.atRisk => (S.streakAtRisk, S.streakAtRiskMsg(n)),
+      StreakStatus.inactive => (S.noStreak, S.streakInactiveMsg),
+    };
+    final base = scheme.streakCardBg;
+
+    return Semantics(
+      container: true,
+      label: '$n ${S.daysStreak}. $pillText. $message',
+      child: ExcludeSemantics(
+        child: AnimatedContainer(
+          duration: _anim,
+          curve: Curves.easeOut,
+          clipBehavior: Clip.antiAlias,
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(16),
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [base, Color.lerp(base, accent, live ? 0.16 : 0.04)!],
             ),
-            // Lime kick bar along the top edge.
-            Positioned(
-              left: 20,
-              right: 20,
-              top: 0,
-              child: Container(
-                height: 3,
-                decoration: BoxDecoration(
-                  color: PacerColors.lime,
-                  borderRadius: BorderRadius.circular(2),
+            border: Border.all(
+              color: live
+                  ? accent.withValues(alpha: 0.35)
+                  : Colors.white.withValues(alpha: 0.10),
+            ),
+            boxShadow: [
+              scheme.shadowBox,
+              if (s == StreakStatus.active)
+                BoxShadow(
+                  color: accent.withValues(alpha: 0.18),
+                  blurRadius: 24,
+                  offset: const Offset(0, 8),
+                ),
+            ],
+          ),
+          child: Stack(
+            children: [
+              // Oversized ghost flame, clipped at the card edge.
+              Positioned(
+                right: -32,
+                top: -40,
+                child: Icon(
+                  Icons.local_fire_department,
+                  size: 168,
+                  color: accent.withValues(alpha: live ? 0.08 : 0.04),
                 ),
               ),
-            ),
-            Padding(
-              padding: const EdgeInsets.fromLTRB(20, 20, 20, 16),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Row(
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 8,
-                          vertical: 4,
-                        ),
-                        decoration: BoxDecoration(
-                          color: Colors.white.withValues(alpha: 0.10),
-                          borderRadius: BorderRadius.circular(999),
-                        ),
-                        child: Row(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Container(
-                              width: 8,
-                              height: 8,
-                              decoration: const BoxDecoration(
-                                color: PacerColors.lime,
-                                shape: BoxShape.circle,
-                              ),
-                            ),
-                            const SizedBox(width: 4),
-                            Text(
-                              S.activeStreak,
-                              style: PacerText.mono.copyWith(
-                                color: PacerColors.lime,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                      const Spacer(),
-                      Container(
-                        width: 44,
-                        height: 44,
-                        decoration: BoxDecoration(
-                          color: PacerColors.lime.withValues(alpha: 0.16),
-                          shape: BoxShape.circle,
-                          border: Border.all(
-                            color: PacerColors.lime.withValues(alpha: 0.45),
-                          ),
-                        ),
-                        child: const Icon(
-                          Icons.local_fire_department,
-                          size: 24,
-                          color: PacerColors.lime,
-                        ),
-                      ),
-                    ],
+              // Accent kick bar along the top edge.
+              Positioned(
+                left: 20,
+                right: 20,
+                top: 0,
+                child: AnimatedContainer(
+                  duration: _anim,
+                  height: 3,
+                  decoration: BoxDecoration(
+                    color: accent.withValues(alpha: live ? 1 : 0.4),
+                    borderRadius: BorderRadius.circular(2),
                   ),
-                  const SizedBox(height: 8),
-                  Row(
-                    crossAxisAlignment: CrossAxisAlignment.end,
-                    children: [
-                      Text(
-                        '${count ?? 0}',
-                        style: PacerText.giantNum(56)
-                            .copyWith(color: labelWhite),
-                      ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: FittedBox(
-                          fit: BoxFit.scaleDown,
-                          alignment: Alignment.centerLeft,
-                          child: Padding(
-                            padding: const EdgeInsets.only(bottom: 8),
-                            child: Text(
-                              S.daysStreak,
-                              style: const TextStyle(
-                                fontSize: 18,
-                                fontWeight: FontWeight.w700,
-                                color: PacerColors.lime,
-                              ),
-                            ),
-                          ),
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 12),
-                  Row(
-                    children: [
-                      for (var i = 0; i < 7; i++)
-                        Expanded(
-                          child: Column(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Container(
-                                width: circle,
-                                height: circle,
-                                alignment: Alignment.center,
-                                decoration: BoxDecoration(
-                                  shape: BoxShape.circle,
-                                  color: isDone(i)
-                                      ? PacerColors.lime
-                                      : Colors.white.withValues(alpha: 0.10),
-                                  border: Border.all(
-                                    color: isDone(i)
-                                        ? PacerColors.lime
-                                        : i == today
-                                        ? PacerColors.lime
-                                        : Colors.white.withValues(alpha: 0.24),
-                                    width: i == today ? 2 : 1.5,
-                                  ),
-                                  boxShadow: i == today
-                                      ? [
-                                          BoxShadow(
-                                            color: PacerColors.lime.withValues(
-                                              alpha: 0.35,
-                                            ),
-                                            blurRadius: 12,
-                                          ),
-                                        ]
-                                      : null,
-                                ),
-                                child: isDone(i)
-                                    ? Icon(
-                                        Icons.check,
-                                        size: circle * 0.45,
-                                        color: PacerColors.navy,
-                                      )
-                                    : null,
-                              ),
-                              const SizedBox(height: 4),
-                              Text(
-                                _dayLabels[i],
-                                style: TextStyle(
-                                  fontSize: 10,
-                                  fontWeight: i == today
-                                      ? FontWeight.w700
-                                      : FontWeight.w500,
-                                  color: i == today
-                                      ? PacerColors.lime
-                                      : Colors.white.withValues(alpha: 0.60),
-                                ),
-                              ),
-                              Text(
-                                '${DateTime(monday.year, monday.month, monday.day + i).day}',
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  fontWeight: FontWeight.w700,
-                                  color: i == today
-                                      ? PacerColors.lime
-                                      : labelWhite,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                    ],
-                  ),
-                  const SizedBox(height: 12),
-                  Container(
-                    height: 1,
-                    color: Colors.white.withValues(alpha: 0.12),
-                  ),
-                  const SizedBox(height: 12),
-                  FittedBox(
-                    fit: BoxFit.scaleDown,
-                    alignment: Alignment.centerLeft,
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 20, 20, 16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Row(
                       children: [
-                        const Icon(
-                          Icons.local_fire_department,
-                          size: 14,
-                          color: PacerColors.lime,
+                        Flexible(
+                          child: AnimatedContainer(
+                            key: const ValueKey('streak-pill'),
+                            duration: _anim,
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 8,
+                              vertical: 4,
+                            ),
+                            decoration: BoxDecoration(
+                              color: accent.withValues(alpha: 0.14),
+                              borderRadius: BorderRadius.circular(999),
+                            ),
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Container(
+                                  width: 8,
+                                  height: 8,
+                                  decoration: BoxDecoration(
+                                    color: accent,
+                                    shape: BoxShape.circle,
+                                  ),
+                                ),
+                                const SizedBox(width: 4),
+                                Flexible(
+                                  child: Text(
+                                    pillText,
+                                    overflow: TextOverflow.ellipsis,
+                                    style: PacerText.mono.copyWith(
+                                      color: accent,
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
                         ),
-                        const SizedBox(width: 4),
-                        Text(
-                          S.personalRecord,
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: Colors.white.withValues(alpha: 0.70),
+                        const SizedBox(width: 8),
+                        AnimatedContainer(
+                          key: const ValueKey('streak-flame'),
+                          duration: _anim,
+                          width: 44,
+                          height: 44,
+                          decoration: BoxDecoration(
+                            color: accent.withValues(alpha: 0.16),
+                            shape: BoxShape.circle,
+                            border: Border.all(
+                              color: accent.withValues(alpha: 0.45),
+                            ),
+                            boxShadow: s == StreakStatus.active
+                                ? [
+                                    BoxShadow(
+                                      color: accent.withValues(alpha: 0.45),
+                                      blurRadius: 16,
+                                    ),
+                                  ]
+                                : null,
+                          ),
+                          child: Icon(
+                            s == StreakStatus.active
+                                ? Icons.local_fire_department
+                                : Icons.local_fire_department_outlined,
+                            size: 24,
+                            color: accent,
                           ),
                         ),
                       ],
                     ),
-                  ),
-                ],
+                    const SizedBox(height: 8),
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      children: [
+                        Text(
+                          '$n',
+                          style: PacerText.giantNum(56).copyWith(
+                            color: live
+                                ? labelWhite
+                                : labelWhite.withValues(alpha: 0.55),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: FittedBox(
+                            fit: BoxFit.scaleDown,
+                            alignment: Alignment.centerLeft,
+                            child: Padding(
+                              padding: const EdgeInsets.only(bottom: 8),
+                              child: Text(
+                                S.daysStreak,
+                                style: TextStyle(
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.w700,
+                                  color: accent,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    Row(
+                      children: [
+                        for (var i = 0; i < 7; i++)
+                          Expanded(
+                            child: _StreakDay(
+                              size: circle,
+                              done: isDone(i),
+                              isToday: i == today,
+                              isFuture: i > today,
+                              accent: accent,
+                              label: labels[i],
+                              date:
+                                  '${DateTime(monday.year, monday.month, monday.day + i).day}',
+                            ),
+                          ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+                    Container(
+                      height: 1,
+                      color: Colors.white.withValues(alpha: 0.12),
+                    ),
+                    const SizedBox(height: 12),
+                    Row(
+                      children: [
+                        Icon(
+                          s == StreakStatus.atRisk
+                              ? Icons.schedule
+                              : s == StreakStatus.active
+                              ? Icons.check_circle
+                              : Icons.directions_run,
+                          size: 14,
+                          color: accent,
+                        ),
+                        const SizedBox(width: 6),
+                        Expanded(
+                          child: Text(
+                            message,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: Colors.white.withValues(alpha: 0.75),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
   }
 }
 
-/// Floating dark blurred nav pill + central START circle. Authored at the
+/// One day bubble of the streak week strip.
+class _StreakDay extends StatelessWidget {
+  final double size;
+  final bool done;
+  final bool isToday;
+  final bool isFuture;
+  final Color accent;
+  final String label;
+  final String date;
+  const _StreakDay({
+    required this.size,
+    required this.done,
+    required this.isToday,
+    required this.isFuture,
+    required this.accent,
+    required this.label,
+    required this.date,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    const labelWhite = Color(0xFFF8FAFC);
+    final dim = isFuture ? 0.35 : 0.60;
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        AnimatedContainer(
+          duration: StreakCard._anim,
+          width: size,
+          height: size,
+          alignment: Alignment.center,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            color: done
+                ? accent
+                : Colors.white.withValues(alpha: isFuture ? 0.04 : 0.10),
+            border: Border.all(
+              color: done || isToday
+                  ? accent
+                  : Colors.white.withValues(alpha: isFuture ? 0.10 : 0.24),
+              width: isToday ? 2 : 1.5,
+            ),
+            boxShadow: isToday && done
+                ? [
+                    BoxShadow(
+                      color: accent.withValues(alpha: 0.40),
+                      blurRadius: 12,
+                    ),
+                  ]
+                : null,
+          ),
+          child: done
+              ? Icon(Icons.check, size: size * 0.45, color: PacerColors.navy)
+              : null,
+        ),
+        const SizedBox(height: 4),
+        Text(
+          label,
+          style: TextStyle(
+            fontSize: 10,
+            fontWeight: isToday ? FontWeight.w700 : FontWeight.w500,
+            color: isToday ? accent : Colors.white.withValues(alpha: dim),
+          ),
+        ),
+        Text(
+          date,
+          style: TextStyle(
+            fontSize: 12,
+            fontWeight: FontWeight.w700,
+            color: isToday
+                ? accent
+                : labelWhite.withValues(alpha: isFuture ? 0.45 : 1),
+          ),
+        ),
+      ],
+    );
+  }
+}
+
+/// Floating frosted-glass nav pill + central START circle. Authored at the
 /// fixed 377x80.7 design size; MainShell scales it via fluid(w, 377, 480)
 /// (capped at ~480 and centered on wide screens per the nav rules).
+///
+/// Glass: strong backdrop blur over the scrolling page, a translucent tint
+/// with a top-light gradient, a hairline highlight border, and a soft drop
+/// shadow outside the clip.
 class BottomNavPill extends StatelessWidget {
   final int index;
   final ValueChanged<int> onTap;
@@ -694,85 +793,170 @@ class BottomNavPill extends StatelessWidget {
     required this.onStart,
   });
 
+  static const blurSigma = 18.0;
+
   @override
   Widget build(BuildContext context) {
     final scheme = PacerScheme.of(context);
     // Per-tab glyphs matching the nav rail: outlined idle, filled selected.
-    const icons = [
-      (Icons.home_outlined, Icons.home),
-      (Icons.directions_run_outlined, Icons.directions_run),
-      (Icons.groups_outlined, Icons.groups),
-      (Icons.leaderboard_outlined, Icons.leaderboard),
+    final tabs = [
+      (Icons.home_outlined, Icons.home, S.home),
+      (Icons.directions_run_outlined, Icons.directions_run, S.running),
+      (Icons.groups_outlined, Icons.groups, S.teams),
+      (Icons.leaderboard_outlined, Icons.leaderboard, S.leaderboard),
     ];
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(50),
-      child: BackdropFilter(
-        filter: ImageFilter.blur(sigmaX: 2, sigmaY: 2),
-        child: Container(
-          // Fixed 377x80.7 DESIGN size — MainShell wraps this in a FittedBox
-          // scaled by fluid(w, 377, 480) so the pill grows moderately on
-          // bigger screens but never balloons.
-          width: 377,
-          height: 80.7,
-          decoration: BoxDecoration(
-            color: scheme.navBar,
-            borderRadius: BorderRadius.circular(50),
-          ),
-          child: Row(
-            mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-            children: [
-              for (var i = 0; i < 2; i++)
-                SizedBox(
-                  width: 50,
-                  height: 49,
-                  child: IconButton(
-                    onPressed: () => onTap(i),
-                    icon: Icon(
-                      index == i ? icons[i].$2 : icons[i].$1,
-                      size: 30,
-                      color: index == i ? PacerColors.lime : scheme.navIcon,
+    final radius = BorderRadius.circular(50);
+    final tint = scheme.navBar;
+
+    Widget tab(int i) {
+      final selected = index == i;
+      return Semantics(
+        selected: selected,
+        button: true,
+        label: tabs[i].$3,
+        // Tap lives here (not on the excluded InkResponse) so screen
+        // readers can still activate the tab.
+        onTap: () => onTap(i),
+        child: ExcludeSemantics(
+          child: Tooltip(
+            message: tabs[i].$3,
+            child: InkResponse(
+              onTap: () => onTap(i),
+              radius: 30,
+              child: SizedBox(
+                width: 56,
+                height: 56,
+                child: Column(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    AnimatedContainer(
+                      duration: const Duration(milliseconds: 250),
+                      curve: Curves.easeOut,
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 4,
+                      ),
+                      decoration: BoxDecoration(
+                        color: selected
+                            ? PacerColors.lime.withValues(alpha: 0.16)
+                            : Colors.transparent,
+                        borderRadius: BorderRadius.circular(999),
+                      ),
+                      child: Icon(
+                        selected ? tabs[i].$2 : tabs[i].$1,
+                        size: 28,
+                        color: selected ? PacerColors.lime : scheme.navIcon,
+                      ),
                     ),
-                  ),
+                    const SizedBox(height: 4),
+                    AnimatedContainer(
+                      duration: const Duration(milliseconds: 250),
+                      width: selected ? 6 : 0,
+                      height: selected ? 6 : 0,
+                      decoration: const BoxDecoration(
+                        color: PacerColors.lime,
+                        shape: BoxShape.circle,
+                      ),
+                    ),
+                  ],
                 ),
-              GestureDetector(
-                onTap: onStart,
-                child: Container(
-                  width: 70,
-                  height: 70,
-                  decoration: const BoxDecoration(
-                    color: PacerColors.primary,
-                    shape: BoxShape.circle,
+              ),
+            ),
+          ),
+        ),
+      );
+    }
+
+    return DecoratedBox(
+      // Shadow lives outside the clip so the blur edge stays crisp.
+      decoration: BoxDecoration(
+        borderRadius: radius,
+        boxShadow: const [
+          BoxShadow(
+            color: Color(0x40000000),
+            blurRadius: 24,
+            offset: Offset(0, 10),
+          ),
+        ],
+      ),
+      child: ClipRRect(
+        borderRadius: radius,
+        child: BackdropFilter(
+          filter: ImageFilter.blur(sigmaX: blurSigma, sigmaY: blurSigma),
+          child: Container(
+            // Fixed 377x80.7 DESIGN size — MainShell wraps this in a FittedBox
+            // scaled by fluid(w, 377, 480) so the pill grows moderately on
+            // bigger screens but never balloons.
+            width: 377,
+            height: 80.7,
+            decoration: BoxDecoration(
+              borderRadius: radius,
+              gradient: LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: [
+                  Color.alphaBlend(
+                    Colors.white.withValues(alpha: 0.10),
+                    tint.withValues(alpha: 0.55),
                   ),
-                  alignment: Alignment.center,
-                  // Fugaz One 20 "START" is ~75px wide — scale to the circle
-                  // instead of wrapping on narrow screens.
-                  padding: const EdgeInsets.all(8),
-                  child: FittedBox(
-                    fit: BoxFit.scaleDown,
-                    child: Text(
-                      'START',
-                      style: PacerText.fugazBrand.copyWith(
-                        fontSize: 20,
-                        color: Colors.black,
+                  tint.withValues(alpha: 0.70),
+                ],
+              ),
+              border: Border.all(
+                color: Colors.white.withValues(alpha: 0.18),
+                width: 1,
+              ),
+            ),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+              children: [
+                tab(0),
+                tab(1),
+                Semantics(
+                  button: true,
+                  label: 'START',
+                  onTap: onStart,
+                  excludeSemantics: true,
+                  child: GestureDetector(
+                    onTap: onStart,
+                    child: Container(
+                      width: 66,
+                      height: 66,
+                      decoration: BoxDecoration(
+                        color: PacerColors.primary,
+                        shape: BoxShape.circle,
+                        border: Border.all(
+                          color: Colors.white.withValues(alpha: 0.35),
+                          width: 2,
+                        ),
+                        boxShadow: [
+                          BoxShadow(
+                            color: PacerColors.primary.withValues(alpha: 0.45),
+                            blurRadius: 16,
+                          ),
+                        ],
+                      ),
+                      alignment: Alignment.center,
+                      // Fugaz One 20 "START" is ~75px wide — scale to the
+                      // circle instead of wrapping on narrow screens.
+                      padding: const EdgeInsets.all(8),
+                      child: FittedBox(
+                        fit: BoxFit.scaleDown,
+                        child: Text(
+                          'START',
+                          style: PacerText.fugazBrand.copyWith(
+                            fontSize: 20,
+                            color: Colors.black,
+                          ),
+                        ),
                       ),
                     ),
                   ),
                 ),
-              ),
-              for (var i = 2; i < 4; i++)
-                SizedBox(
-                  width: 50,
-                  height: 49,
-                  child: IconButton(
-                    onPressed: () => onTap(i),
-                    icon: Icon(
-                      index == i ? icons[i].$2 : icons[i].$1,
-                      size: 30,
-                      color: index == i ? PacerColors.lime : scheme.navIcon,
-                    ),
-                  ),
-                ),
-            ],
+                tab(2),
+                tab(3),
+              ],
+            ),
           ),
         ),
       ),
