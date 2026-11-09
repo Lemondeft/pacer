@@ -1,7 +1,8 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
 
-import 'package:pacer/supabase.dart';
+import 'package:pacer/src/cache/pacer_cache.dart';
 import 'package:pacer/src/teams/team_model.dart';
+import 'package:pacer/supabase.dart';
 
 /// Backend-only team management (DFD process 5.0 PACER TEAM). No widgets.
 ///
@@ -40,6 +41,7 @@ class TeamRepository {
     if (targetNilai != null) payload['target_nilai'] = targetNilai;
     final row = await _client.from('teams').insert(payload).select().single();
     // A DB trigger adds the creator as 'ketua' and generates the secret code.
+    PacerCache.instance.invalidatePrefix('teams_');
     return Team.fromJson(Map<String, dynamic>.from(row));
   }
 
@@ -62,6 +64,8 @@ class TeamRepository {
         .eq('id', id)
         .select()
         .single();
+    PacerCache.instance.invalidate('team_$id');
+    PacerCache.instance.invalidatePrefix('teams_');
     return Team.fromJson(Map<String, dynamic>.from(row));
   }
 
@@ -69,25 +73,42 @@ class TeamRepository {
   /// RLS teams_write gates this to coach/admin.
   Future<void> deleteTeam(String id) async {
     await _client.from('teams').delete().eq('id', id);
+    PacerCache.instance.invalidate('team_$id');
+    PacerCache.instance.invalidatePrefix('teams_');
   }
 
   /// All teams, newest first (created_at desc). Readable by any
   /// authenticated user (teams_select using true).
-  Future<List<Team>> listTeams() async {
+  /// In-memory cached for 3 minutes to avoid redundant DB reads on navigation.
+  Future<List<Team>> listTeams({bool forceRefresh = false}) async {
+    const cacheKey = 'teams_list';
+    if (!forceRefresh) {
+      final cached = PacerCache.instance.get<List<Team>>(cacheKey);
+      if (cached != null) return cached;
+    }
     final rows = await _client
         .from('teams')
         .select()
         .order('created_at', ascending: false);
-    return [
+    final list = [
       for (final row in rows) Team.fromJson(Map<String, dynamic>.from(row)),
     ];
+    PacerCache.instance.set(cacheKey, list, ttl: const Duration(minutes: 3));
+    return list;
   }
 
   /// One team by id; null when missing.
-  Future<Team?> getTeam(String id) async {
+  Future<Team?> getTeam(String id, {bool forceRefresh = false}) async {
+    final cacheKey = 'team_$id';
+    if (!forceRefresh) {
+      final cached = PacerCache.instance.get<Team>(cacheKey);
+      if (cached != null) return cached;
+    }
     final row = await _client.from('teams').select().eq('id', id).maybeSingle();
     if (row == null) return null;
-    return Team.fromJson(Map<String, dynamic>.from(row));
+    final team = Team.fromJson(Map<String, dynamic>.from(row));
+    PacerCache.instance.set(cacheKey, team, ttl: const Duration(minutes: 3));
+    return team;
   }
 
   /// Joins via invite code through the code-checked join_team() rpc
@@ -99,12 +120,14 @@ class TeamRepository {
       'join_team',
       params: {'p_team_id': teamId, 'p_code': code},
     );
+    PacerCache.instance.invalidatePrefix('teams_my_');
   }
 
   /// Joins knowing only the secret code (private teams are not listed).
   /// Returns the joined team id; a wrong code raises PostgrestException.
   Future<String> joinByCode(String code) async {
     final id = await _client.rpc('join_team_by_code', params: {'p_code': code});
+    PacerCache.instance.invalidatePrefix('teams_my_');
     return id as String;
   }
 
@@ -136,6 +159,7 @@ class TeamRepository {
         .delete()
         .eq('team_id', teamId)
         .eq('user_id', _requireUserId());
+    PacerCache.instance.invalidatePrefix('teams_my_');
   }
 
   /// Coach kick: removes any member row. RLS members_delete gates this to
@@ -146,25 +170,38 @@ class TeamRepository {
         .delete()
         .eq('team_id', teamId)
         .eq('user_id', userId);
+    PacerCache.instance.invalidatePrefix('teams_my_');
   }
 
   /// Teams the caller belongs to, newest first. Rpc-free read-then-read:
   /// own team_members rows give the team ids, then teams are fetched.
-  Future<List<Team>> myTeams() async {
+  /// In-memory cached for 3 minutes to avoid redundant DB reads on navigation.
+  Future<List<Team>> myTeams({bool forceRefresh = false}) async {
+    final userId = _requireUserId();
+    final cacheKey = 'teams_my_$userId';
+    if (!forceRefresh) {
+      final cached = PacerCache.instance.get<List<Team>>(cacheKey);
+      if (cached != null) return cached;
+    }
     final memberRows = await _client
         .from('team_members')
         .select('team_id')
-        .eq('user_id', _requireUserId());
+        .eq('user_id', userId);
     final teamIds = [for (final row in memberRows) row['team_id'] as String];
-    if (teamIds.isEmpty) return [];
+    if (teamIds.isEmpty) {
+      PacerCache.instance.set(cacheKey, <Team>[], ttl: const Duration(minutes: 3));
+      return [];
+    }
     final rows = await _client
         .from('teams')
         .select()
         .inFilter('id', teamIds)
         .order('created_at', ascending: false);
-    return [
+    final list = [
       for (final row in rows) Team.fromJson(Map<String, dynamic>.from(row)),
     ];
+    PacerCache.instance.set(cacheKey, list, ttl: const Duration(minutes: 3));
+    return list;
   }
 
   /// Roster with display names + app roles via the team_members→users FK.

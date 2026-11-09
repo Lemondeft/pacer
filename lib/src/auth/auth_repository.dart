@@ -1,7 +1,8 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
 
-import 'package:pacer/supabase.dart';
 import 'package:pacer/src/auth/user_model.dart';
+import 'package:pacer/src/cache/pacer_cache.dart';
+import 'package:pacer/supabase.dart';
 
 /// Backend-only auth (DFD process 1.0 LOGIN/KELOLA USER). No widgets.
 ///
@@ -56,17 +57,28 @@ class AuthRepository {
     }
   }
 
-  Future<void> signOut() => _client.auth.signOut();
+  Future<void> signOut() async {
+    PacerCache.instance.clear();
+    await _client.auth.signOut();
+  }
 
   String? currentUserId() => _client.auth.currentUser?.id;
 
   /// Reads the caller's own profile row (RLS: id == auth.uid()).
-  Future<UserProfile?> getProfile() async {
+  /// Cached in-memory for 5 minutes to avoid redundant DB reads on navigation.
+  Future<UserProfile?> getProfile({bool forceRefresh = false}) async {
     final id = currentUserId();
     if (id == null) return null;
+    final cacheKey = 'auth_profile_$id';
+    if (!forceRefresh) {
+      final cached = PacerCache.instance.get<UserProfile>(cacheKey);
+      if (cached != null) return cached;
+    }
     final row = await _client.from('users').select().eq('id', id).maybeSingle();
     if (row == null) return null;
-    return UserProfile.fromJson(Map<String, dynamic>.from(row));
+    final profile = UserProfile.fromJson(Map<String, dynamic>.from(row));
+    PacerCache.instance.set(cacheKey, profile, ttl: const Duration(minutes: 5));
+    return profile;
   }
 
   /// Updates the caller's own profile. Only non-null fields are written,
@@ -114,5 +126,9 @@ class AuthRepository {
       throw ArgumentError('updateProfile needs at least one field to change.');
     }
     await _client.from('users').update(payload).eq('id', id);
+    PacerCache.instance.invalidate('auth_profile_$id');
+    if (region != null || clear.contains('region')) {
+      PacerCache.instance.invalidatePrefix('leaderboard_');
+    }
   }
 }

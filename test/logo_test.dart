@@ -28,7 +28,7 @@ void main() {
         await t.pump();
         final size = t.getSize(find.byType(PacerLogoLockup));
         expect(size.width, w);
-        expect(size.height, closeTo(w * 0.3, 0.01));
+        expect(size.height, closeTo(w / PacerLogoLockup.designAspect, 0.01));
         expect(t.takeException(), isNull);
       }
     });

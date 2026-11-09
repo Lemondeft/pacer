@@ -1,7 +1,8 @@
 import 'package:supabase_flutter/supabase_flutter.dart';
 
-import 'package:pacer/supabase.dart';
 import 'package:pacer/src/aktivitas/activity_model.dart';
+import 'package:pacer/src/cache/pacer_cache.dart';
+import 'package:pacer/supabase.dart';
 
 /// Backend-only activity tracking (DFD process 2.0 AKTIVITAS & STATISTIK). No widgets.
 ///
@@ -99,6 +100,9 @@ class ActivityRepository {
         .eq('id', id)
         .select()
         .single();
+    PacerCache.instance.invalidatePrefix('activities_');
+    PacerCache.instance.invalidatePrefix('streak_');
+    PacerCache.instance.invalidatePrefix('leaderboard_');
     return Activity.fromJson(Map<String, dynamic>.from(updated));
   }
 
@@ -109,18 +113,35 @@ class ActivityRepository {
         .delete()
         .eq('id', id)
         .eq('user_id', _requireUserId());
+    PacerCache.instance.invalidatePrefix('activities_');
+    PacerCache.instance.invalidatePrefix('streak_');
+    PacerCache.instance.invalidatePrefix('leaderboard_');
   }
 
   /// Riwayat: newest workouts first (mulai_at desc), capped at [limit].
-  Future<List<Activity>> listActivities({int limit = 20}) async {
+  /// In-memory cached for 3 minutes to keep tab navigation fast.
+  Future<List<Activity>> listActivities({
+    int limit = 20,
+    bool forceRefresh = false,
+  }) async {
+    final userId = _client.auth.currentUser?.id;
+    final cacheKey = 'activities_${userId}_$limit';
+    if (!forceRefresh && userId != null) {
+      final cached = PacerCache.instance.get<List<Activity>>(cacheKey);
+      if (cached != null) return cached;
+    }
     final rows = await _client
         .from('aktivitas')
         .select()
         .order('mulai_at', ascending: false)
         .limit(limit);
-    return [
+    final list = [
       for (final row in rows) Activity.fromJson(Map<String, dynamic>.from(row)),
     ];
+    if (userId != null) {
+      PacerCache.instance.set(cacheKey, list, ttl: const Duration(minutes: 3));
+    }
+    return list;
   }
 
   /// Coach read: one student's workouts, newest first.
@@ -189,9 +210,19 @@ class ActivityRepository {
   }
 
   /// Reads the caller's streak row without writing (null when never recorded).
-  /// Unlike [recordStreak], this never touches terakhir_olahraga_tgl.
-  Future<({int berjalan, DateTime? terakhir})?> getStreak() async {
+  /// In-memory cached for 3 minutes to avoid redundant DB reads on navigation.
+  Future<({int berjalan, DateTime? terakhir})?> getStreak({
+    bool forceRefresh = false,
+  }) async {
     final userId = _requireUserId();
+    final cacheKey = 'streak_$userId';
+    if (!forceRefresh) {
+      final cached =
+          PacerCache.instance.get<({int berjalan, DateTime? terakhir})>(
+            cacheKey,
+          );
+      if (cached != null) return cached;
+    }
     final row = await _client
         .from('streak')
         .select('streak_berjalan, terakhir_olahraga_tgl')
@@ -199,10 +230,12 @@ class ActivityRepository {
         .maybeSingle();
     if (row == null) return null;
     final tglRaw = row['terakhir_olahraga_tgl'] as String?;
-    return (
+    final result = (
       berjalan: (row['streak_berjalan'] as num?)?.toInt() ?? 0,
       terakhir: tglRaw == null ? null : DateTime.parse(tglRaw),
     );
+    PacerCache.instance.set(cacheKey, result, ttl: const Duration(minutes: 3));
+    return result;
   }
 
   /// Reads the caller's statistik totals for [periode] (null when none yet).

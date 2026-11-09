@@ -123,7 +123,8 @@ class PacerMark extends StatelessWidget {
 }
 
 /// Full lockup: mark + italic "acer" wordmark (the mark reads as the "p").
-/// Native 400x120 design box, scaled to [width].
+/// Tight visual bounding box (262x80) so that wrapping in [Center] or [Row]
+/// aligns the visible glyphs with zero trailing/leading phantom margins.
 class PacerLogoLockup extends StatelessWidget {
   final double width;
 
@@ -136,6 +137,15 @@ class PacerLogoLockup extends StatelessWidget {
     this.style,
     this.monoColor = PacerColors.slate800,
   });
+
+  /// Design canvas dimensions matching the exact visual bounds:
+  /// - Mark left edge at x=0 (shifted by -25.33 from raw SVG coordinate 25.33)
+  /// - Mark top at y=0, bottom at y=80 (shifted by -20 from SVG y=20..100)
+  /// - "acer" starts at x=74.67 (SVG 100 - 25.33) with baseline at y=76 (SVG 96 - 20)
+  ///   and ends at x≈262.
+  static const double designWidth = 262;
+  static const double designHeight = 80;
+  static const double designAspect = designWidth / designHeight;
 
   @override
   Widget build(BuildContext context) {
@@ -174,31 +184,34 @@ class PacerLogoLockup extends StatelessWidget {
       child: ExcludeSemantics(
         child: SizedBox(
           width: width,
-          height: width * 120 / 400,
+          height: width / designAspect,
           child: FittedBox(
             fit: BoxFit.contain,
             child: SizedBox(
-              width: 400,
-              height: 120,
+              width: designWidth,
+              height: designHeight,
               child: Stack(
                 clipBehavior: Clip.none,
                 children: [
-                  SizedBox(
-                    width: 130,
-                    height: 120,
-                    child: CustomPaint(
-                      painter: _MarkPainter(
-                        gradient: mono ? null : pacerBrandGradient,
-                        color: monoColor,
+                  Transform.translate(
+                    offset: const Offset(-25.33, -20.0),
+                    child: SizedBox(
+                      width: 130,
+                      height: 120,
+                      child: CustomPaint(
+                        painter: _MarkPainter(
+                          gradient: mono ? null : pacerBrandGradient,
+                          color: monoColor,
+                        ),
                       ),
                     ),
                   ),
-                  // Baseline pinned at y=96 of the design box, like the SVG.
+                  // Baseline pinned at y=76 of the design box (96 - 20).
                   Positioned(
-                    left: 100,
+                    left: 74.67,
                     top: 0,
                     child: Baseline(
-                      baseline: 96,
+                      baseline: 76,
                       baselineType: TextBaseline.alphabetic,
                       child: word,
                     ),

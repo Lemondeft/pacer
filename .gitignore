@@ -49,3 +49,7 @@ app.*.map.json
 
 # Env / secrets (Supabase keys)
 .env
+
+# Graphify and Supabase temp
+graphify-out/
+supabase/.temp/

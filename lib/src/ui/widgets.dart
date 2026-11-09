@@ -1514,12 +1514,14 @@ class ResponsiveScroll extends StatelessWidget {
   final Widget child;
   final double maxWidth;
   final bool centerContent;
+  final RefreshCallback? onRefresh;
   const ResponsiveScroll({
     super.key,
     this.padding = EdgeInsets.zero,
     required this.child,
     this.maxWidth = 1100,
     this.centerContent = false,
+    this.onRefresh,
   });
 
   @override
@@ -1537,9 +1539,16 @@ class ResponsiveScroll extends StatelessWidget {
             child: Center(child: body),
           );
         }
-        return SingleChildScrollView(
+        Widget scroll = SingleChildScrollView(
+          physics: onRefresh != null
+              ? const AlwaysScrollableScrollPhysics()
+              : null,
           child: PageShell(maxWidth: maxWidth, child: body),
         );
+        if (onRefresh != null) {
+          scroll = RefreshIndicator(onRefresh: onRefresh!, child: scroll);
+        }
+        return scroll;
       },
     );
   }

@@ -1226,12 +1226,12 @@ class _TeamsScreenState extends State<TeamsScreen> {
     }
   }
 
-  Future<List<Team>> _load() async {
+  Future<List<Team>> _load({bool forceRefresh = false}) async {
     if (!_backend || supa.auth.currentUser == null) {
       return PacerDummyData.teams;
     }
     try {
-      final list = await TeamRepository().listTeams();
+      final list = await TeamRepository().listTeams(forceRefresh: forceRefresh);
       return list.isEmpty ? PacerDummyData.teams : list;
     } catch (_) {
       return PacerDummyData.teams;
@@ -1306,6 +1306,10 @@ class _TeamsScreenState extends State<TeamsScreen> {
       backgroundColor: scheme.scaffold,
       body: SafeArea(
         child: ResponsiveScroll(
+          onRefresh: () async {
+            setState(() => _future = _load(forceRefresh: true));
+            await _future;
+          },
           padding: const EdgeInsets.only(top: 16, bottom: 120),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -2004,7 +2008,7 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
     }
   }
 
-  Future<_BoardData> _load() async {
+  Future<_BoardData> _load({bool forceRefresh = false}) async {
     try {
       if (!_backend || supa.auth.currentUser == null) {
         final d = PacerDummyData.getLeaderboardData(
@@ -2016,13 +2020,18 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
       }
       final uid = supa.auth.currentUser?.id;
       if (_scope == 'region') {
-        final me = await AuthRepository().getProfile();
+        final me = await AuthRepository().getProfile(
+          forceRefresh: forceRefresh,
+        );
         if (me?.region == null) {
           return _BoardData(uid: uid, needsRegion: true);
         }
       }
       final repo = LeaderboardRepository();
-      final boards = await repo.listLeaderboards(limit: 20);
+      final boards = await repo.listLeaderboards(
+        limit: 20,
+        forceRefresh: forceRefresh,
+      );
       if (boards.isEmpty) {
         final d = PacerDummyData.getLeaderboardData(
           metric: _selectedMetric,
@@ -2047,11 +2056,17 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
         }
       }
 
-      var rows = await repo.getPeringkatWithNames(activeBoard.id);
+      var rows = await repo.getPeringkatWithNames(
+        activeBoard.id,
+        forceRefresh: forceRefresh,
+      );
       if (rows.isNotEmpty && _scope != 'global') {
         // Server-side scope: only people sharing my team / region.
         try {
-          final ids = await repo.scopeUserIds(_scope);
+          final ids = await repo.scopeUserIds(
+            _scope,
+            forceRefresh: forceRefresh,
+          );
           rows = rows.where((r) => ids.contains(r.entry.userId)).toList();
         } catch (_) {
           // Scope unavailable (migration not applied): keep the full board.
@@ -2209,6 +2224,10 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
       backgroundColor: PacerScheme.of(context).scaffold,
       body: SafeArea(
         child: ResponsiveScroll(
+          onRefresh: () async {
+            setState(() => _future = _load(forceRefresh: true));
+            await _future;
+          },
           padding: const EdgeInsets.fromLTRB(24, 16, 24, 120),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -2561,10 +2580,12 @@ class _HistoryScreenState extends State<HistoryScreen> {
     }
   }
 
-  Future<List<Activity>> _load() async {
+  Future<List<Activity>> _load({bool forceRefresh = false}) async {
     try {
       if (_demo) return PacerDummyData.activities;
-      final live = await ActivityRepository().listActivities();
+      final live = await ActivityRepository().listActivities(
+        forceRefresh: forceRefresh,
+      );
       return live.isEmpty ? PacerDummyData.activities : live;
     } catch (_) {
       return PacerDummyData.activities;
@@ -2624,6 +2645,10 @@ class _HistoryScreenState extends State<HistoryScreen> {
       backgroundColor: PacerScheme.of(context).scaffold,
       body: SafeArea(
         child: ResponsiveScroll(
+          onRefresh: () async {
+            setState(() => _future = _load(forceRefresh: true));
+            await _future;
+          },
           padding: const EdgeInsets.only(top: 16, bottom: 120),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,

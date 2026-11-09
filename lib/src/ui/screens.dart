@@ -312,7 +312,7 @@ class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key, this.onSeeTeams, this.onSeeHistory});
 
   @override
-  State<HomeScreen> createState() => _HomeScreenState();
+  State<HomeScreen> createState() => HomeScreenState();
 }
 
 /// Live home data; every field null in demo mode (keeps the mock cards).
@@ -331,16 +331,19 @@ class _HomeData {
   });
 }
 
-class _HomeScreenState extends State<HomeScreen> {
+class HomeScreenState extends State<HomeScreen> {
   _HomeData? _data;
 
   @override
   void initState() {
     super.initState();
-    // _load never throws (demo fallback inside); refresh cards on arrival.
-    _load().then((d) {
-      if (mounted) setState(() => _data = d);
-    });
+    reload();
+  }
+
+  /// Reloads home dashboard cards. When [forceRefresh] is true, cache is bypassed.
+  Future<void> reload({bool forceRefresh = false}) async {
+    final d = await _load(forceRefresh: forceRefresh);
+    if (mounted) setState(() => _data = d);
   }
 
   bool get _backend {
@@ -352,7 +355,7 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
-  Future<_HomeData> _load() async {
+  Future<_HomeData> _load({bool forceRefresh = false}) async {
     try {
       if (!_backend || supa.auth.currentUser == null) {
         final now = DateTime.now();
@@ -365,10 +368,15 @@ class _HomeScreenState extends State<HomeScreen> {
         );
       }
       final repo = ActivityRepository();
-      final activities = await repo.listActivities(limit: 5);
-      final streak = await repo.getStreak();
-      final teams = await TeamRepository().myTeams();
-      final profile = await AuthRepository().getProfile();
+      final activities = await repo.listActivities(
+        limit: 5,
+        forceRefresh: forceRefresh,
+      );
+      final streak = await repo.getStreak(forceRefresh: forceRefresh);
+      final teams = await TeamRepository().myTeams(forceRefresh: forceRefresh);
+      final profile = await AuthRepository().getProfile(
+        forceRefresh: forceRefresh,
+      );
       return _HomeData(
         activities: activities.isEmpty
             ? PacerDummyData.activities.take(3).toList()
@@ -532,6 +540,7 @@ class _HomeScreenState extends State<HomeScreen> {
   Widget build(BuildContext context) {
     return SafeArea(
       child: ResponsiveScroll(
+        onRefresh: () => reload(forceRefresh: true),
         // Bottom clearance for the floating nav pill (nav height + margin).
         padding: const EdgeInsets.only(bottom: 150),
         child: Column(
@@ -609,8 +618,14 @@ class _MainShellState extends State<MainShell> {
   int _index = 0;
   String _activeSport = 'lari';
   String? _activeGoal;
+  final GlobalKey<HomeScreenState> _homeKey = GlobalKey<HomeScreenState>();
 
-  void _onPillTap(int i) => setState(() => _index = i);
+  void _onPillTap(int i) {
+    if (i == 0 && _index != 0) {
+      _homeKey.currentState?.reload();
+    }
+    setState(() => _index = i);
+  }
   void _goHistory() =>
       Navigator.of(context)
           .push(MaterialPageRoute(builder: (_) => const HistoryScreen()));
@@ -636,14 +651,21 @@ class _MainShellState extends State<MainShell> {
   @override
   Widget build(BuildContext context) {
     final pages = [
-      HomeScreen(onSeeTeams: () => _onPillTap(2), onSeeHistory: _goHistory),
-      // Tracker gets the full screen: nav pill hidden (it covered PAUSE),
-      // back button returns to Home instead.
-      RunTrackerScreen(
-        onBack: () => _onPillTap(0),
-        sportType: _activeSport,
-        goal: _activeGoal,
+      HomeScreen(
+        key: _homeKey,
+        onSeeTeams: () => _onPillTap(2),
+        onSeeHistory: _goHistory,
       ),
+      // Tracker gets the full screen: nav pill hidden (it covered PAUSE),
+      // back button returns to Home instead. Mounted only when active.
+      if (_index == 1)
+        RunTrackerScreen(
+          onBack: () => _onPillTap(0),
+          sportType: _activeSport,
+          goal: _activeGoal,
+        )
+      else
+        const SizedBox.shrink(),
       TeamsScreen(onBack: () => _onPillTap(0)),
       LeaderboardScreen(onBack: () => _onPillTap(0)),
     ];
@@ -653,7 +675,7 @@ class _MainShellState extends State<MainShell> {
         body: Row(
           children: [
             _PacerNavRail(index: _index, onTap: _onPillTap, onStart: _goSetup),
-            Expanded(child: pages[_index]),
+            Expanded(child: IndexedStack(index: _index, children: pages)),
           ],
         ),
       );
@@ -666,7 +688,7 @@ class _MainShellState extends State<MainShell> {
     return Scaffold(
       body: Stack(
         children: [
-          pages[_index],
+          IndexedStack(index: _index, children: pages),
           if (_index != 1)
             Positioned(
               left: 0,
