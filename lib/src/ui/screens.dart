@@ -449,8 +449,6 @@ class HomeScreenState extends State<HomeScreen> {
   }
 
   Widget _history() {
-    String cap(String j) =>
-        j.isEmpty ? j : '${j[0].toUpperCase()}${j.substring(1)}';
     final activities = _data?.activities;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -486,7 +484,7 @@ class HomeScreenState extends State<HomeScreen> {
             Padding(
               padding: const EdgeInsets.only(bottom: 16),
               child: RunSessionCard(
-                title: cap(a.jenis),
+                title: S.sportName(a.jenis),
                 date: fmtDate(a.mulaiAt),
                 time: fmtDurasi(a.durasiS),
                 pace: fmtPace(a.durasiS, a.jarakM),

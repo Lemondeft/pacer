@@ -177,7 +177,12 @@ class _RunSetupScreenState extends State<RunSetupScreen> {
     ),
   ];
 
-  static const _goals = ['Bebas', '3 km', '5 km', '30 mnt'];
+  List<String> get _goals => [
+    S.free,
+    '3 km',
+    '5 km',
+    langNotifier.value == Lang.en ? '30 min' : '30 mnt',
+  ];
 
   String _sportTitle(int index) {
     switch (index) {
@@ -430,31 +435,12 @@ class _RunSetupScreenState extends State<RunSetupScreen> {
                       spacing: 8,
                       runSpacing: 8,
                       children: [
-                        for (final g in const [
-                          'Bebas',
-                          '3 km',
-                          '5 km',
-                          '30 mnt',
-                        ])
+                        for (var i = 0; i < _goals.length; i++)
                           GestureDetector(
-                            onTap: () => setState(
-                              () => _goal = [
-                                'Bebas',
-                                '3 km',
-                                '5 km',
-                                '30 mnt',
-                              ].indexOf(g),
-                            ),
+                            onTap: () => setState(() => _goal = i),
                             child: GoalChip(
-                              label: g,
-                              selected:
-                                  _goal ==
-                                  [
-                                    'Bebas',
-                                    '3 km',
-                                    '5 km',
-                                    '30 mnt',
-                                  ].indexOf(g),
+                              label: _goals[i],
+                              selected: _goal == i,
                             ),
                           ),
                       ],
@@ -1570,8 +1556,8 @@ class _TeamDetailSheetState extends State<TeamDetailSheet> {
     final yes = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Keluarkan anggota?'),
-        content: Text('$nama akan dikeluarkan dari tim ini.'),
+        title: Text(S.kickMemberTitle),
+        content: Text(S.kickMemberBody(nama)),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(false),
@@ -1579,7 +1565,7 @@ class _TeamDetailSheetState extends State<TeamDetailSheet> {
           ),
           TextButton(
             onPressed: () => Navigator.of(context).pop(true),
-            child: const Text('Keluarkan'),
+            child: Text(S.kickMemberConfirm),
           ),
         ],
       ),
@@ -1672,13 +1658,13 @@ class _TeamDetailSheetState extends State<TeamDetailSheet> {
     final saved = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Ubah tim'),
+        title: Text(S.editTeamTitle),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
             TextField(
               controller: name,
-              decoration: const InputDecoration(labelText: 'Nama'),
+              decoration: InputDecoration(labelText: S.teamName),
             ),
             TextField(
               controller: target,
@@ -1726,8 +1712,8 @@ class _TeamDetailSheetState extends State<TeamDetailSheet> {
     final yes = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Hapus tim?'),
-        content: Text('${team.nama} dan semua anggotanya akan dihapus.'),
+        title: Text(S.deleteTeamTitle),
+        content: Text(S.deleteTeamBody(team.nama)),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(context).pop(false),
@@ -1735,7 +1721,7 @@ class _TeamDetailSheetState extends State<TeamDetailSheet> {
           ),
           TextButton(
             onPressed: () => Navigator.of(context).pop(true),
-            child: const Text('Hapus'),
+            child: Text(S.deleteConfirm),
           ),
         ],
       ),
@@ -2385,8 +2371,8 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
                   }
                   // No mocks: offline and empty both show the empty state.
                   if (rows == null || rows.isEmpty) {
-                    return const PacerEmptyState(
-                      'Belum ada peringkat.',
+                    return PacerEmptyState(
+                      S.emptyLeaderboard,
                       icon: Icons.leaderboard_outlined,
                     );
                   }
@@ -2399,7 +2385,7 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
                           _standingRow(
                             rank: i + 1,
                             name: rows[i].nama,
-                            value: rows[i].entry.nilai.toStringAsFixed(1),
+                            value: _formatMetricValue(rows[i].entry.nilai),
                             mine: rows[i].entry.userId == uid,
                           ),
                       ],
@@ -2408,7 +2394,6 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
                   final uid = d?.uid;
                   final top = rows.take(3).toList();
                   final rest = rows.skip(3).toList();
-                  String val(double v) => v.toStringAsFixed(1);
                   return Column(
                     children: [
                       Row(
@@ -2417,7 +2402,7 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
                         children: [
                           _podium(
                             top[1].nama,
-                            val(top[1].entry.nilai),
+                            _formatMetricValue(top[1].entry.nilai),
                             68,
                             PacerColors.podiumGray,
                             rank: 2,
@@ -2425,7 +2410,7 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
                           ),
                           _podium(
                             top[0].nama,
-                            val(top[0].entry.nilai),
+                            _formatMetricValue(top[0].entry.nilai),
                             89,
                             PacerColors.medalGold,
                             rank: 1,
@@ -2433,7 +2418,7 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
                           ),
                           _podium(
                             top[2].nama,
-                            val(top[2].entry.nilai),
+                            _formatMetricValue(top[2].entry.nilai),
                             63,
                             PacerColors.medalBronze,
                             rank: 3,
@@ -2446,7 +2431,7 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
                         _standingRow(
                           rank: i + 4,
                           name: rest[i].nama,
-                          value: val(rest[i].entry.nilai),
+                          value: _formatMetricValue(rest[i].entry.nilai),
                           mine: uid != null && rest[i].entry.userId == uid,
                         ),
                     ],
@@ -2466,7 +2451,7 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
                       style: OutlinedButton.styleFrom(
                         minimumSize: const Size(0, 48),
                       ),
-                      child: const Text('Statistik'),
+                      child: Text(S.statistic),
                     ),
                   ),
                   const SizedBox(width: 8),
@@ -2492,9 +2477,29 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
     );
   }
 
+  String _formatMetricValue(double v) {
+    if (_selectedMetric == 'kalori') {
+      final unit = langNotifier.value == Lang.en ? 'kcal' : 'kkal';
+      return '${v.round()} $unit';
+    } else if (_selectedMetric == 'durasi') {
+      final totalMin = v.round();
+      if (totalMin >= 60) {
+        final h = totalMin ~/ 60;
+        final m = totalMin % 60;
+        final hUnit = langNotifier.value == Lang.en ? 'h' : 'j';
+        return m > 0 ? '$h$hUnit ${m}m' : '$h$hUnit';
+      }
+      final unit = langNotifier.value == Lang.en ? 'min' : 'mnt';
+      return '$totalMin $unit';
+    } else {
+      // 'jarak' or 'semua'
+      return '${v.toStringAsFixed(1)} Km';
+    }
+  }
+
   Widget _podium(
     String name,
-    String km,
+    String valueText,
     double h,
     Color bar, {
     required int rank,
@@ -2520,7 +2525,7 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
             ),
           ),
           Text(
-            '$km Km',
+            valueText,
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
             style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14),
@@ -2608,13 +2613,11 @@ class _HistoryScreenState extends State<HistoryScreen> {
   }
 
   Widget _activityCard(Activity a) {
-    String cap(String j) =>
-        j.isEmpty ? j : '${j[0].toUpperCase()}${j.substring(1)}';
     return GestureDetector(
       onTap: () => Navigator.of(context).push(
         MaterialPageRoute(
           builder: (_) => RunFinishScreen(
-            title: '${cap(a.jenis)} ${fmtDate(a.mulaiAt)}'.trim(),
+            title: '${S.sportName(a.jenis)} ${fmtDate(a.mulaiAt)}'.trim(),
             isHistoryDetail: true,
             aktivitasId: a.id,
             summary: RunSummary(
@@ -2628,7 +2631,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
         ),
       ),
       child: RunSessionCard(
-        title: cap(a.jenis),
+        title: S.sportName(a.jenis),
         date: fmtDate(a.mulaiAt),
         time: fmtDurasi(a.durasiS),
         pace: fmtPace(a.durasiS, a.jarakM),
@@ -4583,7 +4586,7 @@ class _AboutMeScreenState extends State<AboutMeScreen> {
   }
 
   String _bulan(int m) {
-    const names = [
+    const idNames = [
       'Januari',
       'Februari',
       'Maret',
@@ -4597,6 +4600,21 @@ class _AboutMeScreenState extends State<AboutMeScreen> {
       'November',
       'Desember',
     ];
+    const enNames = [
+      'January',
+      'February',
+      'March',
+      'April',
+      'May',
+      'June',
+      'July',
+      'August',
+      'September',
+      'October',
+      'November',
+      'December',
+    ];
+    final names = langNotifier.value == Lang.en ? enNames : idNames;
     return (m >= 1 && m <= 12) ? names[m - 1] : '';
   }
 
@@ -4617,7 +4635,14 @@ class _AboutMeScreenState extends State<AboutMeScreen> {
             ? '–'
             : '${p!.lahir!.day} ${_bulan(p.lahir!.month)} ${p.lahir!.year}',
       ),
-      (S.gender, p?.jenisKelamin ?? '–'),
+      (
+        S.gender,
+        p?.jenisKelamin == 'Laki-laki'
+            ? S.genderMale
+            : p?.jenisKelamin == 'Perempuan'
+            ? S.genderFemale
+            : p?.jenisKelamin ?? '–',
+      ),
       (S.height, p?.tinggiCm == null ? '–' : '${_trimNum(p?.tinggiCm)} cm'),
       (S.weight, p?.beratKg == null ? '–' : '${_trimNum(p?.beratKg)} kg'),
       (S.region, p?.region ?? '–'),
@@ -4853,13 +4878,13 @@ class _ProfileEditDialogState extends State<ProfileEditDialog> {
               decoration: InputDecoration(hintText: S.gender),
               items: [
                 DropdownMenuItem(value: null, child: Text(S.notSet)),
-                const DropdownMenuItem(
+                DropdownMenuItem(
                   value: 'Laki-laki',
-                  child: Text('Laki-laki'),
+                  child: Text(S.genderMale),
                 ),
-                const DropdownMenuItem(
+                DropdownMenuItem(
                   value: 'Perempuan',
-                  child: Text('Perempuan'),
+                  child: Text(S.genderFemale),
                 ),
               ],
               onChanged: (v) => _gender = v,
@@ -4916,12 +4941,12 @@ class FiturScreen extends StatelessWidget {
         (_) => const ChallengeListScreen(),
       ),
       (
-        'leaderboard',
+        S.leaderboard,
         Icons.leaderboard_outlined,
         (ctx) => LeaderboardScreen(onBack: () => Navigator.of(ctx).pop()),
       ),
       (
-        'teams',
+        S.teams,
         Icons.groups_outlined,
         (ctx) => TeamsScreen(onBack: () => Navigator.of(ctx).pop()),
       ),
@@ -4948,7 +4973,7 @@ class FiturScreen extends StatelessWidget {
             children: [
               const PageHeader(),
               const SizedBox(height: 16),
-              Text('FITUR', style: PacerText.fugazOf(context)),
+              Text(S.features.toUpperCase(), style: PacerText.fugazOf(context)),
               const SizedBox(height: 12),
               // Tiles flow into a grid driven by max extent — never a
               // hardcoded column count.
@@ -5050,6 +5075,7 @@ class _LanguageSettingsScreenState extends State<LanguageSettingsScreen> {
   Future<void> _setLang(Lang lang) async {
     langUserLocked = true;
     langNotifier.value = lang;
+    await persistLanguagePreference(lang);
     try {
       final user = supa.auth.currentUser;
       if (user == null) {
@@ -5187,8 +5213,7 @@ class ThemeSettingsScreen extends StatelessWidget {
             children: [
               const PageHeader(),
               const SizedBox(height: 16),
-              // Hardcoded label — see class doc (S.* untouched).
-              Text('Tema', style: PacerText.pageTitleOf(context)),
+              Text(S.theme, style: PacerText.pageTitleOf(context)),
               const SizedBox(height: 16),
               ValueListenableBuilder<ThemeMode>(
                 valueListenable: themeModeNotifier,
@@ -5196,24 +5221,24 @@ class ThemeSettingsScreen extends StatelessWidget {
                   children: [
                     _themeOption(
                       context,
-                      label: 'Sistem',
-                      sub: 'Ikuti tema perangkat',
+                      label: S.themeSystem,
+                      sub: S.themeSystemSub,
                       selected: current == ThemeMode.system,
                       onTap: () => setThemeMode(ThemeMode.system),
                     ),
                     const SizedBox(height: 12),
                     _themeOption(
                       context,
-                      label: 'Terang',
-                      sub: 'Tampilan terang',
+                      label: S.themeLight,
+                      sub: S.themeLightSub,
                       selected: current == ThemeMode.light,
                       onTap: () => setThemeMode(ThemeMode.light),
                     ),
                     const SizedBox(height: 12),
                     _themeOption(
                       context,
-                      label: 'Gelap',
-                      sub: 'Tampilan gelap',
+                      label: S.themeDark,
+                      sub: S.themeDarkSub,
                       selected: current == ThemeMode.dark,
                       onTap: () => setThemeMode(ThemeMode.dark),
                     ),

@@ -1,7 +1,9 @@
-/// Shared display formatters for activity values (Indonesian number style).
+/// Shared display formatters for activity values.
 /// Used by the home, history, and tracker screens so pace/distance render
 /// identically everywhere.
 library;
+
+import 'package:pacer/src/ui/app_strings.dart';
 
 /// d/M/yyyy; '' when null.
 String fmtDate(DateTime? d) => d == null ? '' : '${d.day}/${d.month}/${d.year}';
@@ -26,13 +28,21 @@ String fmtPace(int? durasiS, double? jarakM) {
   return "$m'${s.toString().padLeft(2, '0')}\"";
 }
 
-/// '15,00 Km' from meters; '' when null.
-String fmtKm(double? m) =>
-    m == null ? '' : '${(m / 1000).toStringAsFixed(2).replaceAll('.', ',')} Km';
+/// '15,00 Km' (or '15.00 Km' in EN) from meters; '' when null.
+String fmtKm(double? m) {
+  if (m == null) return '';
+  final km = (m / 1000).toStringAsFixed(2);
+  final formatted =
+      langNotifier.value == Lang.en ? km : km.replaceAll('.', ',');
+  return '$formatted Km';
+}
 
-/// Plain km number ('15,00') for hero displays.
-String fmtKmNum(double? m) =>
-    m == null ? '' : (m / 1000).toStringAsFixed(2).replaceAll('.', ',');
+/// Plain km number ('15,00' or '15.00' in EN) for hero displays.
+String fmtKmNum(double? m) {
+  if (m == null) return '';
+  final km = (m / 1000).toStringAsFixed(2);
+  return langNotifier.value == Lang.en ? km : km.replaceAll('.', ',');
+}
 
 /// Avatar initials from a display name ('Siti Rahma' → 'SR'); '?' when empty.
 String initialsOf(String? nama) {

@@ -1,7 +1,11 @@
 import 'package:flutter/foundation.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 
 /// App language. Default Indonesian (per Figma's mixed copy, unified to ID).
 enum Lang { id, en }
+
+/// Local persistence key for language choice.
+const String _kPrefLang = 'pacer_user_language';
 
 /// Global language state. UI reads [S] getters; toggling [langNotifier]
 /// rebuilds the whole tree (PacerApp listens). Persisted to Supabase
@@ -13,6 +17,26 @@ final ValueNotifier<Lang> langNotifier = ValueNotifier(Lang.id);
 /// profile row still holds the old default because a write failed).
 bool langUserLocked = false;
 
+/// Loads local language preference on app startup before UI renders.
+Future<void> initLanguagePreference() async {
+  try {
+    final prefs = await SharedPreferences.getInstance();
+    final saved = prefs.getString(_kPrefLang);
+    if (saved != null) {
+      langNotifier.value = saved == 'en' ? Lang.en : Lang.id;
+      langUserLocked = true;
+    }
+  } catch (_) {}
+}
+
+/// Persists user's explicit language preference to local storage.
+Future<void> persistLanguagePreference(Lang lang) async {
+  try {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_kPrefLang, lang == Lang.en ? 'en' : 'id');
+  } catch (_) {}
+}
+
 /// All user-visible strings. Indonesian first, English alternate.
 class S {
   static bool get _en => langNotifier.value == Lang.en;
@@ -20,7 +44,8 @@ class S {
   // Auth / GetStarted
   static String get appTagline =>
       _en ? 'Pacer, ready to help!' : 'Pacer, siap membantu!';
-  static String get signIn => _en ? 'Sign In' : 'Daftar';
+  static String get signUp => _en ? 'Sign Up' : 'Daftar';
+  static String get signIn => _en ? 'Sign Up' : 'Daftar';
   static String get logIn => _en ? 'Log In' : 'Masuk';
   static String get welcomeRunners =>
       _en ? 'Welcome runners !' : 'Selamat datang, pelari !';
@@ -29,7 +54,7 @@ class S {
   static String get email => _en ? 'Email' : 'Email';
   static String get password => _en ? 'Password' : 'Kata sandi';
   static String get confirmPassword =>
-      _en ? 'Konfirmasi Password' : 'Konfirmasi Kata Sandi';
+      _en ? 'Confirm Password' : 'Konfirmasi Kata Sandi';
   static String get orSignUpWith =>
       _en ? 'or sign up with' : 'atau daftar dengan';
   static String get errFillAll =>
@@ -165,7 +190,7 @@ class S {
   static String get searchClubs => _en
       ? 'Search clubs, cities, or friends...'
       : 'Cari klub, kota, atau teman...';
-  static String get createTeam => _en ? 'create team' : 'buat teams';
+  static String get createTeam => _en ? 'Create Team' : 'Buat Tim';
   static String get nearestGroupRun =>
       _en ? 'Nearest Group Run' : 'Group Run Terdekat';
   static String get join => _en ? 'Join' : 'Gabung';
@@ -177,14 +202,14 @@ class S {
   static String get you => _en ? 'You' : 'Anda';
 
   // Challenge
-  static String get challenge => _en ? 'challenge' : 'tantangan';
+  static String get challenge => _en ? 'Challenge' : 'Tantangan';
   static String get challengeDetail =>
-      _en ? 'challenge detail' : 'detail tantangan';
+      _en ? 'Challenge Detail' : 'Detail Tantangan';
   static String get distance => _en ? 'Distance' : 'Jarak';
   static String get date => _en ? 'Date' : 'Tanggal';
   static String get startChallenge =>
-      _en ? 'start challenge' : 'mulai tantangan';
-  static String get leaveChallenge => _en ? 'leave challenge' : 'keluar';
+      _en ? 'Start Challenge' : 'Mulai Tantangan';
+  static String get leaveChallenge => _en ? 'Leave' : 'Keluar';
   static String get coachOnly =>
       _en ? 'Only coaches can do that.' : 'Hanya coach yang bisa.';
   static String get teamCreated => _en ? 'Team created.' : 'Tim dibuat.';
@@ -195,11 +220,14 @@ class S {
   static String get account => _en ? 'ACCOUNT' : 'AKUN';
   static String get aboutMe => _en ? 'About Me' : 'Tentang Saya';
   static String get features => _en ? 'Features' : 'Fitur';
-  static String get out => _en ? 'Out' : 'Keluar';
+  static String get out => _en ? 'Log Out' : 'Keluar';
+  static String get logOut => _en ? 'Log Out' : 'Keluar';
   static String get language => _en ? 'Language' : 'Bahasa';
   static String get fullName => _en ? 'Full Name' : 'Nama Lengkap';
   static String get birth => _en ? 'Birth' : 'Lahir';
   static String get gender => _en ? 'Gender' : 'Jenis Kelamin';
+  static String get genderMale => _en ? 'Male' : 'Laki-laki';
+  static String get genderFemale => _en ? 'Female' : 'Perempuan';
   static String get height => _en ? 'Height' : 'Tinggi';
   static String get weight => _en ? 'Weight' : 'Berat';
   static String get editPersonalDetails =>
@@ -210,9 +238,66 @@ class S {
   static String get nameSaved => _en ? 'Name saved.' : 'Nama tersimpan.';
 
   // Fitur tiles
-  static String get streaks => _en ? 'streaks' : 'streak';
-  static String get riwayat => _en ? 'history' : 'riwayat';
-  static String get profile => _en ? 'profile' : 'profil';
+  static String get streaks => _en ? 'Streaks' : 'Streak';
+  static String get riwayat => _en ? 'History' : 'Riwayat';
+  static String get profile => _en ? 'Profile' : 'Profil';
+
+  // Theme
+  static String get theme => _en ? 'Theme' : 'Tema';
+  static String get themeSystem => _en ? 'System' : 'Sistem';
+  static String get themeSystemSub =>
+      _en ? 'Follow device theme' : 'Ikuti tema perangkat';
+  static String get themeLight => _en ? 'Light' : 'Terang';
+  static String get themeLightSub =>
+      _en ? 'Light appearance' : 'Tampilan terang';
+  static String get themeDark => _en ? 'Dark' : 'Gelap';
+  static String get themeDarkSub =>
+      _en ? 'Dark appearance' : 'Tampilan gelap';
+
+  // Team mod dialogs
+  static String get kickMemberTitle =>
+      _en ? 'Remove member?' : 'Keluarkan anggota?';
+  static String kickMemberBody(String name) => _en
+      ? '$name will be removed from this team.'
+      : '$name akan dikeluarkan dari tim ini.';
+  static String get kickMemberConfirm => _en ? 'Remove' : 'Keluarkan';
+  static String get deleteTeamTitle =>
+      _en ? 'Delete team?' : 'Hapus tim?';
+  static String deleteTeamBody(String team) => _en
+      ? '$team and all its members will be deleted.'
+      : '$team dan semua anggotanya akan dihapus.';
+  static String get deleteConfirm => _en ? 'Delete' : 'Hapus';
+  static String get editTeamTitle => _en ? 'Edit team' : 'Ubah tim';
+  static String get editLabel => _en ? 'Edit' : 'Ubah';
+  static String get deleteLabel => _en ? 'Delete' : 'Hapus';
+
+  // Empty states
+  static String get emptyLeaderboard =>
+      _en ? 'No rankings yet.' : 'Belum ada peringkat.';
+  static String get emptyTeams =>
+      _en ? 'Not joined any team yet.' : 'Belum gabung tim mana pun.';
+  static String get emptyHistory =>
+      _en ? 'No routes saved yet.' : 'Belum ada rute tersimpan.';
+  static String get emptyChat =>
+      _en ? 'No messages yet. Start chatting!' : 'Belum ada pesan. Mulai duluan!';
+
+  // Sport name mapper
+  static String sportName(String jenis) {
+    switch (jenis.toLowerCase()) {
+      case 'lari':
+        return _en ? 'Running' : 'Lari';
+      case 'joging':
+        return _en ? 'Jogging' : 'Joging';
+      case 'bersepeda':
+        return _en ? 'Cycling' : 'Bersepeda';
+      case 'berjalan':
+        return _en ? 'Walking' : 'Berjalan';
+      default:
+        return jenis.isEmpty
+            ? jenis
+            : '${jenis[0].toUpperCase()}${jenis.substring(1)}';
+    }
+  }
 
   // Statistic
   static String get statistic => _en ? 'Statistic' : 'Statistik';
@@ -289,7 +374,7 @@ class S {
       _en ? 'Routine Group Run' : 'Group Run Rutin';
   static String get routineGroupRunDesc =>
       _en ? 'Schedule regular runs together' : 'Jadwalkan lari bersama rutin';
-  static String get agree => _en ? 'agree' : 'setuju';
+  static String get agree => _en ? 'Agree' : 'Setuju';
 
   // Coach board (PE grading)
   static String get coachBoard => _en ? 'Class' : 'Kelas';
@@ -297,7 +382,7 @@ class S {
   static String get pickChallenge =>
       _en ? 'Challenge (optional)' : 'Tantangan (opsional)';
   static String get noMembers => _en ? 'No members yet.' : 'Belum ada anggota.';
-  static String get sessionsCol => _en ? 'sessions' : 'sesi';
+  static String get sessionsCol => _en ? 'Sessions' : 'Sesi';
 
   // Demo messages
   static String get demoJoinSent =>

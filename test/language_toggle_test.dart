@@ -34,7 +34,7 @@ void main() {
     await tester.tap(find.text('English'));
     await tester.pumpAndSettle();
     expect(langNotifier.value, Lang.en);
-    expect(find.text('Sign In'), findsOneWidget);
+    expect(find.text('Sign Up'), findsOneWidget);
 
     // Tap back to Indonesian.
     await tester.tap(find.text('Bahasa Indonesia'));

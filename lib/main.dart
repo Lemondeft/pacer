@@ -8,6 +8,7 @@ import 'package:pacer/supabase.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  await initLanguagePreference();
   try {
     await dotenv.load(fileName: '.env');
   } catch (_) {
@@ -67,7 +68,25 @@ class _RootState extends State<_Root> {
             // Saved session (Supabase restores it at init): skip auth.
             var next = 'getStarted';
             try {
-              if (supa.auth.currentUser != null) next = 'main';
+              final user = supa.auth.currentUser;
+              if (user != null) {
+                next = 'main';
+                if (!langUserLocked) {
+                  supa
+                      .from('users')
+                      .select('language')
+                      .eq('id', user.id)
+                      .maybeSingle()
+                      .then((row) {
+                    final value = row?['language'] as String?;
+                    if (value == 'en' && langNotifier.value != Lang.en) {
+                      langNotifier.value = Lang.en;
+                    } else if (value == 'id' && langNotifier.value != Lang.id) {
+                      langNotifier.value = Lang.id;
+                    }
+                  }).catchError((_) {});
+                }
+              }
             } catch (_) {
               // Demo mode: stay on GetStarted.
             }
