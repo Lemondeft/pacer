@@ -53,3 +53,5 @@ app.*.map.json
 # Graphify and Supabase temp
 graphify-out/
 supabase/.temp/
+GLASSMORPHISM_SPEC.md
+android/build/

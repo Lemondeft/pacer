@@ -1,4 +1,3 @@
-import 'dart:ui';
 
 import 'package:flutter/material.dart';
 import 'package:pacer/core/responsive/responsive.dart';
@@ -7,6 +6,7 @@ import 'package:pacer/src/aktivitas/activity_model.dart';
 import 'app_theme.dart';
 import 'app_strings.dart';
 import 'pacer_logo.dart';
+import 'pacer_glass.dart';
 
 /// The ONE app logo: skewed "p" mark with speed cuts + italic "acer"
 /// wordmark, in Pacer's brand gradient (sky blue → lime). Used on Loading,
@@ -798,6 +798,7 @@ class BottomNavPill extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = PacerScheme.of(context);
+    final dark = Theme.of(context).brightness == Brightness.dark;
     // Per-tab glyphs matching the nav rail: outlined idle, filled selected.
     final tabs = [
       (Icons.home_outlined, Icons.home, S.home),
@@ -805,60 +806,55 @@ class BottomNavPill extends StatelessWidget {
       (Icons.groups_outlined, Icons.groups, S.teams),
       (Icons.leaderboard_outlined, Icons.leaderboard, S.leaderboard),
     ];
-    final radius = BorderRadius.circular(50);
-    final tint = scheme.navBar;
+    final tint = dark ? const Color(0xFF1E293B) : scheme.navBar;
+
+    // Slot index mapping across 5 slots: [0: Home, 1: Run, 2: START, 3: Teams, 4: Rank]
+    final slotIndex = index < 2 ? index : index + 1;
+    final alignX = -1.0 + (slotIndex * 0.5);
 
     Widget tab(int i) {
       final selected = index == i;
-      return Semantics(
-        selected: selected,
-        button: true,
-        label: tabs[i].$3,
-        // Tap lives here (not on the excluded InkResponse) so screen
-        // readers can still activate the tab.
-        onTap: () => onTap(i),
-        child: ExcludeSemantics(
-          child: Tooltip(
-            message: tabs[i].$3,
-            child: InkResponse(
-              onTap: () => onTap(i),
-              radius: 30,
-              child: SizedBox(
-                width: 56,
-                height: 56,
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    AnimatedContainer(
-                      duration: const Duration(milliseconds: 250),
-                      curve: Curves.easeOut,
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 10,
-                        vertical: 4,
-                      ),
-                      decoration: BoxDecoration(
-                        color: selected
-                            ? PacerColors.lime.withValues(alpha: 0.16)
-                            : Colors.transparent,
-                        borderRadius: BorderRadius.circular(999),
-                      ),
-                      child: Icon(
+      return PacerGlassPress(
+        radius: 24,
+        child: Semantics(
+          selected: selected,
+          button: true,
+          label: tabs[i].$3,
+          // Tap lives here (not on the excluded InkResponse) so screen
+          // readers can still activate the tab.
+          onTap: () => onTap(i),
+          child: ExcludeSemantics(
+            child: Tooltip(
+              message: tabs[i].$3,
+              child: InkResponse(
+                onTap: () => onTap(i),
+                radius: 28,
+                child: SizedBox(
+                  width: 58,
+                  height: 58,
+                  child: Column(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(
                         selected ? tabs[i].$2 : tabs[i].$1,
-                        size: 28,
+                        size: 24,
                         color: selected ? PacerColors.lime : scheme.navIcon,
                       ),
-                    ),
-                    const SizedBox(height: 4),
-                    AnimatedContainer(
-                      duration: const Duration(milliseconds: 250),
-                      width: selected ? 6 : 0,
-                      height: selected ? 6 : 0,
-                      decoration: const BoxDecoration(
-                        color: PacerColors.lime,
-                        shape: BoxShape.circle,
+                      const SizedBox(height: 3),
+                      Text(
+                        tabs[i].$3,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontSize: 10,
+                          fontWeight:
+                              selected ? FontWeight.w700 : FontWeight.w500,
+                          color: selected ? PacerColors.lime : scheme.navIcon,
+                          letterSpacing: 0.2,
+                        ),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
               ),
             ),
@@ -867,94 +863,137 @@ class BottomNavPill extends StatelessWidget {
       );
     }
 
-    return DecoratedBox(
-      // Shadow lives outside the clip so the blur edge stays crisp.
-      decoration: BoxDecoration(
-        borderRadius: radius,
-        boxShadow: const [
-          BoxShadow(
-            color: Color(0x40000000),
-            blurRadius: 24,
-            offset: Offset(0, 10),
-          ),
-        ],
-      ),
-      child: ClipRRect(
-        borderRadius: radius,
-        child: BackdropFilter(
-          filter: ImageFilter.blur(sigmaX: blurSigma, sigmaY: blurSigma),
-          child: Container(
-            // Fixed 377x80.7 DESIGN size — MainShell wraps this in a FittedBox
-            // scaled by fluid(w, 377, 480) so the pill grows moderately on
-            // bigger screens but never balloons.
-            width: 377,
-            height: 80.7,
-            decoration: BoxDecoration(
-              borderRadius: radius,
-              gradient: LinearGradient(
-                begin: Alignment.topCenter,
-                end: Alignment.bottomCenter,
-                colors: [
-                  Color.alphaBlend(
-                    Colors.white.withValues(alpha: 0.10),
-                    tint.withValues(alpha: 0.55),
-                  ),
-                  tint.withValues(alpha: 0.70),
-                ],
-              ),
-              border: Border.all(
-                color: Colors.white.withValues(alpha: 0.18),
-                width: 1,
-              ),
-            ),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+    return SizedBox(
+      width: 377,
+      height: 80.7,
+      child: PacerGlass.navigation(
+        radius: 36,
+        tintColor: tint,
+        tintOpacity: PacerGlassTheme.navigationOpacity(context),
+        blurSigmaOverride: blurSigma,
+        child: SizedBox(
+          width: 377,
+          height: 80.7,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+            child: Stack(
+              alignment: Alignment.center,
               children: [
-                tab(0),
-                tab(1),
-                Semantics(
-                  button: true,
-                  label: 'START',
-                  onTap: onStart,
-                  excludeSemantics: true,
-                  child: GestureDetector(
-                    onTap: onStart,
-                    child: Container(
-                      width: 66,
-                      height: 66,
-                      decoration: BoxDecoration(
-                        color: PacerColors.primary,
-                        shape: BoxShape.circle,
-                        border: Border.all(
-                          color: Colors.white.withValues(alpha: 0.35),
-                          width: 2,
-                        ),
-                        boxShadow: [
-                          BoxShadow(
-                            color: PacerColors.primary.withValues(alpha: 0.45),
-                            blurRadius: 16,
+                // Sliding illuminated selection pill (Mornye specification)
+                // Shares the exact same 5-slot coordinate system as the Expanded Row items.
+                Positioned.fill(
+                  child: IgnorePointer(
+                    child: AnimatedAlign(
+                      duration: const Duration(milliseconds: 250),
+                      curve: Curves.easeOutCubic,
+                      alignment: Alignment(alignX, 0),
+                      child: FractionallySizedBox(
+                        widthFactor: 1 / 5,
+                        heightFactor: 1.0,
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 2,
+                            vertical: 2,
                           ),
-                        ],
-                      ),
-                      alignment: Alignment.center,
-                      // Fugaz One 20 "START" is ~75px wide — scale to the
-                      // circle instead of wrapping on narrow screens.
-                      padding: const EdgeInsets.all(8),
-                      child: FittedBox(
-                        fit: BoxFit.scaleDown,
-                        child: Text(
-                          'START',
-                          style: PacerText.fugazBrand.copyWith(
-                            fontSize: 20,
-                            color: Colors.black,
+                          child: DecoratedBox(
+                            decoration: BoxDecoration(
+                              color: PacerColors.lime.withValues(
+                                alpha: dark ? 0.16 : 0.12,
+                              ),
+                              borderRadius: BorderRadius.circular(22),
+                              border: Border.all(
+                                color: PacerColors.lime.withValues(alpha: 0.35),
+                                width: 0.75,
+                              ),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: PacerColors.lime.withValues(
+                                    alpha: 0.18,
+                                  ),
+                                  blurRadius: 12,
+                                  spreadRadius: -2,
+                                ),
+                              ],
+                            ),
                           ),
                         ),
                       ),
                     ),
                   ),
                 ),
-                tab(2),
-                tab(3),
+                // Navigation items + prominent center START action in 5 equal slots
+                Row(
+                  crossAxisAlignment: CrossAxisAlignment.center,
+                  children: [
+                    Expanded(child: Center(child: tab(0))),
+                    Expanded(child: Center(child: tab(1))),
+                    Expanded(
+                      child: Center(
+                        child: PacerGlassPress(
+                          radius: 33,
+                          child: Semantics(
+                            button: true,
+                            label: 'START',
+                            onTap: onStart,
+                            excludeSemantics: true,
+                            child: GestureDetector(
+                              onTap: onStart,
+                              child: Container(
+                                width: 64,
+                                height: 64,
+                                decoration: BoxDecoration(
+                                  shape: BoxShape.circle,
+                                  gradient: const LinearGradient(
+                                    begin: Alignment.topLeft,
+                                    end: Alignment.bottomRight,
+                                    colors: [
+                                      Color(0xFF5CE7FF),
+                                      PacerColors.primary,
+                                      Color(0xFF00A6CE),
+                                    ],
+                                  ),
+                                  border: Border.all(
+                                    color: Colors.white.withValues(alpha: 0.45),
+                                    width: 1.5,
+                                  ),
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: PacerColors.primary.withValues(
+                                        alpha: 0.50,
+                                      ),
+                                      blurRadius: 18,
+                                      offset: const Offset(0, 4),
+                                    ),
+                                    const BoxShadow(
+                                      color: Color(0x33000000),
+                                      blurRadius: 8,
+                                      offset: Offset(0, 2),
+                                    ),
+                                  ],
+                                ),
+                                alignment: Alignment.center,
+                                padding: const EdgeInsets.all(8),
+                                child: FittedBox(
+                                  fit: BoxFit.scaleDown,
+                                  child: Text(
+                                    'START',
+                                    style: PacerText.fugazBrand.copyWith(
+                                      fontSize: 18,
+                                      letterSpacing: 0.8,
+                                      color: const Color(0xFF0B132B),
+                                    ),
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                    Expanded(child: Center(child: tab(2))),
+                    Expanded(child: Center(child: tab(3))),
+                  ],
+                ),
               ],
             ),
           ),

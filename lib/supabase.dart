@@ -15,6 +15,13 @@ Future<void> initSupabase() async {
   }
 
   await Supabase.initialize(url: url, publishableKey: anonKey);
+  try {
+    // Wait for any in-flight token refresh on an expired persisted session to
+    // settle before UI screens issue authenticated PostgREST queries.
+    await Supabase.instance.client.auth.getSession();
+  } catch (_) {
+    // Ignore refresh errors at startup (e.g. offline); callers handle null/expired sessions.
+  }
 }
 
 /// Global Supabase client accessor (valid after [initSupabase]).
