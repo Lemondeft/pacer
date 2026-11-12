@@ -1,5 +1,7 @@
 # Pacer
 
+[![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue.svg)](LICENSE)
+
 An open-source sports tracking application built with **Flutter** and **Supabase Postgres**. Features GPS run tracking, team management, PE coach grading, leaderboards, and real-time chat.
 
 ## Features
@@ -20,7 +22,13 @@ An open-source sports tracking application built with **Flutter** and **Supabase
 
 ### 1. Setup Environment
 ```bash
-git clone [https://github.com/your-username/pacer.git](https://github.com/your-username/pacer.git)
+git clone https://github.com/Lemondeft/pacer.git
 cd pacer
 flutter pub get
 cp .env.example .env
+```
+
+## License
+
+This project is licensed under the terms of the [GNU General Public License v3.0](LICENSE).
+
