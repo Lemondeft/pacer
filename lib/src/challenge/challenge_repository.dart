@@ -1,80 +1,115 @@
+import 'dart:async';
+
 import 'package:supabase_flutter/supabase_flutter.dart';
 
-import 'package:pacer/supabase.dart';
 import 'package:pacer/src/challenge/challenge_model.dart';
+import 'package:pacer/src/local/local_store.dart';
+import 'package:pacer/src/local/swr_helper.dart';
+import 'package:pacer/src/sync/sync_engine.dart';
 
-/// Backend-only challenge flow (DFD process 3.0 CHALLENGE). No widgets.
+/// Offline-first challenge repository (DFD process 3.0 CHALLENGE).
 ///
-/// Reads public.challenge (RLS: all authenticated) and writes only the caller's
-/// own partisipasi_challenge rows; challenge-table writes stay coach/admin-only
-/// via is_coach_or_admin(), never through app-held secrets.
+/// Challenge catalog and participations are cached locally via SWR; joining or
+/// leaving a challenge writes locally first and queues outbox synchronization.
 class ChallengeRepository {
-  final SupabaseClient _client;
+  final SupabaseClient? _clientOverride;
+  final LocalStore? _storeOverride;
+  final SyncEngine? _syncOverride;
 
-  ChallengeRepository({SupabaseClient? client}) : _client = client ?? supa;
+  ChallengeRepository({
+    SupabaseClient? client,
+    LocalStore? store,
+    SyncEngine? sync,
+  }) : _clientOverride = client,
+       _storeOverride = store,
+       _syncOverride = sync;
 
-  String _requireUserId() {
-    final id = _client.auth.currentUser?.id;
+  SupabaseClient? get _client => safeSupabaseClient(_clientOverride);
+  LocalStore get _store => _storeOverride ?? LocalStore.instance;
+  SyncEngine get _sync => _syncOverride ?? SyncEngine.instance;
+
+  Future<String> _requireUserId() async {
+    final id = await resolveActiveUserId(client: _client, store: _store);
     if (id == null) throw StateError('No signed-in user.');
     return id;
   }
 
-  /// Lists all challenges, newest first (RLS: readable by all authenticated).
-  Future<List<Challenge>> listChallenges() async {
-    final rows = await _client
-        .from('challenge')
-        .select()
-        .order('created_at', ascending: false);
-    return [
-      for (final row in rows)
-        Challenge.fromJson(Map<String, dynamic>.from(row)),
-    ];
+  /// Lists all challenges, newest first (offline-first SWR).
+  Future<List<Challenge>> listChallenges({bool forceRefresh = false}) async {
+    final userId = await _requireUserId();
+    final c = _client;
+    return offlineRead<List<Challenge>>(
+      store: _store,
+      syncKey: 'challenges_$userId',
+      forceRefresh: forceRefresh,
+      hasBackend: c != null && c.auth.currentUser != null,
+      staleAfter: const Duration(minutes: 3),
+      readLocal: () => _store.getChallenges(userId),
+      fetchRemote: () async {
+        final rows = await c!
+            .from('challenge')
+            .select()
+            .order('created_at', ascending: false);
+        final list = [
+          for (final row in rows)
+            Challenge.fromJson(Map<String, dynamic>.from(row)),
+        ];
+        await _store.saveChallenges(userId, list);
+        return list;
+      },
+      writeLocal: (_) async {},
+      isEmpty: (list) => list.isEmpty,
+    );
   }
 
-  /// Joins a challenge; idempotent — returns the existing row if already joined.
+  /// Joins a challenge optimistically locally and queues remote outbox sync.
   Future<PartisipasiChallenge> joinChallenge(String challengeId) async {
-    final userId = _requireUserId();
-    final existing = await _client
-        .from('partisipasi_challenge')
-        .select()
-        .eq('user_id', userId)
-        .eq('challenge_id', challengeId)
-        .maybeSingle();
-    if (existing != null) {
-      return PartisipasiChallenge.fromJson(Map<String, dynamic>.from(existing));
-    }
-    final row = await _client
-        .from('partisipasi_challenge')
-        .insert({'user_id': userId, 'challenge_id': challengeId})
-        .select()
-        .single();
-    return PartisipasiChallenge.fromJson(Map<String, dynamic>.from(row));
+    final userId = await _requireUserId();
+    final joined = await _store.queueJoinChallenge(userId, challengeId);
+    await _sync.refreshCounts(userId: userId);
+    unawaited(_sync.triggerSync(userId: userId));
+    return joined;
   }
 
-  /// Leaves a challenge by deleting the caller's own participation row.
+  /// Leaves a challenge locally immediately and queues remote delete sync.
   Future<void> leaveChallenge(String challengeId) async {
-    await _client
-        .from('partisipasi_challenge')
-        .delete()
-        .eq('user_id', _requireUserId())
-        .eq('challenge_id', challengeId);
+    final userId = await _requireUserId();
+    await _store.queueLeaveChallenge(userId, challengeId);
+    await _sync.refreshCounts(userId: userId);
+    unawaited(_sync.triggerSync(userId: userId));
   }
 
-  /// The caller's own participation rows, newest first (RLS: own or coach-read-all).
-  Future<List<PartisipasiChallenge>> myParticipations() async {
-    final rows = await _client
-        .from('partisipasi_challenge')
-        .select()
-        .eq('user_id', _requireUserId())
-        .order('created_at', ascending: false);
-    return [
-      for (final row in rows)
-        PartisipasiChallenge.fromJson(Map<String, dynamic>.from(row)),
-    ];
+  /// The caller's own participation rows (remote merged with pending ops).
+  Future<List<PartisipasiChallenge>> myParticipations({
+    bool forceRefresh = false,
+  }) async {
+    final userId = await _requireUserId();
+    final c = _client;
+    return offlineRead<List<PartisipasiChallenge>>(
+      store: _store,
+      syncKey: 'challenge_parts_$userId',
+      forceRefresh: forceRefresh,
+      hasBackend: c != null && c.auth.currentUser != null,
+      staleAfter: const Duration(minutes: 2),
+      readLocal: () => _store.getParticipations(userId),
+      fetchRemote: () async {
+        final rows = await c!
+            .from('partisipasi_challenge')
+            .select()
+            .eq('user_id', userId)
+            .order('created_at', ascending: false);
+        final list = [
+          for (final row in rows)
+            PartisipasiChallenge.fromJson(Map<String, dynamic>.from(row)),
+        ];
+        await _store.saveParticipations(userId, list);
+        return _store.getParticipations(userId);
+      },
+      writeLocal: (_) async {},
+      isEmpty: (list) => list.isEmpty,
+    );
   }
 
-  /// Creates a challenge (coach/admin only — RLS challenge_insert rejects
-  /// regular users with 42501, which the UI maps to a "coach only" message).
   Future<Challenge> createChallenge({
     required String jenis,
     required double targetNilai,
@@ -92,10 +127,14 @@ class ChallengeRepository {
         'must be one of $targetSatuanOpsi',
       );
     }
-    final row = await _client
+    final c = _client;
+    if (c == null) throw StateError('No backend configured.');
+    final uid = c.auth.currentUser?.id;
+    if (uid == null) throw StateError('No signed-in user.');
+    final row = await c
         .from('challenge')
         .insert({
-          'dibuat_oleh': _requireUserId(),
+          'dibuat_oleh': uid,
           'jenis': jenis,
           'target_nilai': targetNilai,
           'target_satuan': targetSatuan,
@@ -108,12 +147,12 @@ class ChallengeRepository {
     return Challenge.fromJson(Map<String, dynamic>.from(row));
   }
 
-  /// Coach read: every participation in one challenge, newest first.
-  /// Legal under partisipasi_select (coach read-all); students see own only.
   Future<List<PartisipasiChallenge>> participationsForChallenge(
     String challengeId,
   ) async {
-    final rows = await _client
+    final c = _client;
+    if (c == null) throw StateError('No backend configured.');
+    final rows = await c
         .from('partisipasi_challenge')
         .select()
         .eq('challenge_id', challengeId)

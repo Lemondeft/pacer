@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
+import 'package:pacer/src/auth/auth_repository.dart';
+import 'package:pacer/src/local/local_store.dart';
+import 'package:pacer/src/sync/sync_engine.dart';
 import 'package:pacer/src/ui/app_strings.dart';
 import 'package:pacer/src/ui/app_theme.dart';
 import 'package:pacer/src/ui/more_screens.dart';
@@ -9,6 +12,7 @@ import 'package:pacer/supabase.dart';
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await initLanguagePreference();
+  await LocalStore.init();
   try {
     await dotenv.load(fileName: '.env');
   } catch (_) {
@@ -19,6 +23,7 @@ void main() async {
   } catch (_) {
     // Demo mode: run Figma-derived UI without backend.
   }
+  await SyncEngine.instance.init();
   runApp(const PacerApp());
 }
 
@@ -58,6 +63,40 @@ class _Root extends StatefulWidget {
 class _RootState extends State<_Root> {
   String _route = 'loading';
 
+  Future<void> _resolveInitialRoute() async {
+    var next = 'getStarted';
+    try {
+      final auth = AuthRepository();
+      final uid = await auth.resolveUserId();
+      if (uid != null) {
+        next = 'main';
+        if (!langUserLocked) {
+          final value = await auth.getLanguage();
+          if (value == 'en' && langNotifier.value != Lang.en) {
+            langNotifier.value = Lang.en;
+          } else if (value == 'id' && langNotifier.value != Lang.id) {
+            langNotifier.value = Lang.id;
+          }
+        }
+        await SyncEngine.instance.refreshCounts(userId: uid);
+        SyncEngine.instance.triggerSync(userId: uid);
+      }
+    } catch (_) {
+      // Demo mode: stay on GetStarted.
+    }
+    if (!mounted) return;
+    setState(() => _route = next);
+  }
+
+  void _enterMain() {
+    setState(() => _route = 'main');
+    AuthRepository().resolveUserId().then((uid) {
+      if (uid != null) {
+        SyncEngine.instance.triggerSync(userId: uid);
+      }
+    }).catchError((_) {});
+  }
+
   @override
   Widget build(BuildContext context) {
     switch (_route) {
@@ -65,43 +104,18 @@ class _RootState extends State<_Root> {
         return LoadingScreen(
           onDone: () {
             if (!mounted) return;
-            // Saved session (Supabase restores it at init): skip auth.
-            var next = 'getStarted';
-            try {
-              final user = supa.auth.currentUser;
-              if (user != null) {
-                next = 'main';
-                if (!langUserLocked) {
-                  supa
-                      .from('users')
-                      .select('language')
-                      .eq('id', user.id)
-                      .maybeSingle()
-                      .then((row) {
-                    final value = row?['language'] as String?;
-                    if (value == 'en' && langNotifier.value != Lang.en) {
-                      langNotifier.value = Lang.en;
-                    } else if (value == 'id' && langNotifier.value != Lang.id) {
-                      langNotifier.value = Lang.id;
-                    }
-                  }).catchError((_) {});
-                }
-              }
-            } catch (_) {
-              // Demo mode: stay on GetStarted.
-            }
-            setState(() => _route = next);
+            _resolveInitialRoute();
           },
         );
       case 'create':
         return CreateAccountScreen(
-          onSubmitted: () => setState(() => _route = 'main'),
+          onSubmitted: _enterMain,
           // Root-switched screens have no route to pop: back means GetStarted.
           onBack: () => setState(() => _route = 'getStarted'),
         );
       case 'login':
         return LoginScreen(
-          onLoggedIn: () => setState(() => _route = 'main'),
+          onLoggedIn: _enterMain,
           onBack: () => setState(() => _route = 'getStarted'),
         );
       case 'main':

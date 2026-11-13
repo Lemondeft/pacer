@@ -2,6 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:latlong2/latlong.dart' hide Path;
 
+import 'package:pacer/src/tracking/tile_cache_stub.dart'
+    if (dart.library.io) 'package:pacer/src/tracking/tile_cache_io.dart'
+    as tile_cache;
+
 /// Simple Strava-like route view: OpenStreetMap tiles (no API key) render
 /// immediately — even before GPS lock — with a lime route polyline and a
 /// runner dot once fixes arrive. Empty points show a small overlay chip
@@ -26,9 +30,20 @@ class RouteMap extends StatefulWidget {
 
 class _RouteMapState extends State<RouteMap> {
   final MapController _controller = MapController();
+  TileProvider? _tileProvider;
 
   static const LatLng _fallback = LatLng(-6.2296, 106.8294);
   static const Color _route = Color(0xFFBAFF29);
+
+  @override
+  void initState() {
+    super.initState();
+    tile_cache.getCachedTileProvider().then((provider) {
+      if (mounted && provider != null) {
+        setState(() => _tileProvider = provider);
+      }
+    });
+  }
 
   @override
   void didUpdateWidget(covariant RouteMap oldWidget) {
@@ -92,6 +107,7 @@ class _RouteMapState extends State<RouteMap> {
                   // (operations#737); keyless and reliable.
                   urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
                   userAgentPackageName: 'com.example.pacer',
+                  tileProvider: _tileProvider,
                 ),
                 if (pts.length > 1)
                   PolylineLayer(

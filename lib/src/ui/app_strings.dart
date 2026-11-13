@@ -396,4 +396,61 @@ class S {
   static String get langSaveFailed => _en
       ? "Couldn't save language online — using it on this device only."
       : 'Bahasa gagal disimpan online — hanya berlaku di perangkat ini.';
+
+  // Offline & Sync UI
+  static String get offlineBannerTitle =>
+      _en ? 'Offline mode' : 'Mode offline';
+  static String get offlineBannerBody => _en
+      ? 'Runs & edits save on this device and sync automatically when online.'
+      : 'Lari & perubahan tersimpan di perangkat ini dan sinkron otomatis saat online.';
+  static String get syncingNow => _en ? 'Syncing...' : 'Menyinkronkan...';
+  static String syncPendingCount(int n) =>
+      _en ? '$n pending sync' : '$n menunggu sinkron';
+  static String syncFailedCount(int n) =>
+      _en ? '$n sync failed' : '$n gagal sinkron';
+  static String get syncRetry => _en ? 'Retry' : 'Coba lagi';
+  static String get syncSignInAgain =>
+      _en ? 'Sign in again to sync' : 'Masuk ulang untuk sinkron';
+  static String get syncChipLocal => _en ? 'Local' : 'Lokal';
+  static String get syncChipSynced => _en ? 'Synced' : 'Sinkron';
+  static String get syncChipFailed => _en ? 'Failed' : 'Gagal';
+  static String get draftRecoveryTitle =>
+      _en ? 'Unfinished run found' : 'Ada lari yang belum selesai';
+  static String draftRecoveryBody(String sport, String km, String dur) => _en
+      ? 'Resume your $sport session ($km · $dur) or save it now?'
+      : 'Lanjutkan sesi $sport ($km · $dur) atau simpan sekarang?';
+  static String get draftResume => _en ? 'Resume' : 'Lanjutkan';
+  static String get draftSaveNow => _en ? 'Save now' : 'Simpan sekarang';
+  static String get draftDiscard => _en ? 'Discard' : 'Buang';
+  static String get unsyncedSignOutTitle =>
+      _en ? 'Unsynced data on device' : 'Data belum tersinkron';
+  static String unsyncedSignOutBody(int n) => _en
+      ? '$n item(s) have not synced to the cloud yet. Signing out will clear local data.'
+      : '$n item belum tersinkron ke server. Keluar akan menghapus data lokal.';
+  static String get signOutAnyway => _en ? 'Sign out anyway' : 'Tetap keluar';
+  static String get offlineActionNeedsNet => _en
+      ? 'Connect to the internet to complete this action.'
+      : 'Hubungkan internet untuk menyelesaikan tindakan ini.';
+  static String get queuedOfflineSaved => _en
+      ? 'Saved on device — will sync automatically when online.'
+      : 'Tersimpan di perangkat — otomatis sinkron saat online.';
+  static String get pendingSyncSection =>
+      _en ? 'Device Sync' : 'Sinkronisasi Perangkat';
+  static String get pendingSyncAllClear => _en
+      ? 'All runs and changes are synced'
+      : 'Semua lari dan perubahan tersinkron';
+  static String get chatOfflineComposerHint => _en
+      ? 'Offline — messages send when back online'
+      : 'Offline — pesan terkirim saat kembali online';
+  static String get noRunsOfflineEmpty => _en
+      ? 'No runs yet. Start a run offline anytime!'
+      : 'Belum ada lari. Mulai lari offline kapan saja!';
+  static String get noTeamsCachedEmpty =>
+      _en ? 'No clubs yet on this device.' : 'Belum ada klub di perangkat ini.';
+  static String get noChallengesCachedEmpty => _en
+      ? 'No challenges saved locally.'
+      : 'Belum ada challenge tersimpan lokal.';
+  static String get noLeaderboardCachedEmpty => _en
+      ? 'Leaderboard data not cached yet.'
+      : 'Data papan peringkat belum tersimpan.';
 }

@@ -4,9 +4,12 @@ import 'package:pacer/src/auth/auth_repository.dart';
 import 'package:pacer/src/challenge/challenge_model.dart';
 import 'package:pacer/src/challenge/challenge_repository.dart';
 import 'package:pacer/src/demo/pacer_dummy_data.dart';
+import 'package:pacer/src/local/local_models.dart';
+import 'package:pacer/src/local/local_store.dart';
+import 'package:pacer/src/local/swr_helper.dart';
+import 'package:pacer/src/sync/connectivity_service.dart';
 import 'package:pacer/src/teams/team_model.dart';
 import 'package:pacer/src/teams/team_repository.dart';
-import 'package:pacer/supabase.dart';
 
 import 'app_strings.dart';
 import 'app_theme.dart';
@@ -49,6 +52,7 @@ class _CoachBoardScreenState extends State<CoachBoardScreen> {
   String? _teamId;
   String? _challengeId;
   Future<List<_CoachRow>>? _rows;
+  bool _isDemo = true;
 
   @override
   void initState() {
@@ -56,18 +60,10 @@ class _CoachBoardScreenState extends State<CoachBoardScreen> {
     _gate = _checkCoach();
   }
 
-  bool get _backend {
-    try {
-      supa;
-      return true;
-    } catch (_) {
-      return false;
-    }
-  }
-
-  /// Null when signed out/offline/non-coach (with a reason string).
+  /// Null when non-coach (with a reason string); Demo Mode when signed out.
   Future<_Gate> _checkCoach() async {
-    if (!_backend || supa.auth.currentUser == null) {
+    if (await isDemoAccount()) {
+      _isDemo = true;
       if (mounted) {
         setState(() {
           _teams = PacerDummyData.teams;
@@ -78,6 +74,7 @@ class _CoachBoardScreenState extends State<CoachBoardScreen> {
       _refresh();
       return (coach: true, reason: '');
     }
+    _isDemo = false;
     try {
       final profile = await AuthRepository().getProfile();
       final peran = profile?.peran ?? 'user';
@@ -86,10 +83,8 @@ class _CoachBoardScreenState extends State<CoachBoardScreen> {
         final challenges = await ChallengeRepository().listChallenges();
         if (mounted) {
           setState(() {
-            _teams = teams.isEmpty ? PacerDummyData.teams : teams;
-            _challenges = challenges.isEmpty
-                ? PacerDummyData.challenges
-                : challenges;
+            _teams = teams;
+            _challenges = challenges;
             _teamId ??= (_teams.isEmpty ? null : _teams.first.id);
           });
         }
@@ -98,15 +93,7 @@ class _CoachBoardScreenState extends State<CoachBoardScreen> {
       }
       return (coach: false, reason: '');
     } catch (_) {
-      if (mounted) {
-        setState(() {
-          _teams = PacerDummyData.teams;
-          _challenges = PacerDummyData.challenges;
-          _teamId ??= PacerDummyData.teams.first.id;
-        });
-      }
-      _refresh();
-      return (coach: true, reason: '');
+      return (coach: false, reason: '');
     }
   }
 
@@ -125,6 +112,18 @@ class _CoachBoardScreenState extends State<CoachBoardScreen> {
         .toList();
   }
 
+  List<_CoachRow> _mapLocalRows(List<LocalCoachRow> rows) => [
+    for (final r in rows)
+      _CoachRow(
+        nama: r.nama,
+        sessions: r.sessions,
+        weekKm: r.weekKm,
+        streak: r.streak,
+        progress: r.progress,
+        berhasil: r.berhasil,
+      ),
+  ];
+
   void _refresh() {
     final teamId = _teamId;
     if (teamId == null) return;
@@ -134,9 +133,23 @@ class _CoachBoardScreenState extends State<CoachBoardScreen> {
   }
 
   Future<List<_CoachRow>> _loadRows(String teamId, String? challengeId) async {
+    if (await isDemoAccount()) return _dummyRows();
+    final uid = await AuthRepository().resolveUserId() ?? '';
+    final cached = await LocalStore.instance.getCoachRows(
+      uid,
+      teamId,
+      challengeId,
+    );
+    if (!ConnectivityService.instance.value &&
+        cached != null &&
+        cached.isNotEmpty) {
+      return _mapLocalRows(cached);
+    }
     try {
       final roster = await TeamRepository().teamRoster(teamId);
-      if (roster.isEmpty) return _dummyRows();
+      if (roster.isEmpty) {
+        return cached != null ? _mapLocalRows(cached) : const [];
+      }
       final now = DateTime.now();
       final monday = DateTime(now.year, now.month, now.day - (now.weekday - 1));
       final actRepo = ActivityRepository();
@@ -149,7 +162,8 @@ class _CoachBoardScreenState extends State<CoachBoardScreen> {
           prog[p.userId] = (progress: p.progressNilai, berhasil: p.berhasil);
         }
       }
-      final out = <_CoachRow>[];
+      final localRows = <LocalCoachRow>[];
+      var remoteSucceeded = 0;
       for (final m in roster) {
         int sessions = 0;
         double weekM = 0;
@@ -165,12 +179,14 @@ class _CoachBoardScreenState extends State<CoachBoardScreen> {
             }
           }
           streak = (await actRepo.getStreakFor(m.userId))?.berjalan ?? 0;
+          remoteSucceeded++;
         } catch (_) {
-          // Per-student failures degrade to zeros, never break the table.
+          // Per-student failures degrade to zeros unless entire fetch was offline.
         }
         final cp = prog[m.userId];
-        out.add(
-          _CoachRow(
+        localRows.add(
+          LocalCoachRow(
+            userId: m.userId,
             nama: m.nama,
             sessions: sessions,
             weekKm: weekM / 1000,
@@ -180,9 +196,20 @@ class _CoachBoardScreenState extends State<CoachBoardScreen> {
           ),
         );
       }
-      return out.isEmpty ? _dummyRows() : out;
+      if (remoteSucceeded == 0 && cached != null && cached.isNotEmpty) {
+        return _mapLocalRows(cached);
+      }
+      if (uid.isNotEmpty && remoteSucceeded > 0) {
+        await LocalStore.instance.saveCoachRows(
+          uid,
+          teamId,
+          challengeId,
+          localRows,
+        );
+      }
+      return _mapLocalRows(localRows);
     } catch (_) {
-      return _dummyRows();
+      return cached != null ? _mapLocalRows(cached) : const [];
     }
   }
 
@@ -200,7 +227,9 @@ class _CoachBoardScreenState extends State<CoachBoardScreen> {
               const PageHeader(),
               const SizedBox(height: 16),
               Text(S.coachBoard, style: PacerText.pageTitleOf(context)),
-              const SizedBox(height: 16),
+              const SizedBox(height: 12),
+              if (!_isDemo) const SyncStatusBanner(),
+              const SizedBox(height: 4),
               FutureBuilder<_Gate>(
                 future: _gate,
                 builder: (context, snap) {

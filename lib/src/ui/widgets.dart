@@ -2,6 +2,9 @@
 import 'package:flutter/material.dart';
 import 'package:pacer/core/responsive/responsive.dart';
 import 'package:pacer/src/aktivitas/activity_model.dart';
+import 'package:pacer/src/local/local_models.dart';
+import 'package:pacer/src/sync/connectivity_service.dart';
+import 'package:pacer/src/sync/sync_engine.dart';
 
 import 'app_theme.dart';
 import 'app_strings.dart';
@@ -121,6 +124,7 @@ class RunSessionCard extends StatelessWidget {
   final String pace;
   final String distance;
   final bool limePill;
+  final SyncState? syncState;
   const RunSessionCard({
     super.key,
     this.title = 'Monday Morning Run',
@@ -129,11 +133,13 @@ class RunSessionCard extends StatelessWidget {
     this.pace = "5'00''",
     this.distance = '3,00 Km',
     this.limePill = false,
+    this.syncState,
   });
 
   @override
   Widget build(BuildContext context) {
     final scheme = PacerScheme.of(context);
+    final showBadge = syncState != null && syncState != SyncState.synced;
     return Container(
       padding: const EdgeInsets.fromLTRB(16, 24, 16, 16),
       decoration: BoxDecoration(
@@ -153,11 +159,21 @@ class RunSessionCard extends StatelessWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  date,
-                  style: PacerText.cardDateOf(context),
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
+                Row(
+                  children: [
+                    Flexible(
+                      child: Text(
+                        date,
+                        style: PacerText.cardDateOf(context),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ),
+                    if (showBadge) ...[
+                      const SizedBox(width: 6),
+                      SyncStateChip(state: syncState!),
+                    ],
+                  ],
                 ),
                 const SizedBox(height: 16),
                 Text(
@@ -1591,4 +1607,159 @@ class ResponsiveScroll extends StatelessWidget {
       },
     );
   }
+}
+
+/// Compact pill indicating local/failed sync state on an activity card or item.
+class SyncStateChip extends StatelessWidget {
+  final SyncState state;
+  const SyncStateChip({super.key, required this.state});
+
+  @override
+  Widget build(BuildContext context) {
+    final isFailed = state == SyncState.failed;
+    final fg = isFailed ? const Color(0xFFD97706) : const Color(0xFF0369A1);
+    final bg = fg.withValues(alpha: 0.14);
+    final label = isFailed ? S.syncChipFailed : S.syncChipLocal;
+    final icon = isFailed ? Icons.error_outline : Icons.cloud_upload_outlined;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+      decoration: BoxDecoration(
+        color: bg,
+        borderRadius: BorderRadius.circular(999),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(icon, size: 11, color: fg),
+          const SizedBox(width: 3),
+          Text(
+            label,
+            style: TextStyle(
+              fontSize: 10,
+              fontWeight: FontWeight.w600,
+              color: fg,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// Live banner tracking offline state, pending sync queue, or auth expiry.
+/// Renders empty ([SizedBox.shrink]) when online and completely synced.
+class SyncStatusBanner extends StatelessWidget {
+  final EdgeInsetsGeometry margin;
+  final SyncEngine? engine;
+  const SyncStatusBanner({
+    super.key,
+    this.margin = const EdgeInsets.only(bottom: 12),
+    this.engine,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final sync = engine ?? SyncEngine.instance;
+    return ListenableBuilder(
+      listenable: sync,
+      builder: (context, _) {
+        final status = sync.status;
+        if (status.isOnline &&
+            !status.isSyncing &&
+            status.pendingCount == 0 &&
+            status.failedCount == 0 &&
+            !status.needsReauth) {
+          return const SizedBox.shrink();
+        }
+        final scheme = PacerScheme.of(context);
+        final IconData icon;
+        final Color accent;
+        final String message;
+        var showRetry = false;
+
+        if (status.needsReauth) {
+          icon = Icons.lock_clock_outlined;
+          accent = const Color(0xFFD97706);
+          message = status.pendingCount > 0
+              ? '${S.syncSignInAgain} (${S.syncPendingCount(status.pendingCount)})'
+              : S.syncSignInAgain;
+          showRetry = true;
+        } else if (status.failedCount > 0) {
+          icon = Icons.sync_problem_outlined;
+          accent = const Color(0xFFDC2626);
+          message = S.syncFailedCount(status.failedCount);
+          showRetry = true;
+        } else if (!status.isOnline) {
+          icon = Icons.cloud_off_outlined;
+          accent = scheme.muted;
+          message = status.pendingCount > 0
+              ? '${S.offlineBannerTitle} · ${S.syncPendingCount(status.pendingCount)}'
+              : S.offlineBannerTitle;
+        } else if (status.isSyncing) {
+          icon = Icons.sync;
+          accent = PacerColors.primary;
+          message = S.syncingNow;
+        } else {
+          icon = Icons.cloud_queue_outlined;
+          accent = PacerColors.primary;
+          message = S.syncPendingCount(status.pendingCount);
+          showRetry = true;
+        }
+
+        return Container(
+          margin: margin,
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          decoration: BoxDecoration(
+            color: accent.withValues(alpha: 0.1),
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(color: accent.withValues(alpha: 0.25)),
+          ),
+          child: Row(
+            children: [
+              Icon(icon, size: 17, color: accent),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  message,
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w500,
+                    color: scheme.ink,
+                  ),
+                ),
+              ),
+              if (showRetry)
+                TextButton(
+                  onPressed: status.isSyncing
+                      ? null
+                      : () => sync.syncNow(retryFailed: true),
+                  style: TextButton.styleFrom(
+                    foregroundColor: accent,
+                    padding: const EdgeInsets.symmetric(horizontal: 8),
+                    minimumSize: const Size(0, 28),
+                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                  ),
+                  child: Text(
+                    S.syncRetry,
+                    style: const TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+}
+
+/// Maps transient connectivity failures to the friendly localized offline hint
+/// instead of leaking raw SocketException / ClientException strings in SnackBars.
+String offlineActionErrorMessage(Object error) {
+  if (isTransientNetworkError(error) || !ConnectivityService.instance.value) {
+    return S.offlineActionNeedsNet;
+  }
+  return S.errSaveFailed;
 }

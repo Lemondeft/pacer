@@ -11,13 +11,17 @@ import 'package:pacer/src/challenge/challenge_model.dart';
 import 'package:pacer/src/challenge/challenge_repository.dart';
 import 'package:pacer/src/chat/chat_model.dart';
 import 'package:pacer/src/chat/chat_repository.dart';
-import 'package:pacer/src/tracking/recorder.dart';
-import 'package:pacer/src/tracking/route_map.dart';
 import 'package:pacer/src/demo/pacer_dummy_data.dart';
 import 'package:pacer/src/leaderboard/leaderboard_model.dart';
 import 'package:pacer/src/leaderboard/leaderboard_repository.dart';
+import 'package:pacer/src/local/local_models.dart';
+import 'package:pacer/src/local/swr_helper.dart';
+import 'package:pacer/src/sync/connectivity_service.dart';
+import 'package:pacer/src/sync/sync_engine.dart';
 import 'package:pacer/src/teams/team_model.dart';
 import 'package:pacer/src/teams/team_repository.dart';
+import 'package:pacer/src/tracking/recorder.dart';
+import 'package:pacer/src/tracking/route_map.dart';
 import 'package:pacer/supabase.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -486,11 +490,13 @@ class RunTrackerScreen extends StatefulWidget {
   final VoidCallback? onBack;
   final String sportType;
   final String? goal;
+  final ActiveDraftRun? initialDraft;
   const RunTrackerScreen({
     super.key,
     this.onBack,
     this.sportType = 'lari',
     this.goal,
+    this.initialDraft,
   });
 
   @override
@@ -511,6 +517,17 @@ class _RunTrackerScreenState extends State<RunTrackerScreen> {
 
   /// Minimal map mode (offline canvas instead of OSM tiles).
   bool _minimalMap = false;
+
+  @override
+  void initState() {
+    super.initState();
+    final draft = widget.initialDraft;
+    if (draft != null) {
+      _recorder.restoreDraft(draft);
+      _started = true;
+      _running = true;
+    }
+  }
 
   @override
   void dispose() {
@@ -655,7 +672,10 @@ class _RunTrackerScreenState extends State<RunTrackerScreen> {
     if (_finished) {
       return RunFinishScreen(
         summary: _summary,
-        onBack: () => setState(() => _finished = false),
+        title: S.sportName(_summary?.jenis ?? widget.sportType),
+        isHistoryDetail: (_summary?.pointCount ?? 0) > 0,
+        aktivitasId: _summary?.aktivitasId,
+        onBack: widget.onBack ?? () => setState(() => _finished = false),
       );
     }
     // Back mid-run asks to discard instead of leaking an unfinished row
@@ -1203,24 +1223,14 @@ class _TeamsScreenState extends State<TeamsScreen> {
     _future = _load();
   }
 
-  bool get _backend {
-    try {
-      supa;
-      return true;
-    } catch (_) {
-      return false;
-    }
-  }
-
   Future<List<Team>> _load({bool forceRefresh = false}) async {
-    if (!_backend || supa.auth.currentUser == null) {
+    if (await isDemoAccount()) {
       return PacerDummyData.teams;
     }
     try {
-      final list = await TeamRepository().listTeams(forceRefresh: forceRefresh);
-      return list.isEmpty ? PacerDummyData.teams : list;
+      return await TeamRepository().listTeams(forceRefresh: forceRefresh);
     } catch (_) {
-      return PacerDummyData.teams;
+      return const [];
     }
   }
 
@@ -1253,7 +1263,7 @@ class _TeamsScreenState extends State<TeamsScreen> {
     if (code == null || code.isEmpty || !mounted) return;
     final messenger = ScaffoldMessenger.of(context);
     try {
-      if (!_backend || supa.auth.currentUser == null) {
+      if (await isDemoAccount()) {
         messenger.showSnackBar(SnackBar(content: Text(S.demoJoinSent)));
         return;
       }
@@ -1265,8 +1275,10 @@ class _TeamsScreenState extends State<TeamsScreen> {
       messenger.showSnackBar(
         const SnackBar(content: Text('Kode salah. Coba lagi.')),
       );
-    } catch (_) {
-      messenger.showSnackBar(SnackBar(content: Text(S.errSaveFailed)));
+    } catch (e) {
+      messenger.showSnackBar(
+        SnackBar(content: Text(offlineActionErrorMessage(e))),
+      );
     }
   }
 
@@ -1484,6 +1496,7 @@ class _TeamDetailSheetState extends State<TeamDetailSheet> {
   bool _busy = false;
   Team? _team;
   bool _isCoach = false;
+  String? _uid;
   // Server-decided: admin / creator / ketua / coach-member of THIS team.
   bool _canManage = false;
   String? _inviteCode;
@@ -1501,17 +1514,9 @@ class _TeamDetailSheetState extends State<TeamDetailSheet> {
     super.dispose();
   }
 
-  String? _uidOf() {
-    try {
-      return supa.auth.currentUser?.id;
-    } catch (_) {
-      return null;
-    }
-  }
-
   Future<void> _refresh() async {
     try {
-      final uid = _uidOf();
+      final uid = await AuthRepository().resolveUserId();
       final repo = TeamRepository();
       final team = await repo.getTeam(widget.teamId);
       String? peran;
@@ -1522,6 +1527,7 @@ class _TeamDetailSheetState extends State<TeamDetailSheet> {
       }
       if (!mounted) return;
       setState(() {
+        _uid = uid;
         _team = team;
         _isCoach = peran == 'coach' || peran == 'admin';
       });
@@ -1574,10 +1580,11 @@ class _TeamDetailSheetState extends State<TeamDetailSheet> {
     try {
       await TeamRepository().removeMember(widget.teamId, userId);
       await _refresh();
-    } catch (_) {
+    } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text(S.errSaveFailed)));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(offlineActionErrorMessage(e))),
+        );
       }
     }
   }
@@ -1590,10 +1597,11 @@ class _TeamDetailSheetState extends State<TeamDetailSheet> {
         await TeamRepository().leaveTeam(widget.teamId);
         if (mounted) setState(() => _joined = false);
         await _refresh();
-      } catch (_) {
+      } catch (e) {
         if (mounted) {
-          ScaffoldMessenger.of(context)
-              .showSnackBar(SnackBar(content: Text(S.errSaveFailed)));
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(offlineActionErrorMessage(e))),
+          );
         }
       } finally {
         if (mounted) setState(() => _busy = false);
@@ -1621,10 +1629,11 @@ class _TeamDetailSheetState extends State<TeamDetailSheet> {
           context,
         ).showSnackBar(const SnackBar(content: Text('Kode salah. Coba lagi.')));
       }
-    } catch (_) {
+    } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text(S.errSaveFailed)));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(offlineActionErrorMessage(e))),
+        );
       }
     } finally {
       if (mounted) setState(() => _busy = false);
@@ -1637,10 +1646,11 @@ class _TeamDetailSheetState extends State<TeamDetailSheet> {
     try {
       final code = await TeamRepository().regenerateInviteCode(widget.teamId);
       if (mounted) setState(() => _inviteCode = code);
-    } catch (_) {
+    } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text(S.errSaveFailed)));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(offlineActionErrorMessage(e))),
+        );
       }
     } finally {
       if (mounted) setState(() => _busy = false);
@@ -1697,10 +1707,11 @@ class _TeamDetailSheetState extends State<TeamDetailSheet> {
         targetNilai: targetNilai,
       );
       await _refresh();
-    } catch (_) {
+    } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text(S.errSaveFailed)));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(offlineActionErrorMessage(e))),
+        );
       }
     }
   }
@@ -1730,10 +1741,11 @@ class _TeamDetailSheetState extends State<TeamDetailSheet> {
     try {
       await TeamRepository().deleteTeam(team.id);
       if (mounted) Navigator.of(context).pop();
-    } catch (_) {
+    } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text(S.errSaveFailed)));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(offlineActionErrorMessage(e))),
+        );
       }
     }
   }
@@ -1834,7 +1846,7 @@ class _TeamDetailSheetState extends State<TeamDetailSheet> {
                               ],
                             ),
                           ),
-                          if (_isCoach && m.userId != _uidOf())
+                          if (_isCoach && m.userId != _uid)
                             TextButton(
                               onPressed: () => _kick(m.userId, m.nama),
                               child: const Text('Keluarkan'),
@@ -1985,18 +1997,9 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
     _future = _load();
   }
 
-  bool get _backend {
-    try {
-      supa;
-      return true;
-    } catch (_) {
-      return false;
-    }
-  }
-
   Future<_BoardData> _load({bool forceRefresh = false}) async {
     try {
-      if (!_backend || supa.auth.currentUser == null) {
+      if (await isDemoAccount()) {
         final d = PacerDummyData.getLeaderboardData(
           metric: _selectedMetric,
           period: _selectedPeriod,
@@ -2004,7 +2007,7 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
         );
         return _BoardData(boardNama: d.boardNama, rows: d.rows, uid: d.uid);
       }
-      final uid = supa.auth.currentUser?.id;
+      final uid = await AuthRepository().resolveUserId();
       if (_scope == 'region') {
         final me = await AuthRepository().getProfile(
           forceRefresh: forceRefresh,
@@ -2019,13 +2022,7 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
         forceRefresh: forceRefresh,
       );
       if (boards.isEmpty) {
-        final d = PacerDummyData.getLeaderboardData(
-          metric: _selectedMetric,
-          period: _selectedPeriod,
-          scope: _scope,
-          uid: uid,
-        );
-        return _BoardData(boardNama: d.boardNama, rows: d.rows, uid: d.uid);
+        return _BoardData(uid: uid, allBoards: boards);
       }
 
       Leaderboard activeBoard = boards.first;
@@ -2064,22 +2061,6 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
           allBoards: boards,
         );
       }
-      if (rows.isEmpty) {
-        final d = PacerDummyData.getLeaderboardData(
-          metric: _selectedMetric,
-          period: _selectedPeriod,
-          scope: _scope,
-          uid: uid,
-        );
-        return _BoardData(
-          boardNama: activeBoard.nama.isNotEmpty
-              ? activeBoard.nama
-              : d.boardNama,
-          rows: d.rows,
-          uid: d.uid,
-          allBoards: boards,
-        );
-      }
       return _BoardData(
         boardNama: activeBoard.nama,
         rows: rows,
@@ -2087,12 +2068,15 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
         allBoards: boards,
       );
     } catch (_) {
-      final d = PacerDummyData.getLeaderboardData(
-        metric: _selectedMetric,
-        period: _selectedPeriod,
-        scope: _scope,
-      );
-      return _BoardData(boardNama: d.boardNama, rows: d.rows, uid: d.uid);
+      if (await isDemoAccount()) {
+        final d = PacerDummyData.getLeaderboardData(
+          metric: _selectedMetric,
+          period: _selectedPeriod,
+          scope: _scope,
+        );
+        return _BoardData(boardNama: d.boardNama, rows: d.rows, uid: d.uid);
+      }
+      return _BoardData(uid: await AuthRepository().resolveUserId());
     }
   }
 
@@ -2568,32 +2552,52 @@ class HistoryScreen extends StatefulWidget {
 }
 
 class _HistoryScreenState extends State<HistoryScreen> {
-  Future<List<Activity>>? _future;
+  Future<List<LocalActivity>>? _future;
+  bool _isDemo = false;
+  bool _wasSyncing = false;
 
   @override
   void initState() {
     super.initState();
+    SyncEngine.instance.addListener(_onSyncChanged);
     _future = _load();
   }
 
-  /// Demo when offline or signed out (mock cards show, not the empty state).
-  bool get _demo {
-    try {
-      return supa.auth.currentUser == null;
-    } catch (_) {
-      return true;
-    }
+  @override
+  void dispose() {
+    SyncEngine.instance.removeListener(_onSyncChanged);
+    super.dispose();
   }
 
-  Future<List<Activity>> _load({bool forceRefresh = false}) async {
+  void _onSyncChanged() {
+    final syncing = SyncEngine.instance.status.isSyncing;
+    if (_wasSyncing && !syncing && mounted) {
+      setState(() => _future = _load());
+    }
+    _wasSyncing = syncing;
+  }
+
+  Future<List<LocalActivity>> _load({bool forceRefresh = false}) async {
+    if (await isDemoAccount()) {
+      _isDemo = true;
+      final now = DateTime.now();
+      return [
+        for (final a in PacerDummyData.activities)
+          LocalActivity(
+            activity: a,
+            syncState: SyncState.synced,
+            updatedAt: a.selesaiAt ?? a.mulaiAt ?? now,
+          ),
+      ];
+    }
+    _isDemo = false;
     try {
-      if (_demo) return PacerDummyData.activities;
-      final live = await ActivityRepository().listActivities(
+      return await ActivityRepository().listLocalActivities(
+        limit: 50,
         forceRefresh: forceRefresh,
       );
-      return live.isEmpty ? PacerDummyData.activities : live;
     } catch (_) {
-      return PacerDummyData.activities;
+      return const [];
     }
   }
 
@@ -2612,7 +2616,8 @@ class _HistoryScreenState extends State<HistoryScreen> {
     );
   }
 
-  Widget _activityCard(Activity a) {
+  Widget _activityCard(LocalActivity item) {
+    final a = item.activity;
     return GestureDetector(
       onTap: () => Navigator.of(context).push(
         MaterialPageRoute(
@@ -2636,11 +2641,12 @@ class _HistoryScreenState extends State<HistoryScreen> {
         time: fmtDurasi(a.durasiS),
         pace: fmtPace(a.durasiS, a.jarakM),
         distance: fmtKm(a.jarakM),
+        syncState: _isDemo ? null : item.syncState,
       ),
     );
   }
 
-  /// Figma mock hero + cards (demo mode, loading, or error).
+  /// Figma mock hero + cards (demo mode) or offline-first SSOT activities.
   @override
   Widget build(BuildContext context) {
     final w = MediaQuery.sizeOf(context).width;
@@ -2659,20 +2665,19 @@ class _HistoryScreenState extends State<HistoryScreen> {
               const PageHeader(),
               const SizedBox(height: 16),
               Text(S.history, style: PacerText.pageTitleOf(context)),
-              FutureBuilder<List<Activity>>(
+              if (!_isDemo) const SizedBox(height: 8),
+              if (!_isDemo) const SyncStatusBanner(),
+              FutureBuilder<List<LocalActivity>>(
                 future: _future,
                 builder: (context, snap) {
-                  final activities = snap.data;
-                  // Grid shell always renders (stable layout); zeros + empty
-                  // text when offline or empty — never mock content.
-                  final list = activities ?? PacerDummyData.activities;
+                  final list = snap.data ?? const <LocalActivity>[];
                   final totalKm = list.fold<double>(
                     0,
-                    (s, a) => s + (a.jarakM ?? 0),
+                    (s, item) => s + (item.activity.jarakM ?? 0),
                   );
                   final totalS = list.fold<int>(
                     0,
-                    (s, a) => s + (a.durasiS ?? 0),
+                    (s, item) => s + (item.activity.durasiS ?? 0),
                   );
                   return Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -2741,9 +2746,10 @@ class _HistoryScreenState extends State<HistoryScreen> {
                       _historyGrid(context, [
                         for (final a in list) _activityCard(a),
                       ]),
-                      if (list.isEmpty)
-                        const PacerEmptyState(
-                          'Belum ada aktivitas. Mulai lari pertamamu!',
+                      if (list.isEmpty &&
+                          snap.connectionState != ConnectionState.waiting)
+                        PacerEmptyState(
+                          S.noRunsOfflineEmpty,
                           icon: Icons.directions_run_outlined,
                         ),
                     ],
@@ -2785,16 +2791,11 @@ class _ChallengeDetailSheetState extends State<ChallengeDetailSheet> {
     _check();
   }
 
-  bool get _live {
-    try {
-      return supa.auth.currentUser != null && widget.challengeId != null;
-    } catch (_) {
-      return false;
-    }
-  }
+  Future<bool> _isLive() async =>
+      !(await isDemoAccount()) && widget.challengeId != null;
 
   Future<void> _check() async {
-    if (!_live) return;
+    if (!await _isLive()) return;
     try {
       final parts = await ChallengeRepository().myParticipations();
       if (mounted) {
@@ -2809,9 +2810,11 @@ class _ChallengeDetailSheetState extends State<ChallengeDetailSheet> {
 
   Future<void> _toggle() async {
     final id = widget.challengeId;
-    if (!_live || id == null) {
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text(S.demoChallengeStarted)));
+    if (!await _isLive() || id == null) {
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(S.demoChallengeStarted)));
+      }
       return;
     }
     setState(() => _busy = true);
@@ -2824,10 +2827,15 @@ class _ChallengeDetailSheetState extends State<ChallengeDetailSheet> {
         await repo.joinChallenge(id);
         if (mounted) setState(() => _joined = true);
       }
+      if (mounted && !ConnectivityService.instance.value) {
+        ScaffoldMessenger.of(context)
+            .showSnackBar(SnackBar(content: Text(S.queuedOfflineSaved)));
+      }
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text(S.errSaveFailed)));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(offlineActionErrorMessage(e))),
+        );
       }
     } finally {
       if (mounted) setState(() => _busy = false);
@@ -2924,23 +2932,32 @@ class AccountScreen extends StatefulWidget {
 
 class _AccountScreenState extends State<AccountScreen> {
   ({String? nama, String? email})? _profile;
+  bool _isDemo = true;
 
   @override
   void initState() {
     super.initState();
     _load().then((p) {
-      if (mounted) setState(() => _profile = p);
+      if (mounted) {
+        setState(() {
+          _profile = (nama: p.nama, email: p.email);
+          _isDemo = p.isDemo;
+        });
+      }
     });
   }
 
-  Future<({String? nama, String? email})> _load() async {
+  Future<({String? nama, String? email, bool isDemo})> _load() async {
     try {
-      final user = supa.auth.currentUser;
-      if (user == null) return (nama: null, email: null);
-      final profile = await AuthRepository().getProfile();
-      return (nama: profile?.nama, email: user.email);
+      if (await isDemoAccount()) {
+        return (nama: null, email: null, isDemo: true);
+      }
+      final auth = AuthRepository();
+      final profile = await auth.getProfile();
+      final email = await auth.getSavedEmail();
+      return (nama: profile?.nama, email: email, isDemo: false);
     } catch (_) {
-      return (nama: null, email: null);
+      return (nama: null, email: null, isDemo: await isDemoAccount());
     }
   }
 
@@ -3077,6 +3094,33 @@ class _AccountScreenState extends State<AccountScreen> {
                       context,
                       label: S.out,
                       onTap: () async {
+                        if (!_isDemo) {
+                          final pending = await AuthRepository()
+                              .pendingSyncCount();
+                          if (pending > 0) {
+                            if (!context.mounted) return;
+                            final confirm = await showDialog<bool>(
+                              context: context,
+                              builder: (ctx) => AlertDialog(
+                                title: Text(S.unsyncedSignOutTitle),
+                                content: Text(S.unsyncedSignOutBody(pending)),
+                                actions: [
+                                  TextButton(
+                                    onPressed: () =>
+                                        Navigator.of(ctx).pop(false),
+                                    child: Text(S.cancelLabel),
+                                  ),
+                                  TextButton(
+                                    onPressed: () =>
+                                        Navigator.of(ctx).pop(true),
+                                    child: Text(S.signOutAnyway),
+                                  ),
+                                ],
+                              ),
+                            );
+                            if (confirm != true) return;
+                          }
+                        }
                         try {
                           await AuthRepository().signOut();
                         } catch (_) {
@@ -3109,6 +3153,10 @@ class _AccountScreenState extends State<AccountScreen> {
                   ],
                 ),
               ),
+              if (!_isDemo) ...[
+                const SizedBox(height: 16),
+                const SyncStatusBanner(margin: EdgeInsets.zero),
+              ],
             ],
           ),
         ),
@@ -3136,24 +3184,18 @@ class _StatisticScreenState extends State<StatisticScreen> {
     _future = _load();
   }
 
-  bool get _demo {
-    try {
-      return supa.auth.currentUser == null;
-    } catch (_) {
-      return true;
-    }
-  }
-
-  /// This week's distance + time; null in demo or when empty.
+  /// This week's distance + time; null when signed in and empty.
   Future<({double km, int seconds})?> _load() async {
+    if (await isDemoAccount()) return PacerDummyData.statistics;
     try {
-      if (_demo) return PacerDummyData.statistics;
       final repo = ActivityRepository();
       final stats = await repo.getStatistik(periodeKey(DateTime.now()));
-      if (stats == null || stats.jarakM <= 0) return PacerDummyData.statistics;
+      if (stats == null || (stats.jarakM <= 0 && stats.waktuS <= 0)) {
+        return null;
+      }
       return (km: stats.jarakM / 1000, seconds: stats.waktuS);
     } catch (_) {
-      return PacerDummyData.statistics;
+      return null;
     }
   }
 
@@ -3360,39 +3402,27 @@ class _StreaksScreenState extends State<StreaksScreen> {
     _future = _load();
   }
 
-  bool get _demo {
-    try {
-      return supa.auth.currentUser == null;
-    } catch (_) {
-      return true;
-    }
-  }
-
   Future<({int count, DateTime? terakhir, double totalKm})?> _load() async {
+    if (await isDemoAccount()) {
+      return (
+        count: 5,
+        terakhir: DateTime.now().subtract(const Duration(hours: 4)),
+        totalKm: 45.2,
+      );
+    }
     try {
-      if (_demo) {
-        return (
-          count: 5,
-          terakhir: DateTime.now().subtract(const Duration(hours: 4)),
-          totalKm: 45.2,
-        );
-      }
       final repo = ActivityRepository();
       final streak = await repo.getStreak();
       final activities = await repo.listActivities(limit: 100);
       final totalKm =
           activities.fold<double>(0, (s, a) => s + (a.jarakM ?? 0)) / 1000;
       return (
-        count: streak?.berjalan ?? 5,
-        terakhir: streak?.terakhir ?? DateTime.now(),
-        totalKm: totalKm > 0 ? totalKm : 45.2,
+        count: streak?.berjalan ?? 0,
+        terakhir: streak?.terakhir,
+        totalKm: totalKm,
       );
     } catch (_) {
-      return (
-        count: 5,
-        terakhir: DateTime.now().subtract(const Duration(hours: 4)),
-        totalKm: 45.2,
-      );
+      return (count: 0, terakhir: null, totalKm: 0.0);
     }
   }
 
@@ -3549,24 +3579,14 @@ class _ChallengeListScreenState extends State<ChallengeListScreen> {
     _future = _load();
   }
 
-  bool get _backend {
-    try {
-      supa;
-      return true;
-    } catch (_) {
-      return false;
-    }
-  }
-
   Future<List<Challenge>> _load() async {
-    try {
-      if (!_backend || supa.auth.currentUser == null) {
-        return PacerDummyData.challenges;
-      }
-      final list = await ChallengeRepository().listChallenges();
-      return list.isEmpty ? PacerDummyData.challenges : list;
-    } catch (_) {
+    if (await isDemoAccount()) {
       return PacerDummyData.challenges;
+    }
+    try {
+      return await ChallengeRepository().listChallenges();
+    } catch (_) {
+      return const [];
     }
   }
 
@@ -3607,8 +3627,8 @@ class _ChallengeListScreenState extends State<ChallengeListScreen> {
                   final live = snap.data;
                   // No mocks: offline and empty both show the empty state.
                   if (live == null || live.isEmpty) {
-                    return const PacerEmptyState(
-                      'Belum ada challenge.',
+                    return PacerEmptyState(
+                      S.noChallengesCachedEmpty,
                       icon: Icons.emoji_events_outlined,
                     );
                   }
@@ -3830,14 +3850,6 @@ class _CreateClubScreenState extends State<CreateClubScreen> {
     super.dispose();
   }
 
-  bool get _live {
-    try {
-      return supa.auth.currentUser != null;
-    } catch (_) {
-      return false;
-    }
-  }
-
   Future<void> _submit() async {
     setState(() => _error = null);
     final nama = _name.text.trim();
@@ -3845,7 +3857,7 @@ class _CreateClubScreenState extends State<CreateClubScreen> {
       setState(() => _error = S.errFillAll);
       return;
     }
-    if (!_live) {
+    if (await isDemoAccount()) {
       if (mounted) {
         ScaffoldMessenger.of(context)
             .showSnackBar(SnackBar(content: Text(S.demoJoinSent)));
@@ -3865,8 +3877,8 @@ class _CreateClubScreenState extends State<CreateClubScreen> {
       setState(
         () => _error = e.code == '42501' ? S.coachOnly : S.errSaveFailed,
       );
-    } catch (_) {
-      setState(() => _error = S.errSaveFailed);
+    } catch (e) {
+      setState(() => _error = offlineActionErrorMessage(e));
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -4082,8 +4094,8 @@ class _CreateChallengeScreenState extends State<CreateChallengeScreen> {
       setState(
         () => _error = e.code == '42501' ? S.coachOnly : S.errSaveFailed,
       );
-    } catch (_) {
-      if (mounted) setState(() => _error = S.errSaveFailed);
+    } catch (e) {
+      if (mounted) setState(() => _error = offlineActionErrorMessage(e));
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -4204,8 +4216,10 @@ class ChatScreen extends StatefulWidget {
 
 class _ChatScreenState extends State<ChatScreen> {
   ChatRepository? _repo;
-  List<ChatMessage> _messages = [];
+  List<LocalChatMessage> _messages = [];
   bool _loading = true;
+  bool _demo = true;
+  bool _wasSyncing = false;
   String? _uid;
   final _composer = TextEditingController();
   final _scroll = ScrollController();
@@ -4213,34 +4227,42 @@ class _ChatScreenState extends State<ChatScreen> {
   @override
   void initState() {
     super.initState();
+    SyncEngine.instance.addListener(_onSyncChanged);
     _open();
   }
 
   @override
   void dispose() {
+    SyncEngine.instance.removeListener(_onSyncChanged);
     _repo?.dispose();
     _composer.dispose();
     _scroll.dispose();
     super.dispose();
   }
 
-  String? _uidOf() {
-    try {
-      return supa.auth.currentUser?.id;
-    } catch (_) {
-      return null;
+  void _onSyncChanged() {
+    final syncing = SyncEngine.instance.status.isSyncing;
+    if (_wasSyncing && !syncing && !_demo && _repo != null && widget.teamId != null) {
+      _repo!.fetchRecentLocal(widget.teamId!).then((recent) {
+        if (mounted) setState(() => _messages = recent);
+      }).catchError((_) {});
     }
+    _wasSyncing = syncing;
   }
 
   Future<void> _open() async {
     final teamId = widget.teamId;
-    // Lazily constructed: ChatRepository() touches supa, which throws
-    // when Supabase was never initialized (demo mode).
+    final demo = await isDemoAccount();
+    final uid = await AuthRepository().resolveUserId();
     try {
-      if (teamId == null || _uidOf() == null) {
+      if (teamId == null || demo || uid == null) {
         if (mounted) {
           setState(() {
-            _messages = PacerDummyData.chatMessages;
+            _demo = true;
+            _messages = [
+              for (final m in PacerDummyData.chatMessages)
+                LocalChatMessage(message: m, syncState: SyncState.synced),
+            ];
             _loading = false;
           });
           _jumpToBottom();
@@ -4248,19 +4270,23 @@ class _ChatScreenState extends State<ChatScreen> {
         return;
       }
       final repo = ChatRepository();
-      final recent = await repo.fetchRecent(teamId);
+      final recent = await repo.fetchRecentLocal(teamId);
       if (!mounted) return;
       setState(() {
+        _demo = false;
         _repo = repo;
-        _uid = _uidOf();
-        _messages = recent.isEmpty ? PacerDummyData.chatMessages : recent;
+        _uid = uid;
+        _messages = recent;
         _loading = false;
       });
       repo.watchTeam(teamId, (msg) {
         if (!mounted) return;
         setState(() {
-          if (_messages.any((m) => m.id == msg.id)) return;
-          _messages = [..._messages, msg];
+          if (_messages.any((m) => m.message.id == msg.id)) return;
+          _messages = [
+            ..._messages,
+            LocalChatMessage(message: msg, syncState: SyncState.synced),
+          ];
         });
         _jumpToBottom();
       });
@@ -4268,7 +4294,13 @@ class _ChatScreenState extends State<ChatScreen> {
     } catch (_) {
       if (mounted) {
         setState(() {
-          _messages = PacerDummyData.chatMessages;
+          _demo = demo || teamId == null;
+          _messages = demo || teamId == null
+              ? [
+                  for (final m in PacerDummyData.chatMessages)
+                    LocalChatMessage(message: m, syncState: SyncState.synced),
+                ]
+              : const [];
           _loading = false;
         });
         _jumpToBottom();
@@ -4290,13 +4322,16 @@ class _ChatScreenState extends State<ChatScreen> {
     _composer.clear();
     final repo = _repo;
     if (repo == null || widget.teamId == null) {
-      final dummyMsg = ChatMessage(
-        id: 'msg-${DateTime.now().millisecondsSinceEpoch}',
-        teamId: widget.teamId ?? 'demo-team',
-        userId: _uid ?? 'demo-user-me',
-        userNama: 'Kamu',
-        body: text,
-        createdAt: DateTime.now(),
+      final dummyMsg = LocalChatMessage(
+        message: ChatMessage(
+          id: 'msg-${DateTime.now().millisecondsSinceEpoch}',
+          teamId: widget.teamId ?? 'demo-team',
+          userId: _uid ?? 'demo-user-me',
+          userNama: 'Kamu',
+          body: text,
+          createdAt: DateTime.now(),
+        ),
+        syncState: SyncState.synced,
       );
       if (mounted) {
         setState(() {
@@ -4307,10 +4342,10 @@ class _ChatScreenState extends State<ChatScreen> {
       return;
     }
     try {
-      final sent = await repo.send(widget.teamId!, text);
+      final sent = await repo.sendLocal(widget.teamId!, text);
       if (!mounted) return;
       setState(() {
-        if (_messages.any((m) => m.id == sent.id)) return;
+        if (_messages.any((m) => m.message.id == sent.message.id)) return;
         _messages = [..._messages, sent];
       });
       _jumpToBottom();
@@ -4370,6 +4405,11 @@ class _ChatScreenState extends State<ChatScreen> {
           constraints: const BoxConstraints(maxWidth: 720),
           child: Column(
             children: [
+              if (!_demo)
+                const Padding(
+                  padding: EdgeInsets.fromLTRB(12, 8, 12, 0),
+                  child: SyncStatusBanner(margin: EdgeInsets.zero),
+                ),
               Expanded(child: _body()),
               _composerBar(),
             ],
@@ -4396,7 +4436,8 @@ class _ChatScreenState extends State<ChatScreen> {
     );
   }
 
-  Widget _bubble(ChatMessage m) {
+  Widget _bubble(LocalChatMessage lm) {
+    final m = lm.message;
     final mine = _uid != null && m.userId == _uid;
     final scheme = PacerScheme.of(context);
     return Align(
@@ -4430,9 +4471,24 @@ class _ChatScreenState extends State<ChatScreen> {
                 ),
               ),
             Text(m.body),
-            Text(
-              _clock(m.createdAt),
-              style: TextStyle(fontSize: 10, color: scheme.subtle),
+            Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text(
+                  _clock(m.createdAt),
+                  style: TextStyle(fontSize: 10, color: scheme.subtle),
+                ),
+                if (mine && lm.syncState != SyncState.synced) ...[
+                  const SizedBox(width: 4),
+                  Icon(
+                    lm.syncState == SyncState.failed
+                        ? Icons.error_outline
+                        : Icons.schedule,
+                    size: 11,
+                    color: scheme.subtle,
+                  ),
+                ],
+              ],
             ),
           ],
         ),
@@ -4442,46 +4498,55 @@ class _ChatScreenState extends State<ChatScreen> {
 
   Widget _composerBar() {
     final live = _repo != null;
-    return Padding(
-      padding: const EdgeInsets.all(12),
-      child: Row(
-        children: [
-          Expanded(
-            child: TextField(
-              controller: _composer,
-              enabled: live,
-              decoration: InputDecoration(
-                hintText: live ? S.writeMessage : 'Pilih tim dulu.',
-                border: const OutlineInputBorder(
-                  borderRadius: BorderRadius.all(Radius.circular(22)),
+    return ValueListenableBuilder<bool>(
+      valueListenable: ConnectivityService.instance.isOnline,
+      builder: (context, _, _) {
+        final online = ConnectivityService.instance.value;
+        final hint = !live
+            ? 'Pilih tim dulu.'
+            : (online ? S.writeMessage : S.chatOfflineComposerHint);
+        return Padding(
+          padding: const EdgeInsets.all(12),
+          child: Row(
+            children: [
+              Expanded(
+                child: TextField(
+                  controller: _composer,
+                  enabled: live,
+                  decoration: InputDecoration(
+                    hintText: hint,
+                    border: const OutlineInputBorder(
+                      borderRadius: BorderRadius.all(Radius.circular(22)),
+                    ),
+                  ),
+                  onSubmitted: (_) => _send(),
                 ),
               ),
-              onSubmitted: (_) => _send(),
-            ),
-          ),
-          const SizedBox(width: 8),
-          GestureDetector(
-            onTap: live ? _send : null,
-            child: Container(
-              width: 48,
-              height: 48,
-              decoration: BoxDecoration(
-                color: live
-                    ? PacerColors.chatGreen
-                    : PacerScheme.of(context).softBorder,
-                shape: BoxShape.circle,
+              const SizedBox(width: 8),
+              GestureDetector(
+                onTap: live ? _send : null,
+                child: Container(
+                  width: 48,
+                  height: 48,
+                  decoration: BoxDecoration(
+                    color: live
+                        ? PacerColors.chatGreen
+                        : PacerScheme.of(context).softBorder,
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(Icons.send, color: Colors.white, size: 20),
+                ),
               ),
-              child: const Icon(Icons.send, color: Colors.white, size: 20),
-            ),
+            ],
           ),
-        ],
-      ),
+        );
+      },
     );
   }
 }
 
-/// Figma About Me data card. The name row is live (profile row, editable
-/// via the button below); other rows have no backend columns and stay static.
+/// Figma About Me data card. Reads/updates offline-first profile locally
+/// when signed in and syncs automatically when online.
 class AboutMeScreen extends StatefulWidget {
   const AboutMeScreen({super.key});
 
@@ -4500,13 +4565,7 @@ class _AboutMeScreenState extends State<AboutMeScreen> {
   }
 
   Future<void> _load() async {
-    try {
-      if (supa.auth.currentUser == null) throw StateError('demo');
-      final profile = await AuthRepository().getProfile();
-      if (mounted) setState(() => _profile = profile);
-    } catch (_) {
-      // Signed out / offline: show editable local demo data instead of
-      // dashes, so the screen is usable and edits don't hit the server.
+    if (await isDemoAccount()) {
       if (mounted) {
         setState(() {
           _demo = true;
@@ -4521,6 +4580,18 @@ class _AboutMeScreenState extends State<AboutMeScreen> {
           );
         });
       }
+      return;
+    }
+    try {
+      final profile = await AuthRepository().getProfile();
+      if (mounted) {
+        setState(() {
+          _demo = false;
+          _profile = profile;
+        });
+      }
+    } catch (_) {
+      if (mounted) setState(() => _demo = false);
     }
   }
 
@@ -4566,8 +4637,10 @@ class _AboutMeScreenState extends State<AboutMeScreen> {
       );
       await _reloadProfile();
       if (!mounted) return;
-      ScaffoldMessenger.of(context)
-          .showSnackBar(SnackBar(content: Text(S.nameSaved)));
+      final msg = ConnectivityService.instance.value
+          ? S.nameSaved
+          : S.queuedOfflineSaved;
+      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
     } catch (_) {
       if (mounted) {
         ScaffoldMessenger.of(context)
@@ -5054,21 +5127,15 @@ class _LanguageSettingsScreenState extends State<LanguageSettingsScreen> {
     // a write failed or RLS denied it).
     if (langUserLocked) return;
     try {
-      final user = supa.auth.currentUser;
-      if (user == null) return;
-      final row = await supa
-          .from('users')
-          .select('language')
-          .eq('id', user.id)
-          .maybeSingle();
-      final value = row?['language'] as String?;
+      if (await isDemoAccount()) return;
+      final value = await AuthRepository().getLanguage();
       if (value == 'en' && langNotifier.value != Lang.en) {
         langNotifier.value = Lang.en;
       } else if (value == 'id' && langNotifier.value != Lang.id) {
         langNotifier.value = Lang.id;
       }
     } catch (_) {
-      // Demo mode or column not migrated yet — local value stands.
+      // Demo mode or offline — local value stands.
     }
   }
 
@@ -5077,19 +5144,12 @@ class _LanguageSettingsScreenState extends State<LanguageSettingsScreen> {
     langNotifier.value = lang;
     await persistLanguagePreference(lang);
     try {
-      final user = supa.auth.currentUser;
-      if (user == null) {
+      if (await isDemoAccount()) {
         if (mounted) setState(() {});
         return;
       }
-      await supa
-          .from('users')
-          .update({'language': lang == Lang.en ? 'en' : 'id'})
-          .eq('id', user.id)
-          .timeout(const Duration(seconds: 5));
+      await AuthRepository().updateLanguage(lang == Lang.en ? 'en' : 'id');
     } catch (_) {
-      // Demo mode, missing column, RLS denial, or offline: the choice
-      // still applies locally — say so instead of failing silently.
       if (mounted) {
         ScaffoldMessenger.of(context)
             .showSnackBar(SnackBar(content: Text(S.langSaveFailed)));

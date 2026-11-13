@@ -3,9 +3,14 @@ import 'package:pacer/core/responsive/responsive.dart';
 import 'package:pacer/src/aktivitas/activity_model.dart';
 import 'package:pacer/src/aktivitas/activity_repository.dart';
 import 'package:pacer/src/auth/auth_repository.dart';
+import 'package:pacer/src/demo/pacer_dummy_data.dart';
+import 'package:pacer/src/local/local_models.dart';
+import 'package:pacer/src/local/local_store.dart';
+import 'package:pacer/src/local/swr_helper.dart';
+import 'package:pacer/src/sync/sync_engine.dart';
 import 'package:pacer/src/teams/team_model.dart';
 import 'package:pacer/src/teams/team_repository.dart';
-import 'package:pacer/src/demo/pacer_dummy_data.dart';
+import 'package:pacer/src/tracking/recorder.dart';
 import 'package:pacer/supabase.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -315,29 +320,47 @@ class HomeScreen extends StatefulWidget {
   State<HomeScreen> createState() => HomeScreenState();
 }
 
-/// Live home data; every field null in demo mode (keeps the mock cards).
+/// Live home data; [isDemo] marks signed-out preview mode.
 class _HomeData {
-  final List<Activity>? activities;
-  final int? streak;
+  final List<LocalActivity> activities;
+  final int streak;
   final DateTime? streakLast;
-  final List<Team>? teams;
-  final String? initials;
+  final List<Team> teams;
+  final String initials;
+  final bool isDemo;
   const _HomeData({
-    this.activities,
-    this.streak,
+    this.activities = const [],
+    this.streak = 0,
     this.streakLast,
-    this.teams,
-    this.initials,
+    this.teams = const [],
+    this.initials = '?',
+    this.isDemo = false,
   });
 }
 
 class HomeScreenState extends State<HomeScreen> {
   _HomeData? _data;
+  bool _wasSyncing = false;
 
   @override
   void initState() {
     super.initState();
+    SyncEngine.instance.addListener(_onSyncChanged);
     reload();
+  }
+
+  @override
+  void dispose() {
+    SyncEngine.instance.removeListener(_onSyncChanged);
+    super.dispose();
+  }
+
+  void _onSyncChanged() {
+    final syncing = SyncEngine.instance.status.isSyncing;
+    if (_wasSyncing && !syncing) {
+      reload();
+    }
+    _wasSyncing = syncing;
   }
 
   /// Reloads home dashboard cards. When [forceRefresh] is true, cache is bypassed.
@@ -346,53 +369,62 @@ class HomeScreenState extends State<HomeScreen> {
     if (mounted) setState(() => _data = d);
   }
 
-  bool get _backend {
-    try {
-      supa;
-      return true;
-    } catch (_) {
-      return false;
-    }
+  _HomeData _demoData() {
+    final now = DateTime.now();
+    return _HomeData(
+      activities: PacerDummyData.activities
+          .take(3)
+          .map(
+            (a) => LocalActivity(
+              activity: a,
+              syncState: SyncState.synced,
+              updatedAt: a.selesaiAt ?? a.mulaiAt ?? now,
+            ),
+          )
+          .toList(),
+      streak: 5,
+      streakLast: now.subtract(const Duration(hours: 4)),
+      teams: PacerDummyData.teams.take(3).toList(),
+      initials: 'PD',
+      isDemo: true,
+    );
   }
 
   Future<_HomeData> _load({bool forceRefresh = false}) async {
     try {
-      if (!_backend || supa.auth.currentUser == null) {
-        final now = DateTime.now();
-        return _HomeData(
-          activities: PacerDummyData.activities.take(3).toList(),
-          streak: 5,
-          streakLast: now.subtract(const Duration(hours: 4)),
-          teams: PacerDummyData.teams.take(3).toList(),
-          initials: 'PD',
-        );
+      if (await isDemoAccount()) {
+        return _demoData();
       }
       final repo = ActivityRepository();
-      final activities = await repo.listActivities(
+      final auth = AuthRepository();
+      final activities = await repo.listLocalActivities(
         limit: 5,
         forceRefresh: forceRefresh,
       );
       final streak = await repo.getStreak(forceRefresh: forceRefresh);
       final teams = await TeamRepository().myTeams(forceRefresh: forceRefresh);
-      final profile = await AuthRepository().getProfile(
-        forceRefresh: forceRefresh,
-      );
+      final profile = await auth.getProfile(forceRefresh: forceRefresh);
+      final email = await auth.getSavedEmail();
+      final name = (profile?.nama ?? '').trim();
+      final label = name.isNotEmpty ? name : (email ?? 'P');
       return _HomeData(
-        activities: activities.isEmpty
-            ? PacerDummyData.activities.take(3).toList()
-            : activities,
-        streak: streak?.berjalan ?? 5,
-        streakLast: streak?.terakhir ?? DateTime.now(),
-        teams: teams.isEmpty ? PacerDummyData.teams.take(3).toList() : teams,
-        initials: initialsOf(profile?.nama ?? 'Pacer Demo'),
+        activities: activities,
+        streak: streak?.berjalan ?? 0,
+        streakLast: streak?.terakhir,
+        teams: teams,
+        initials: initialsOf(label),
+        isDemo: false,
       );
     } catch (_) {
-      return _HomeData(
-        activities: PacerDummyData.activities.take(3).toList(),
-        streak: 5,
-        streakLast: DateTime.now().subtract(const Duration(hours: 4)),
-        teams: PacerDummyData.teams.take(3).toList(),
-        initials: 'PD',
+      if (await isDemoAccount()) {
+        return _demoData();
+      }
+      return const _HomeData(
+        activities: [],
+        streak: 0,
+        teams: [],
+        initials: 'P',
+        isDemo: false,
       );
     }
   }
@@ -417,7 +449,8 @@ class HomeScreenState extends State<HomeScreen> {
           // 48px tap target around the 42px visual.
           GestureDetector(
             onTap: () => Navigator.of(context)
-                .push(MaterialPageRoute(builder: (_) => const AccountScreen())),
+                .push(MaterialPageRoute(builder: (_) => const AccountScreen()))
+                .then((_) => reload()),
             child: SizedBox(
               width: 48,
               height: 48,
@@ -473,22 +506,23 @@ class HomeScreenState extends State<HomeScreen> {
           ),
         ),
         const SizedBox(height: 8),
-        // No mocks: offline and empty both show the empty state.
+        // Empty state instead of mock cards when signed in.
         if (activities == null || activities.isEmpty)
-          const PacerEmptyState(
-            'Belum ada aktivitas. Mulai lari pertamamu!',
+          PacerEmptyState(
+            S.noRunsOfflineEmpty,
             icon: Icons.directions_run_outlined,
           )
         else
-          for (final a in activities.take(2))
+          for (final item in activities.take(2))
             Padding(
               padding: const EdgeInsets.only(bottom: 16),
               child: RunSessionCard(
-                title: S.sportName(a.jenis),
-                date: fmtDate(a.mulaiAt),
-                time: fmtDurasi(a.durasiS),
-                pace: fmtPace(a.durasiS, a.jarakM),
-                distance: fmtKm(a.jarakM),
+                title: S.sportName(item.activity.jenis),
+                date: fmtDate(item.activity.mulaiAt),
+                time: fmtDurasi(item.activity.durasiS),
+                pace: fmtPace(item.activity.durasiS, item.activity.jarakM),
+                distance: fmtKm(item.activity.jarakM),
+                syncState: _data?.isDemo == true ? null : item.syncState,
               ),
             ),
       ],
@@ -512,11 +546,10 @@ class HomeScreenState extends State<HomeScreen> {
                 scrollDirection: Axis.horizontal,
                 padding: EdgeInsets.zero,
                 children: [
-                  // No mocks: offline and empty both show the empty state.
                   // Compact variant: the carousel is only 150px tall.
                   if (teams == null || teams.isEmpty)
-                    const PacerEmptyState(
-                      'Belum gabung tim mana pun.',
+                    PacerEmptyState(
+                      S.noTeamsCachedEmpty,
                       icon: Icons.groups_outlined,
                       compact: true,
                     )
@@ -545,7 +578,9 @@ class HomeScreenState extends State<HomeScreen> {
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
             _header(context),
-            const SizedBox(height: 16),
+            const SizedBox(height: 12),
+            if (_data != null && !_data!.isDemo) const SyncStatusBanner(),
+            const SizedBox(height: 4),
             LayoutBuilder(
               builder: (context, c) {
                 return switch (screenSizeOf(c.maxWidth)) {
@@ -612,27 +647,132 @@ class MainShell extends StatefulWidget {
   State<MainShell> createState() => _MainShellState();
 }
 
-class _MainShellState extends State<MainShell> {
+class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
   int _index = 0;
   String _activeSport = 'lari';
   String? _activeGoal;
+  ActiveDraftRun? _resumedDraft;
+  bool _draftPrompted = false;
   final GlobalKey<HomeScreenState> _homeKey = GlobalKey<HomeScreenState>();
 
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    WidgetsBinding.instance.addPostFrameCallback((_) => _checkPendingDraft());
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      AuthRepository().resolveUserId().then((uid) {
+        if (uid != null) {
+          SyncEngine.instance.triggerSync(userId: uid);
+        }
+      }).catchError((_) {});
+      _homeKey.currentState?.reload();
+    }
+  }
+
+  Future<void> _checkPendingDraft() async {
+    if (_draftPrompted) return;
+    final uid = await AuthRepository().resolveUserId();
+    if (uid == null || !mounted) return;
+    final draft = await LocalStore.instance.loadActiveDraft(uid);
+    if (draft == null || !mounted) return;
+    _draftPrompted = true;
+    final choice = await showDialog<String>(
+      context: context,
+      barrierDismissible: false,
+      builder: (ctx) => AlertDialog(
+        title: Text(S.draftRecoveryTitle),
+        content: Text(
+          S.draftRecoveryBody(
+            S.sportName(draft.jenis),
+            fmtKm(draft.distanceM),
+            fmtDurasi(draft.elapsedS),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop('discard'),
+            child: Text(S.draftDiscard),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop('save'),
+            child: Text(S.draftSaveNow),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(ctx).pop('resume'),
+            child: Text(S.draftResume),
+          ),
+        ],
+      ),
+    );
+    if (!mounted) return;
+    switch (choice) {
+      case 'resume':
+        setState(() {
+          _resumedDraft = draft;
+          _activeSport = draft.jenis;
+          _activeGoal = null;
+          _index = 1;
+        });
+        break;
+      case 'save':
+        final rec = RunRecorder();
+        try {
+          rec.restoreDraft(draft);
+          final summary = await rec.finish();
+          await _homeKey.currentState?.reload();
+          if (summary != null && mounted) {
+            await Navigator.of(context).push(
+              MaterialPageRoute(
+                builder: (_) => RunFinishScreen(
+                  summary: summary,
+                  isHistoryDetail: true,
+                  aktivitasId: summary.aktivitasId,
+                  title: S.sportName(summary.jenis),
+                ),
+              ),
+            );
+            await _homeKey.currentState?.reload();
+          }
+        } finally {
+          rec.dispose();
+        }
+        break;
+      case 'discard':
+        await LocalStore.instance.discardDraft(draft.id);
+        break;
+    }
+  }
+
   void _onPillTap(int i) {
-    if (i == 0 && _index != 0) {
+    if (i == 0) {
+      _resumedDraft = null;
       _homeKey.currentState?.reload();
     }
     setState(() => _index = i);
   }
-  void _goHistory() =>
-      Navigator.of(context)
-          .push(MaterialPageRoute(builder: (_) => const HistoryScreen()));
+
+  void _goHistory() => Navigator.of(context)
+      .push(MaterialPageRoute(builder: (_) => const HistoryScreen()))
+      .then((_) => _homeKey.currentState?.reload());
+
   void _goSetup() => Navigator.of(context).push(
     MaterialPageRoute(
       builder: (_) => RunSetupScreen(
         onStartWithConfig: (sport, goal) {
           Navigator.of(context).pop();
           setState(() {
+            _resumedDraft = null;
             _activeSport = sport;
             _activeGoal = goal;
             _index = 1;
@@ -640,7 +780,10 @@ class _MainShellState extends State<MainShell> {
         },
         onStart: () {
           Navigator.of(context).pop();
-          setState(() => _index = 1);
+          setState(() {
+            _resumedDraft = null;
+            _index = 1;
+          });
         },
       ),
     ),
@@ -661,6 +804,7 @@ class _MainShellState extends State<MainShell> {
           onBack: () => _onPillTap(0),
           sportType: _activeSport,
           goal: _activeGoal,
+          initialDraft: _resumedDraft,
         )
       else
         const SizedBox.shrink(),
