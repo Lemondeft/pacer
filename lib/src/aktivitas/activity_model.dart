@@ -196,3 +196,139 @@ DateTime? _parseDate(dynamic value) =>
     value == null ? null : DateTime.parse(value as String);
 
 String? _iso(DateTime? value) => value?.toUtc().toIso8601String();
+
+/// Derived post-workout metrics computed from activity totals & GPS points.
+class RunMetrics {
+  final int caloriesKcal;
+  final double elevationGainM;
+  final double? stepLengthCm;
+  final int? cadenceSpm;
+
+  const RunMetrics({
+    required this.caloriesKcal,
+    required this.elevationGainM,
+    this.stepLengthCm,
+    this.cadenceSpm,
+  });
+}
+
+/// Sums positive GPS elevation deltas while filtering small altitude jitter.
+double computeElevationGainM(List<RutePoint> points) {
+  double? anchorAlt;
+  var gainM = 0.0;
+  for (final pt in points) {
+    final alt = pt.elevasiM;
+    if (alt == null || !alt.isFinite) continue;
+    if (anchorAlt == null) {
+      anchorAlt = alt;
+      continue;
+    }
+    final diff = alt - anchorAlt;
+    if (diff > 1.5) {
+      gainM += diff;
+      anchorAlt = alt;
+    } else if (diff < -1.5) {
+      anchorAlt = alt;
+    }
+  }
+  return gainM;
+}
+
+/// ACSM MET-based calorie estimation from sport type, duration, distance, and weight.
+int estimateCaloriesKcal({
+  required String jenis,
+  required int durasiS,
+  required double jarakM,
+  double weightKg = 65,
+}) {
+  if (durasiS <= 0 || weightKg <= 0) return 0;
+  final hours = durasiS / 3600.0;
+  final speedKmh = (jarakM > 0 && hours > 0) ? (jarakM / 1000.0) / hours : 0.0;
+  final double met;
+  switch (jenis.toLowerCase()) {
+    case 'berjalan':
+      if (speedKmh <= 0) {
+        met = 3.2;
+      } else if (speedKmh < 4.0) {
+        met = 3.0;
+      } else if (speedKmh < 6.0) {
+        met = 4.3;
+      } else {
+        met = 5.0;
+      }
+      break;
+    case 'joging':
+      met = speedKmh > 9.0 ? 8.5 : 7.0;
+      break;
+    case 'bersepeda':
+      if (speedKmh < 16.0) {
+        met = 6.0;
+      } else if (speedKmh < 22.0) {
+        met = 8.0;
+      } else {
+        met = 10.0;
+      }
+      break;
+    case 'lari':
+    default:
+      if (speedKmh < 8.5) {
+        met = 8.3;
+      } else if (speedKmh < 10.5) {
+        met = 9.8;
+      } else {
+        met = 11.5;
+      }
+      break;
+  }
+  final kcal = (met * 3.5 * weightKg / 200.0) * (durasiS / 60.0);
+  return kcal.round();
+}
+
+/// Computes derived finish metrics (calories, elevation gain, stride, cadence).
+RunMetrics computeRunMetrics({
+  required String jenis,
+  required int durasiS,
+  required double jarakM,
+  List<RutePoint> points = const [],
+  double? weightKg,
+  double? heightCm,
+}) {
+  final weight = (weightKg != null && weightKg > 0) ? weightKg : 65.0;
+  final height = (heightCm != null && heightCm > 0) ? heightCm : 170.0;
+  final calories = estimateCaloriesKcal(
+    jenis: jenis,
+    durasiS: durasiS,
+    jarakM: jarakM,
+    weightKg: weight,
+  );
+  final elevation = computeElevationGainM(points);
+
+  if (jenis.toLowerCase() == 'bersepeda') {
+    return RunMetrics(caloriesKcal: calories, elevationGainM: elevation);
+  }
+  if (jarakM <= 0 || durasiS <= 0) {
+    return RunMetrics(
+      caloriesKcal: calories,
+      elevationGainM: elevation,
+      stepLengthCm: 0,
+      cadenceSpm: 0,
+    );
+  }
+
+  final speedMs = jarakM / durasiS;
+  final factor = switch (jenis.toLowerCase()) {
+    'berjalan' => (0.41 + (speedMs - 1.2) * 0.04).clamp(0.38, 0.48),
+    'joging' => (0.52 + (speedMs - 2.2) * 0.05).clamp(0.45, 0.68),
+    _ => (0.58 + (speedMs - 2.8) * 0.06).clamp(0.45, 0.80),
+  };
+  final stepCm = (height * factor).clamp(50.0, 145.0);
+  final totalSteps = jarakM / (stepCm / 100.0);
+  final cadence = (totalSteps / (durasiS / 60.0)).round().clamp(40, 220);
+
+  return RunMetrics(
+    caloriesKcal: calories,
+    elevationGainM: elevation,
+    stepLengthCm: stepCm,
+    cadenceSpm: cadence,
+  );
+}

@@ -5,6 +5,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'package:pacer/src/aktivitas/activity_model.dart';
 import 'package:pacer/src/cache/pacer_cache.dart';
+import 'package:pacer/src/challenge/challenge_model.dart';
 import 'package:pacer/src/chat/chat_model.dart';
 import 'package:pacer/src/local/local_models.dart';
 import 'package:pacer/src/local/local_store.dart';
@@ -82,8 +83,15 @@ abstract class RemoteSyncGateway {
   });
   Future<void> updateProfile(String userId, Map<String, dynamic> patch);
   Future<void> updateLanguage(String userId, String langCode);
-  Future<void> joinChallenge(String userId, String challengeId);
+  Future<void> joinChallenge(
+    String userId,
+    String challengeId, {
+    String? id,
+    DateTime? createdAt,
+  });
   Future<void> leaveChallenge(String userId, String challengeId);
+  Future<List<PartisipasiChallenge>?> recomputeChallengeProgressRpc();
+  Future<List<PartisipasiChallenge>> fallbackSyncChallengeProgress(String userId);
   Future<ChatMessage> sendChatMessage({
     required String id,
     required String teamId,
@@ -287,7 +295,12 @@ class SupabaseSyncGateway implements RemoteSyncGateway {
   }
 
   @override
-  Future<void> joinChallenge(String userId, String challengeId) async {
+  Future<void> joinChallenge(
+    String userId,
+    String challengeId, {
+    String? id,
+    DateTime? createdAt,
+  }) async {
     final c = _client!;
     final existing = await c
         .from('partisipasi_challenge')
@@ -298,8 +311,10 @@ class SupabaseSyncGateway implements RemoteSyncGateway {
     if (existing != null) return;
     try {
       await c.from('partisipasi_challenge').insert({
+        if (id != null && id.isNotEmpty) 'id': id,
         'user_id': userId,
         'challenge_id': challengeId,
+        if (createdAt != null) 'created_at': createdAt.toUtc().toIso8601String(),
       });
     } on PostgrestException catch (e) {
       if (e.code != '23505') rethrow;
@@ -313,6 +328,82 @@ class SupabaseSyncGateway implements RemoteSyncGateway {
         .delete()
         .eq('user_id', userId)
         .eq('challenge_id', challengeId);
+  }
+
+  @override
+  Future<List<PartisipasiChallenge>?> recomputeChallengeProgressRpc() async {
+    final c = _client!;
+    try {
+      final raw = await c.rpc('sync_recompute_challenge_progress');
+      final rows = raw is List ? raw : (raw == null ? const [] : [raw]);
+      return [
+        for (final row in rows)
+          PartisipasiChallenge.fromJson(Map<String, dynamic>.from(row as Map)),
+      ];
+    } on PostgrestException catch (e) {
+      final code = (e.code ?? '').toUpperCase();
+      if (code == 'PGRST202' || code == '42883') {
+        return null;
+      }
+      rethrow;
+    }
+  }
+
+  @override
+  Future<List<PartisipasiChallenge>> fallbackSyncChallengeProgress(
+    String userId,
+  ) async {
+    final c = _client!;
+    final partRows = await c
+        .from('partisipasi_challenge')
+        .select()
+        .eq('user_id', userId)
+        .order('created_at', ascending: false);
+    final parts = [
+      for (final row in partRows)
+        PartisipasiChallenge.fromJson(Map<String, dynamic>.from(row)),
+    ];
+    if (parts.isEmpty) return const [];
+
+    final chalRows = await c.from('challenge').select();
+    final challenges = {
+      for (final row in chalRows)
+        row['id'] as String: Challenge.fromJson(Map<String, dynamic>.from(row)),
+    };
+    final actRows = await c
+        .from('aktivitas')
+        .select()
+        .eq('user_id', userId)
+        .not('selesai_at', 'is', null);
+    final acts = [
+      for (final row in actRows)
+        Activity.fromJson(Map<String, dynamic>.from(row)),
+    ];
+
+    final updated = <PartisipasiChallenge>[];
+    for (final p in parts) {
+      final ch = challenges[p.challengeId];
+      if (ch == null) {
+        updated.add(p);
+        continue;
+      }
+      final eval = evaluateChallengeProgress(
+        challenge: ch,
+        participation: p,
+        activities: acts,
+      );
+      if (eval.progressNilai != p.progressNilai || eval.berhasil != p.berhasil) {
+        await c
+            .from('partisipasi_challenge')
+            .update({
+              'progress_nilai': eval.progressNilai,
+              'berhasil': eval.berhasil,
+            })
+            .eq('id', p.id);
+      }
+      updated.add(eval);
+    }
+    return updated;
   }
 
   @override
@@ -605,7 +696,13 @@ class SyncEngine extends ChangeNotifier {
         );
         await _store.markOutboxSynced(item.id);
       case OutboxOp.joinChallenge:
-        await _gateway.joinChallenge(item.userId, item.entityId);
+        final createdRaw = item.payload['created_at'] as String?;
+        await _gateway.joinChallenge(
+          item.userId,
+          item.entityId,
+          id: item.payload['id'] as String?,
+          createdAt: createdRaw == null ? null : DateTime.parse(createdRaw),
+        );
         await _store.markOutboxSynced(item.id);
       case OutboxOp.leaveChallenge:
         await _gateway.leaveChallenge(item.userId, item.entityId);
@@ -654,6 +751,7 @@ class SyncEngine extends ChangeNotifier {
         baselineStreak: rpcResult.streakBerjalan,
         baselineStreakLast: rpcResult.streakLast,
       );
+      await _syncChallengeProgressAfterActivity(item.userId, activity);
       return;
     }
 
@@ -685,6 +783,24 @@ class SyncEngine extends ChangeNotifier {
       baselineStreak: effStreak?.berjalan,
       baselineStreakLast: effStreak?.terakhir,
     );
+    await _syncChallengeProgressAfterActivity(item.userId, activity);
+  }
+
+  Future<void> _syncChallengeProgressAfterActivity(
+    String userId,
+    Activity activity,
+  ) async {
+    final rpcParts = await _gateway.recomputeChallengeProgressRpc();
+    if (rpcParts != null) {
+      await _store.saveParticipations(userId, rpcParts);
+      return;
+    }
+    final fallbackParts = await _gateway.fallbackSyncChallengeProgress(userId);
+    if (fallbackParts.isNotEmpty) {
+      await _store.saveParticipations(userId, fallbackParts);
+    } else {
+      await _store.applySyncedActivityChallengeDelta(userId, activity);
+    }
   }
 
   @override

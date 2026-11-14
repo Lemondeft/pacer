@@ -1,5 +1,6 @@
 import 'package:pacer/src/aktivitas/activity_model.dart';
 import 'package:pacer/src/auth/user_model.dart';
+import 'package:pacer/src/challenge/challenge_model.dart';
 import 'package:pacer/src/local/local_models.dart';
 
 /// Pure aggregation helpers shared by [SqliteLocalStore] and
@@ -81,4 +82,87 @@ UserProfile applyProfilePatch(
   }
   base['id'] = userId;
   return UserProfile.fromJson(base);
+}
+
+/// Computes current effective challenge participations from stored baselines
+/// plus queued offline finished workouts (`syncState != synced`).
+List<PartisipasiChallenge> computeEffectiveParticipations({
+  required List<PartisipasiChallenge> baselines,
+  required List<Challenge> challenges,
+  required List<LocalActivity> activities,
+}) {
+  final challengeById = <String, Challenge>{
+    for (final c in challenges) c.id: c,
+  };
+  final pendingFinished = activities
+      .where(
+        (a) =>
+            a.status == RunStatus.finished && a.syncState != SyncState.synced,
+      )
+      .toList(growable: false);
+
+  return [
+    for (final p in baselines)
+      _effectiveOneParticipation(p, challengeById[p.challengeId], pendingFinished),
+  ];
+}
+
+PartisipasiChallenge _effectiveOneParticipation(
+  PartisipasiChallenge baseline,
+  Challenge? challenge,
+  List<LocalActivity> pendingFinished,
+) {
+  if (challenge == null || pendingFinished.isEmpty) return baseline;
+  var delta = 0.0;
+  for (final item in pendingFinished) {
+    delta += challengeActivityDelta(
+      challenge: challenge,
+      participation: baseline,
+      activity: item.activity,
+    );
+  }
+  if (delta <= 0) return baseline;
+  final total = baseline.progressNilai + delta;
+  return PartisipasiChallenge(
+    id: baseline.id,
+    challengeId: baseline.challengeId,
+    userId: baseline.userId,
+    progressNilai: total,
+    berhasil:
+        baseline.berhasil ||
+        (challenge.targetNilai > 0 && total >= challenge.targetNilai),
+    createdAt: baseline.createdAt,
+  );
+}
+
+/// Adjusts stored participation baselines by a single [activity]
+/// ([sign] = 1 on sync without server snapshot, [sign] = -1 when deleting
+/// an already-synced activity locally).
+PartisipasiChallenge applyActivityDeltaToBaseline({
+  required PartisipasiChallenge baseline,
+  required Challenge? challenge,
+  required Activity activity,
+  int sign = 1,
+}) {
+  if (challenge == null) return baseline;
+  final delta = challengeActivityDelta(
+    challenge: challenge,
+    participation: baseline,
+    activity: activity,
+  );
+  if (delta <= 0) return baseline;
+  final rawTotal = baseline.progressNilai + (delta * sign);
+  final total = rawTotal < 0 ? 0.0 : rawTotal;
+  final achieved = sign < 0
+      ? (challenge.targetNilai > 0 && total >= challenge.targetNilai)
+      : (baseline.berhasil ||
+          (challenge.targetNilai > 0 && total >= challenge.targetNilai));
+  return PartisipasiChallenge(
+    id: baseline.id,
+    challengeId: baseline.challengeId,
+    userId: baseline.userId,
+    progressNilai: total,
+    berhasil: achieved,
+    createdAt: baseline.createdAt,
+  );
 }

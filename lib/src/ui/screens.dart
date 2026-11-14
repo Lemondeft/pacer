@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:pacer/core/responsive/responsive.dart';
 import 'package:pacer/src/aktivitas/activity_model.dart';
 import 'package:pacer/src/aktivitas/activity_repository.dart';
@@ -523,6 +524,26 @@ class HomeScreenState extends State<HomeScreen> {
                 pace: fmtPace(item.activity.durasiS, item.activity.jarakM),
                 distance: fmtKm(item.activity.jarakM),
                 syncState: _data?.isDemo == true ? null : item.syncState,
+                onTap: () => Navigator.of(context).push(
+                  MaterialPageRoute(
+                    builder: (_) => RunFinishScreen(
+                      title:
+                          '${S.sportName(item.activity.jenis)} ${fmtDate(item.activity.mulaiAt)}'
+                              .trim(),
+                      isHistoryDetail: true,
+                      aktivitasId: _data?.isDemo == true
+                          ? null
+                          : item.activity.id,
+                      summary: RunSummary(
+                        aktivitasId: item.activity.id,
+                        jenis: item.activity.jenis,
+                        jarakM: item.activity.jarakM ?? 0,
+                        durasiS: item.activity.durasiS ?? 0,
+                        pointCount: 0,
+                      ),
+                    ),
+                  ),
+                ),
               ),
             ),
       ],
@@ -649,6 +670,8 @@ class MainShell extends StatefulWidget {
 
 class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
   int _index = 0;
+  final List<int> _tabHistory = [];
+  DateTime? _lastBackAt;
   String _activeSport = 'lari';
   String? _activeGoal;
   ActiveDraftRun? _resumedDraft;
@@ -755,11 +778,70 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
   }
 
   void _onPillTap(int i) {
-    if (i == 0) {
-      _resumedDraft = null;
+    if (i == _index) {
+      if (i == 0) {
+        _resumedDraft = null;
+        _homeKey.currentState?.reload();
+      }
+      return;
+    }
+    setState(() {
+      if (_index != 1 && (_tabHistory.isEmpty || _tabHistory.last != _index)) {
+        _tabHistory.add(_index);
+        if (_tabHistory.length > 12) _tabHistory.removeAt(0);
+      }
+      if (i == 0) {
+        _resumedDraft = null;
+        _homeKey.currentState?.reload();
+      }
+      _index = i;
+    });
+  }
+
+  void _goBackFromTab() {
+    if (_tabHistory.isNotEmpty) {
+      final prev = _tabHistory.removeLast();
+      setState(() {
+        _resumedDraft = null;
+        _index = prev;
+      });
+      if (prev == 0) {
+        _homeKey.currentState?.reload();
+      }
+      return;
+    }
+    if (_index != 0) {
+      setState(() {
+        _resumedDraft = null;
+        _index = 0;
+      });
       _homeKey.currentState?.reload();
     }
-    setState(() => _index = i);
+  }
+
+  void _handleShellBack() {
+    if (_index != 0 || _tabHistory.isNotEmpty) {
+      HapticFeedback.lightImpact();
+      _goBackFromTab();
+      return;
+    }
+    final now = DateTime.now();
+    if (_lastBackAt == null ||
+        now.difference(_lastBackAt!) > const Duration(seconds: 2)) {
+      _lastBackAt = now;
+      HapticFeedback.lightImpact();
+      final messenger = ScaffoldMessenger.maybeOf(context);
+      messenger?.hideCurrentSnackBar();
+      messenger?.showSnackBar(
+        SnackBar(
+          content: Text(S.pressBackAgainToExit),
+          behavior: SnackBarBehavior.floating,
+          duration: const Duration(seconds: 2),
+        ),
+      );
+      return;
+    }
+    SystemNavigator.pop();
   }
 
   void _goHistory() => Navigator.of(context)
@@ -772,6 +854,11 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
         onStartWithConfig: (sport, goal) {
           Navigator.of(context).pop();
           setState(() {
+            if (_index != 1 &&
+                (_tabHistory.isEmpty || _tabHistory.last != _index)) {
+              _tabHistory.add(_index);
+              if (_tabHistory.length > 12) _tabHistory.removeAt(0);
+            }
             _resumedDraft = null;
             _activeSport = sport;
             _activeGoal = goal;
@@ -781,6 +868,11 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
         onStart: () {
           Navigator.of(context).pop();
           setState(() {
+            if (_index != 1 &&
+                (_tabHistory.isEmpty || _tabHistory.last != _index)) {
+              _tabHistory.add(_index);
+              if (_tabHistory.length > 12) _tabHistory.removeAt(0);
+            }
             _resumedDraft = null;
             _index = 1;
           });
@@ -798,27 +890,33 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
         onSeeHistory: _goHistory,
       ),
       // Tracker gets the full screen: nav pill hidden (it covered PAUSE),
-      // back button returns to Home instead. Mounted only when active.
+      // back button returns to the previous tab instead. Mounted only when active.
       if (_index == 1)
         RunTrackerScreen(
-          onBack: () => _onPillTap(0),
+          onBack: _goBackFromTab,
           sportType: _activeSport,
           goal: _activeGoal,
           initialDraft: _resumedDraft,
         )
       else
         const SizedBox.shrink(),
-      TeamsScreen(onBack: () => _onPillTap(0)),
-      LeaderboardScreen(onBack: () => _onPillTap(0)),
+      TeamsScreen(onBack: _goBackFromTab),
+      LeaderboardScreen(onBack: _goBackFromTab),
     ];
     final w = MediaQuery.sizeOf(context).width;
     if (w >= Breakpoints.expanded) {
-      return Scaffold(
-        body: Row(
-          children: [
-            _PacerNavRail(index: _index, onTap: _onPillTap, onStart: _goSetup),
-            Expanded(child: IndexedStack(index: _index, children: pages)),
-          ],
+      return PopScope(
+        canPop: false,
+        onPopInvokedWithResult: (didPop, _) {
+          if (!didPop) _handleShellBack();
+        },
+        child: Scaffold(
+          body: Row(
+            children: [
+              _PacerNavRail(index: _index, onTap: _onPillTap, onStart: _goSetup),
+              Expanded(child: _AnimatedTabStack(index: _index, children: pages)),
+            ],
+          ),
         ),
       );
     }
@@ -827,35 +925,96 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
     var pillW = fluid(w, 377, 480);
     if (pillW > w - 16) pillW = w - 16;
     final pillScale = pillW / 377;
-    return Scaffold(
-      body: Stack(
-        children: [
-          IndexedStack(index: _index, children: pages),
-          if (_index != 1)
-            Positioned(
-              left: 0,
-              right: 0,
-              // Sticks low: small margin above the bottom edge.
-              bottom: 16,
-              child: Center(
-                child: SizedBox(
-                  width: pillW,
-                  height: 80.7 * pillScale,
-                  // Pill is authored at fixed 377x80.7 design size; the
-                  // FittedBox scales it uniformly (aspect ratios match, so
-                  // contain == exact proportional scale).
-                  child: FittedBox(
-                    fit: BoxFit.contain,
-                    child: BottomNavPill(
-                      index: _index,
-                      onTap: _onPillTap,
-                      onStart: _goSetup,
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop) _handleShellBack();
+      },
+      child: Scaffold(
+        body: Stack(
+          children: [
+            _AnimatedTabStack(index: _index, children: pages),
+            if (_index != 1)
+              Positioned(
+                left: 0,
+                right: 0,
+                // Sticks low: small margin above the bottom edge.
+                bottom: 16,
+                child: Center(
+                  child: SizedBox(
+                    width: pillW,
+                    height: 80.7 * pillScale,
+                    // Pill is authored at fixed 377x80.7 design size; the
+                    // FittedBox scales it uniformly (aspect ratios match, so
+                    // contain == exact proportional scale).
+                    child: FittedBox(
+                      fit: BoxFit.contain,
+                      child: BottomNavPill(
+                        index: _index,
+                        onTap: _onPillTap,
+                        onStart: _goSetup,
+                      ),
                     ),
                   ),
                 ),
               ),
-            ),
-        ],
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _AnimatedTabStack extends StatefulWidget {
+  final int index;
+  final List<Widget> children;
+  const _AnimatedTabStack({required this.index, required this.children});
+
+  @override
+  State<_AnimatedTabStack> createState() => _AnimatedTabStackState();
+}
+
+class _AnimatedTabStackState extends State<_AnimatedTabStack>
+    with SingleTickerProviderStateMixin {
+  late final AnimationController _ctrl = AnimationController(
+    vsync: this,
+    duration: const Duration(milliseconds: 200),
+    value: 1.0,
+  );
+  late final Animation<double> _fade = CurvedAnimation(
+    parent: _ctrl,
+    curve: Curves.easeOutCubic,
+  );
+  late final Animation<Offset> _slide = Tween<Offset>(
+    begin: const Offset(0, 0.02),
+    end: Offset.zero,
+  ).animate(CurvedAnimation(parent: _ctrl, curve: Curves.easeOutCubic));
+
+  @override
+  void didUpdateWidget(covariant _AnimatedTabStack oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.index != widget.index) {
+      if (MediaQuery.disableAnimationsOf(context)) {
+        _ctrl.value = 1.0;
+      } else {
+        _ctrl.forward(from: 0.0);
+      }
+    }
+  }
+
+  @override
+  void dispose() {
+    _ctrl.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return FadeTransition(
+      opacity: _fade,
+      child: SlideTransition(
+        position: _slide,
+        child: IndexedStack(index: widget.index, children: widget.children),
       ),
     );
   }

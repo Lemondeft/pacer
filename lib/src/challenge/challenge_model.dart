@@ -1,7 +1,8 @@
 // Domain models + pure helpers for DFD process 3.0 CHALLENGE.
 // Mirrors public.challenge / public.partisipasi_challenge (migration 20261009120000).
 
-import 'package:pacer/src/aktivitas/activity_model.dart' show jsonToDouble;
+import 'package:pacer/src/aktivitas/activity_model.dart'
+    show Activity, jsonToDouble;
 
 /// Allowed values for challenge.target_satuan (matches the DB check constraint).
 const List<String> targetSatuanOpsi = <String>['jarak_m', 'waktu_s'];
@@ -105,6 +106,61 @@ double progressPercent(double progressNilai, double targetNilai) {
   if (targetNilai <= 0) return 0;
   final pct = progressNilai / targetNilai * 100;
   return pct.clamp(0.0, 100.0).toDouble();
+}
+
+/// Contribution of a single finished [activity] toward [challenge] joined via
+/// [participation], or `0` when the workout does not match sport or windows.
+double challengeActivityDelta({
+  required Challenge challenge,
+  required PartisipasiChallenge participation,
+  required Activity activity,
+}) {
+  final finishedAt = activity.selesaiAt?.toUtc();
+  if (finishedAt == null) return 0;
+  if (activity.jenis != challenge.jenis) return 0;
+
+  final startedAt = (activity.mulaiAt ?? finishedAt).toUtc();
+  if (challenge.waktuMulai != null &&
+      startedAt.isBefore(challenge.waktuMulai!.toUtc())) {
+    return 0;
+  }
+  if (challenge.waktuSelesai != null &&
+      !startedAt.isBefore(challenge.waktuSelesai!.toUtc())) {
+    return 0;
+  }
+  if (participation.createdAt != null &&
+      finishedAt.isBefore(participation.createdAt!.toUtc())) {
+    return 0;
+  }
+
+  return challenge.targetSatuan == 'waktu_s'
+      ? (activity.durasiS ?? 0).toDouble()
+      : (activity.jarakM ?? 0.0);
+}
+
+/// Evaluates updated `(progressNilai, berhasil)` for [participation] from a
+/// full list of [activities] (idempotent across retries & replays).
+PartisipasiChallenge evaluateChallengeProgress({
+  required Challenge challenge,
+  required PartisipasiChallenge participation,
+  required Iterable<Activity> activities,
+}) {
+  double total = 0;
+  for (final a in activities) {
+    total += challengeActivityDelta(
+      challenge: challenge,
+      participation: participation,
+      activity: a,
+    );
+  }
+  return PartisipasiChallenge(
+    id: participation.id,
+    challengeId: participation.challengeId,
+    userId: participation.userId,
+    progressNilai: total,
+    berhasil: challenge.targetNilai > 0 && total >= challenge.targetNilai,
+    createdAt: participation.createdAt,
+  );
 }
 
 DateTime? _parseDate(dynamic value) =>

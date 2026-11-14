@@ -2,6 +2,7 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:pacer/src/aktivitas/activity_model.dart';
+import 'package:pacer/src/challenge/challenge_model.dart';
 import 'package:pacer/src/chat/chat_model.dart';
 import 'package:pacer/src/local/local_models.dart';
 import 'package:pacer/src/local/sqlite_local_store.dart';
@@ -18,12 +19,19 @@ class _FakeGateway implements RemoteSyncGateway {
   final List<String> ops = [];
   final List<String> upsertedActivities = [];
   final List<String> fallbackCalls = [];
+  final List<({String userId, String challengeId, String? id, DateTime? createdAt})>
+      joinedCalls = [];
+  final List<String> challengeFallbackCalls = [];
   int rpcCalls = 0;
+  int challengeRpcCalls = 0;
 
   Object? throwOnActivity;
   Object? throwOnProfile;
   Object? throwOnLanguage;
   bool returnNullFromRpc = false;
+  bool returnNullFromChallengeRpc = false;
+  List<PartisipasiChallenge>? challengeRpcResult;
+  List<PartisipasiChallenge> challengeFallbackResult = const [];
   int rpcFailuresBeforeSuccess = 0;
 
   @override
@@ -98,13 +106,39 @@ class _FakeGateway implements RemoteSyncGateway {
   }
 
   @override
-  Future<void> joinChallenge(String userId, String challengeId) async {
+  Future<void> joinChallenge(
+    String userId,
+    String challengeId, {
+    String? id,
+    DateTime? createdAt,
+  }) async {
     ops.add('join:$challengeId');
+    joinedCalls.add((
+      userId: userId,
+      challengeId: challengeId,
+      id: id,
+      createdAt: createdAt,
+    ));
   }
 
   @override
   Future<void> leaveChallenge(String userId, String challengeId) async {
     ops.add('leave:$challengeId');
+  }
+
+  @override
+  Future<List<PartisipasiChallenge>?> recomputeChallengeProgressRpc() async {
+    challengeRpcCalls++;
+    if (returnNullFromChallengeRpc) return null;
+    return challengeRpcResult ?? const [];
+  }
+
+  @override
+  Future<List<PartisipasiChallenge>> fallbackSyncChallengeProgress(
+    String userId,
+  ) async {
+    challengeFallbackCalls.add(userId);
+    return challengeFallbackResult;
   }
 
   @override
@@ -312,6 +346,100 @@ void main() {
       await engine.syncNow(userId: 'user-sync-1', retryFailed: true);
       expect(engine.status.failedCount, 0);
       expect(gateway.ops, contains('profile:Blocked'));
+    });
+
+    test('offline join + offline workout syncs join createdAt and recomputes challenge progress without double-counting', () async {
+      final challenge = Challenge(
+        id: 'chal-sync-1',
+        jenis: 'lari',
+        targetNilai: 5000,
+        targetSatuan: 'jarak_m',
+        diumumkan: true,
+        waktuMulai: DateTime.utc(2026, 11, 1),
+        waktuSelesai: DateTime.utc(2026, 11, 30),
+      );
+      await store.saveChallenges('user-sync-1', [challenge]);
+      final localJoin = await store.queueJoinChallenge(
+        'user-sync-1',
+        'chal-sync-1',
+      );
+      expect(localJoin.createdAt, isNotNull);
+
+      final runStart = localJoin.createdAt!.toUtc().add(const Duration(minutes: 1));
+      final runEnd = runStart.add(const Duration(minutes: 15));
+      await store.finalizeRunAtomic(
+        id: 'run-chal-sync-1',
+        userId: 'user-sync-1',
+        jenis: 'lari',
+        mulaiAt: runStart,
+        selesaiAt: runEnd,
+        durasiS: 900,
+        jarakM: 3200.0,
+        allPoints: const [],
+      );
+
+      // Before sync: effective progress reflects pending offline run immediately.
+      final beforeSync = await store.getParticipations('user-sync-1');
+      expect(beforeSync.length, 1);
+      expect(beforeSync.first.progressNilai, closeTo(3200.0, 0.01));
+      expect(beforeSync.first.berhasil, isFalse);
+
+      // RPC path returns authoritative server row.
+      gateway.challengeRpcResult = [
+        PartisipasiChallenge(
+          id: localJoin.id,
+          challengeId: 'chal-sync-1',
+          userId: 'user-sync-1',
+          progressNilai: 3200.0,
+          berhasil: false,
+          createdAt: localJoin.createdAt,
+        ),
+      ];
+
+      await engine.syncNow(userId: 'user-sync-1');
+
+      expect(engine.status.pendingCount, 0);
+      expect(gateway.joinedCalls.length, 1);
+      expect(gateway.joinedCalls.first.challengeId, 'chal-sync-1');
+      expect(gateway.joinedCalls.first.id, localJoin.id);
+      expect(gateway.joinedCalls.first.createdAt, isNotNull);
+      expect(gateway.challengeRpcCalls, 1);
+
+      // After sync: no double counting!
+      final afterRpc = await store.getParticipations('user-sync-1');
+      expect(afterRpc.length, 1);
+      expect(afterRpc.first.progressNilai, closeTo(3200.0, 0.01));
+
+      // Fallback path when backend RPC is missing.
+      final run2Start = runEnd.add(const Duration(minutes: 5));
+      final run2End = run2Start.add(const Duration(minutes: 10));
+      await store.finalizeRunAtomic(
+        id: 'run-chal-sync-2',
+        userId: 'user-sync-1',
+        jenis: 'lari',
+        mulaiAt: run2Start,
+        selesaiAt: run2End,
+        durasiS: 600,
+        jarakM: 2000.0,
+        allPoints: const [],
+      );
+      gateway.returnNullFromChallengeRpc = true;
+      gateway.challengeFallbackResult = [
+        PartisipasiChallenge(
+          id: localJoin.id,
+          challengeId: 'chal-sync-1',
+          userId: 'user-sync-1',
+          progressNilai: 5200.0,
+          berhasil: true,
+          createdAt: localJoin.createdAt,
+        ),
+      ];
+
+      await engine.syncNow(userId: 'user-sync-1');
+      expect(gateway.challengeFallbackCalls, ['user-sync-1']);
+      final afterFallback = await store.getParticipations('user-sync-1');
+      expect(afterFallback.single.progressNilai, closeTo(5200.0, 0.01));
+      expect(afterFallback.single.berhasil, isTrue);
     });
   });
 }

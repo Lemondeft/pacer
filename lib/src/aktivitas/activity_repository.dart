@@ -122,6 +122,13 @@ class ActivityRepository {
     PacerCache.instance.invalidatePrefix('activities_');
     PacerCache.instance.invalidatePrefix('streak_');
     PacerCache.instance.invalidatePrefix('leaderboard_');
+    final uid = c.auth.currentUser?.id;
+    if (uid != null) {
+      await _store.setSyncTimestamp(
+        'challenge_parts_$uid',
+        DateTime.fromMillisecondsSinceEpoch(0),
+      );
+    }
     return Activity.fromJson(Map<String, dynamic>.from(updated));
   }
 
@@ -140,6 +147,12 @@ class ActivityRepository {
     PacerCache.instance.invalidatePrefix('activities_');
     PacerCache.instance.invalidatePrefix('streak_');
     PacerCache.instance.invalidatePrefix('leaderboard_');
+    if (uid != null) {
+      await _store.setSyncTimestamp(
+        'challenge_parts_$uid',
+        DateTime.fromMillisecondsSinceEpoch(0),
+      );
+    }
   }
 
   /// Returns locally stored finished workouts (synced + pending) with SWR sync.

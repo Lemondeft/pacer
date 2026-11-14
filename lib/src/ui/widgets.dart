@@ -1,5 +1,6 @@
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:pacer/core/responsive/responsive.dart';
 import 'package:pacer/src/aktivitas/activity_model.dart';
 import 'package:pacer/src/local/local_models.dart';
@@ -125,6 +126,7 @@ class RunSessionCard extends StatelessWidget {
   final String distance;
   final bool limePill;
   final SyncState? syncState;
+  final VoidCallback? onTap;
   const RunSessionCard({
     super.key,
     this.title = 'Monday Morning Run',
@@ -134,13 +136,14 @@ class RunSessionCard extends StatelessWidget {
     this.distance = '3,00 Km',
     this.limePill = false,
     this.syncState,
+    this.onTap,
   });
 
   @override
   Widget build(BuildContext context) {
     final scheme = PacerScheme.of(context);
     final showBadge = syncState != null && syncState != SyncState.synced;
-    return Container(
+    final card = Container(
       padding: const EdgeInsets.fromLTRB(16, 24, 16, 16),
       decoration: BoxDecoration(
         color: scheme.runCard,
@@ -240,6 +243,16 @@ class RunSessionCard extends StatelessWidget {
             ),
           ),
         ],
+      ),
+    );
+    if (onTap == null) return card;
+    return PacerTapScale(
+      child: GestureDetector(
+        onTap: () {
+          HapticFeedback.selectionClick();
+          onTap!();
+        },
+        child: card,
       ),
     );
   }
@@ -366,18 +379,27 @@ class PageHeader extends StatelessWidget {
     final scheme = PacerScheme.of(context);
     return Row(
       children: [
-        Container(
-          width: 48,
-          height: 48,
-          decoration: BoxDecoration(
-            color: scheme.card,
-            shape: BoxShape.circle,
-            boxShadow: [scheme.shadowBox],
-          ),
-          child: BackButton(
-            color: scheme.ink,
-            // Null falls back to Navigator.maybePop (correct on pushed routes).
-            onPressed: onBack,
+        PacerTapScale(
+          pressedScale: 0.92,
+          child: Container(
+            width: 48,
+            height: 48,
+            decoration: BoxDecoration(
+              color: scheme.card,
+              shape: BoxShape.circle,
+              boxShadow: [scheme.shadowBox],
+            ),
+            child: BackButton(
+              color: scheme.ink,
+              onPressed: () {
+                HapticFeedback.lightImpact();
+                if (onBack != null) {
+                  onBack!();
+                } else {
+                  Navigator.maybePop(context);
+                }
+              },
+            ),
           ),
         ),
         if (title != null) ...[
@@ -838,12 +860,18 @@ class BottomNavPill extends StatelessWidget {
           label: tabs[i].$3,
           // Tap lives here (not on the excluded InkResponse) so screen
           // readers can still activate the tab.
-          onTap: () => onTap(i),
+          onTap: () {
+            HapticFeedback.selectionClick();
+            onTap(i);
+          },
           child: ExcludeSemantics(
             child: Tooltip(
               message: tabs[i].$3,
               child: InkResponse(
-                onTap: () => onTap(i),
+                onTap: () {
+                  HapticFeedback.selectionClick();
+                  onTap(i);
+                },
                 radius: 28,
                 child: SizedBox(
                   width: 58,
@@ -950,10 +978,16 @@ class BottomNavPill extends StatelessWidget {
                           child: Semantics(
                             button: true,
                             label: 'START',
-                            onTap: onStart,
+                            onTap: () {
+                              HapticFeedback.mediumImpact();
+                              onStart();
+                            },
                             excludeSemantics: true,
                             child: GestureDetector(
-                              onTap: onStart,
+                              onTap: () {
+                                HapticFeedback.mediumImpact();
+                                onStart();
+                              },
                               child: Container(
                                 width: 64,
                                 height: 64,
@@ -1039,30 +1073,39 @@ class CircleAction extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        width: size,
-        height: size,
-        decoration: BoxDecoration(
-          color: bg,
-          shape: BoxShape.circle,
-          border: Border.all(
-            color: PacerColors.lime,
-            width: bg == Colors.white ? 2 : 0,
+    return PacerTapScale(
+      enabled: onTap != null,
+      pressedScale: 0.93,
+      child: GestureDetector(
+        onTap: onTap == null
+            ? null
+            : () {
+                HapticFeedback.mediumImpact();
+                onTap!();
+              },
+        child: Container(
+          width: size,
+          height: size,
+          decoration: BoxDecoration(
+            color: bg,
+            shape: BoxShape.circle,
+            border: Border.all(
+              color: PacerColors.lime,
+              width: bg == Colors.white ? 2 : 0,
+            ),
           ),
-        ),
-        alignment: Alignment.center,
-        child: Padding(
-          padding: const EdgeInsets.all(8),
-          child: FittedBox(
-            fit: BoxFit.scaleDown,
-            child: Text(
-              label,
-              textAlign: TextAlign.center,
-              style: PacerText.fugazBrand.copyWith(
-                color: fg,
-                fontSize: labelSize,
+          alignment: Alignment.center,
+          child: Padding(
+            padding: const EdgeInsets.all(8),
+            child: FittedBox(
+              fit: BoxFit.scaleDown,
+              child: Text(
+                label,
+                textAlign: TextAlign.center,
+                style: PacerText.fugazBrand.copyWith(
+                  color: fg,
+                  fontSize: labelSize,
+                ),
               ),
             ),
           ),
@@ -1076,30 +1119,78 @@ class CircleAction extends StatelessWidget {
 class MapCircleButton extends StatelessWidget {
   final double size;
   final VoidCallback? onTap;
-  const MapCircleButton({super.key, this.size = 98, this.onTap});
+  final bool active;
+  final IconData icon;
+  final String? tooltip;
+  const MapCircleButton({
+    super.key,
+    this.size = 98,
+    this.onTap,
+    this.active = false,
+    this.icon = Icons.map_outlined,
+    this.tooltip,
+  });
 
   @override
   Widget build(BuildContext context) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        width: size,
-        height: size,
-        decoration: BoxDecoration(
-          shape: BoxShape.circle,
-          gradient: LinearGradient(
-            colors: [
-              PacerScheme.of(context).softBorder,
-              PacerScheme.of(context).mapBtnB,
-            ],
+    final scheme = PacerScheme.of(context);
+    final label = tooltip ?? S.toggleMapStyle;
+    return Semantics(
+      button: true,
+      toggled: active,
+      label: label,
+      child: Tooltip(
+        message: label,
+        child: PacerTapScale(
+          enabled: onTap != null,
+          pressedScale: 0.93,
+          child: GestureDetector(
+            onTap: onTap == null
+                ? null
+                : () {
+                    HapticFeedback.selectionClick();
+                    onTap!();
+                  },
+            child: AnimatedContainer(
+              duration: const Duration(milliseconds: 220),
+              curve: Curves.easeOutCubic,
+              width: size,
+              height: size,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                gradient: active
+                    ? const LinearGradient(
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                        colors: [PacerColors.lime, Color(0xFFA3EA15)],
+                      )
+                    : LinearGradient(
+                        colors: [scheme.softBorder, scheme.mapBtnB],
+                      ),
+                border: active
+                    ? Border.all(
+                        color: scheme.ink.withValues(alpha: 0.16),
+                        width: 1.5,
+                      )
+                    : const Border.fromBorderSide(BorderSide.none),
+                boxShadow: active
+                    ? [
+                        BoxShadow(
+                          color: PacerColors.lime.withValues(alpha: 0.35),
+                          blurRadius: 16,
+                          offset: const Offset(0, 4),
+                        ),
+                      ]
+                    : null,
+              ),
+              alignment: Alignment.center,
+              child: Icon(
+                icon,
+                size: 36,
+                color: active ? PacerColors.ink : scheme.ink,
+              ),
+            ),
           ),
-          border: const Border.fromBorderSide(BorderSide.none),
-        ),
-        alignment: Alignment.center,
-        child: Icon(
-          Icons.map_outlined,
-          size: 36,
-          color: PacerScheme.of(context).ink,
         ),
       ),
     );
@@ -1226,21 +1317,21 @@ class SummaryLimeCard extends StatelessWidget {
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Expanded(child: _col(distance, 'Distance')),
+              Expanded(child: _col(distance, S.distance)),
               Container(
                 width: 1,
                 height: 30,
                 margin: const EdgeInsets.symmetric(horizontal: 8),
                 color: PacerColors.limeDivider,
               ),
-              Expanded(child: _col(duration, 'Duration')),
+              Expanded(child: _col(duration, S.duration)),
               Container(
                 width: 1,
                 height: 30,
                 margin: const EdgeInsets.symmetric(horizontal: 8),
                 color: PacerColors.limeDivider,
               ),
-              Expanded(child: _col(pace, 'Avg Pace')),
+              Expanded(child: _col(pace, S.avgPace)),
             ],
           ),
         );
@@ -1374,24 +1465,32 @@ class LimeActionBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return SizedBox(
-      width: double.infinity,
-      height: 48,
-      child: ElevatedButton(
-        onPressed: onPressed,
-        style: ElevatedButton.styleFrom(
-          backgroundColor: PacerColors.lime,
-          foregroundColor: PacerColors.ink,
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(10),
+    return PacerTapScale(
+      enabled: onPressed != null,
+      child: SizedBox(
+        width: double.infinity,
+        height: 48,
+        child: ElevatedButton(
+          onPressed: onPressed == null
+              ? null
+              : () {
+                  HapticFeedback.lightImpact();
+                  onPressed!();
+                },
+          style: ElevatedButton.styleFrom(
+            backgroundColor: PacerColors.lime,
+            foregroundColor: PacerColors.ink,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(10),
+            ),
           ),
-        ),
-        child: Text(
-          label,
-          style: const TextStyle(
-            fontWeight: FontWeight.w700,
-            fontSize: 20,
-            color: PacerColors.ink,
+          child: Text(
+            label,
+            style: const TextStyle(
+              fontWeight: FontWeight.w700,
+              fontSize: 20,
+              color: PacerColors.ink,
+            ),
           ),
         ),
       ),
@@ -1762,4 +1861,53 @@ String offlineActionErrorMessage(Object error) {
     return S.offlineActionNeedsNet;
   }
   return S.errSaveFailed;
+}
+
+/// Lightweight tactile spring scale wrapper for cards, pills, and action bars.
+/// Uses a non-competing [Listener] so inner tap handlers continue uninterrupted
+/// and honors system reduced-motion settings.
+class PacerTapScale extends StatefulWidget {
+  final Widget child;
+  final bool enabled;
+  final double pressedScale;
+
+  const PacerTapScale({
+    super.key,
+    required this.child,
+    this.enabled = true,
+    this.pressedScale = 0.96,
+  });
+
+  @override
+  State<PacerTapScale> createState() => _PacerTapScaleState();
+}
+
+class _PacerTapScaleState extends State<PacerTapScale> {
+  bool _pressed = false;
+
+  void _setPressed(bool value) {
+    if (_pressed != value && mounted) {
+      setState(() => _pressed = value);
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    if (!widget.enabled) return widget.child;
+    final disableAnims = MediaQuery.disableAnimationsOf(context);
+    return Listener(
+      behavior: HitTestBehavior.translucent,
+      onPointerDown: (_) => _setPressed(true),
+      onPointerUp: (_) => _setPressed(false),
+      onPointerCancel: (_) => _setPressed(false),
+      child: AnimatedScale(
+        scale: _pressed ? widget.pressedScale : 1.0,
+        duration: disableAnims
+            ? Duration.zero
+            : const Duration(milliseconds: 140),
+        curve: Curves.easeOutCubic,
+        child: widget.child,
+      ),
+    );
+  }
 }

@@ -553,15 +553,17 @@ class SqliteLocalStore implements LocalStore {
 
   @override
   Future<void> discardDraft(String id) async {
-    await _db.transaction((txn) async {
-      await txn.delete(
-        'sync_outbox',
-        where: 'op_type = ? AND entity_id = ?',
-        whereArgs: [OutboxOp.syncActivity, id],
-      );
-      await txn.delete('route_points', where: 'aktivitas_id = ?', whereArgs: [id]);
-      await txn.delete('activities', where: 'id = ?', whereArgs: [id]);
-    });
+    await _db.transaction((txn) => _deleteActivityRowsTxn(txn, id));
+  }
+
+  Future<void> _deleteActivityRowsTxn(DatabaseExecutor txn, String id) async {
+    await txn.delete(
+      'sync_outbox',
+      where: 'op_type = ? AND entity_id = ?',
+      whereArgs: [OutboxOp.syncActivity, id],
+    );
+    await txn.delete('route_points', where: 'aktivitas_id = ?', whereArgs: [id]);
+    await txn.delete('activities', where: 'id = ?', whereArgs: [id]);
   }
 
   @override
@@ -673,7 +675,29 @@ class SqliteLocalStore implements LocalStore {
   }
 
   @override
-  Future<void> deleteActivityLocal(String id) => discardDraft(id);
+  Future<void> deleteActivityLocal(String id) async {
+    await _db.transaction((txn) async {
+      final rows = await txn.query(
+        'activities',
+        where: 'id = ?',
+        whereArgs: [id],
+        limit: 1,
+      );
+      if (rows.isNotEmpty) {
+        final local = _localActivityFromRow(rows.first);
+        if (local.status == RunStatus.finished &&
+            local.syncState == SyncState.synced) {
+          await _applyChallengeDeltaTxn(
+            txn,
+            local.activity.userId,
+            local.activity,
+            sign: -1,
+          );
+        }
+      }
+      await _deleteActivityRowsTxn(txn, id);
+    });
+  }
 
   @override
   Future<List<RutePoint>> getRoutePoints(String aktivitasId) async {
@@ -1069,7 +1093,9 @@ class SqliteLocalStore implements LocalStore {
           'id': payload['id'] as String? ?? entry.key,
           'progress_nilai': 0.0,
           'berhasil': 0,
-          'created_at': entry.value['created_at'] as String?,
+          'created_at':
+              payload['created_at'] as String? ??
+              entry.value['created_at'] as String?,
           'sync_state': 'pending',
         }, conflictAlgorithm: ConflictAlgorithm.replace);
       }
@@ -1085,13 +1111,25 @@ class SqliteLocalStore implements LocalStore {
       whereArgs: [userId],
       orderBy: 'created_at DESC',
     );
-    return [
+    if (rows.isEmpty) return const [];
+    final baselines = [
       for (final r in rows)
         PartisipasiChallenge.fromJson({
           ...r,
           'berhasil': (r['berhasil'] as int? ?? 0) == 1,
         }),
     ];
+    final challenges = await getChallenges(userId);
+    final pendingActRows = await _db.query(
+      'activities',
+      where: 'user_id = ? AND status = ? AND sync_state != ?',
+      whereArgs: [userId, 'finished', 'synced'],
+    );
+    return computeEffectiveParticipations(
+      baselines: baselines,
+      challenges: challenges,
+      activities: pendingActRows.map(_localActivityFromRow).toList(),
+    );
   }
 
   @override
@@ -1131,13 +1169,75 @@ class SqliteLocalStore implements LocalStore {
         'user_id': userId,
         'op_type': OutboxOp.joinChallenge,
         'entity_id': challengeId,
-        'payload_json': jsonEncode({'id': p.id, 'challenge_id': challengeId}),
+        'payload_json': jsonEncode({
+          'id': p.id,
+          'challenge_id': challengeId,
+          'created_at': p.createdAt!.toIso8601String(),
+        }),
         'status': 'pending',
         'attempts': 0,
         'created_at': _nowIso(),
       });
     });
     return p;
+  }
+
+  @override
+  Future<void> applySyncedActivityChallengeDelta(
+    String userId,
+    Activity activity,
+  ) => _db.transaction(
+    (txn) => _applyChallengeDeltaTxn(txn, userId, activity, sign: 1),
+  );
+
+  Future<void> _applyChallengeDeltaTxn(
+    DatabaseExecutor txn,
+    String userId,
+    Activity activity, {
+    required int sign,
+  }) async {
+    final partRows = await txn.query(
+      'challenge_participations',
+      where: 'user_id = ?',
+      whereArgs: [userId],
+    );
+    if (partRows.isEmpty) return;
+    final chalRows = await txn.query(
+      'challenges',
+      where: 'user_id = ?',
+      whereArgs: [userId],
+    );
+    final chalMap = {
+      for (final r in chalRows)
+        r['id'] as String: Challenge.fromJson({
+          ...r,
+          'diumumkan': (r['diumumkan'] as int? ?? 0) == 1,
+        }),
+    };
+    for (final r in partRows) {
+      final cur = PartisipasiChallenge.fromJson({
+        ...r,
+        'berhasil': (r['berhasil'] as int? ?? 0) == 1,
+      });
+      final updated = applyActivityDeltaToBaseline(
+        baseline: cur,
+        challenge: chalMap[cur.challengeId],
+        activity: activity,
+        sign: sign,
+      );
+      if (updated.progressNilai != cur.progressNilai ||
+          updated.berhasil != cur.berhasil) {
+        await txn.update(
+          'challenge_participations',
+          {
+            'progress_nilai': updated.progressNilai,
+            'berhasil': updated.berhasil ? 1 : 0,
+          },
+          where: 'user_id = ? AND challenge_id = ?',
+          whereArgs: [userId, cur.challengeId],
+        );
+      }
+    }
   }
 
   @override

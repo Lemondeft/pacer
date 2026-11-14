@@ -144,7 +144,23 @@ class ChallengeRepository {
         })
         .select()
         .single();
+    await _store.setSyncTimestamp(
+      'challenges_$uid',
+      DateTime.fromMillisecondsSinceEpoch(0),
+    );
     return Challenge.fromJson(Map<String, dynamic>.from(row));
+  }
+
+  /// Resolves one challenge by [challengeId] via offline-first [listChallenges].
+  Future<Challenge?> getChallengeById(
+    String challengeId, {
+    bool forceRefresh = false,
+  }) async {
+    final all = await listChallenges(forceRefresh: forceRefresh);
+    for (final c in all) {
+      if (c.id == challengeId) return c;
+    }
+    return null;
   }
 
   Future<List<PartisipasiChallenge>> participationsForChallenge(

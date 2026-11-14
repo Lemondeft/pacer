@@ -307,11 +307,20 @@ class MemoryLocalStore implements LocalStore {
 
   @override
   Future<void> deleteActivityLocal(String id) async {
-    _activities.remove(id);
+    final existing = _activities.remove(id);
     _routes.remove(id);
     _outbox.removeWhere(
       (o) => o.opType == OutboxOp.syncActivity && o.entityId == id,
     );
+    if (existing != null &&
+        existing.status == RunStatus.finished &&
+        existing.syncState == SyncState.synced) {
+      await _applyChallengeDelta(
+        existing.activity.userId,
+        existing.activity,
+        sign: -1,
+      );
+    }
   }
 
   @override
@@ -464,13 +473,16 @@ class MemoryLocalStore implements LocalStore {
     for (final o in _outbox) {
       if (o.userId != userId) continue;
       if (o.opType == OutboxOp.joinChallenge) {
+        final rawCreated = o.payload['created_at'] as String?;
         map.putIfAbsent(
           o.entityId,
           () => PartisipasiChallenge(
             id: o.payload['id'] as String? ?? o.entityId,
             challengeId: o.entityId,
             userId: userId,
-            createdAt: o.createdAt,
+            createdAt: rawCreated != null
+                ? DateTime.parse(rawCreated)
+                : o.createdAt,
           ),
         );
       } else if (o.opType == OutboxOp.leaveChallenge) {
@@ -481,13 +493,22 @@ class MemoryLocalStore implements LocalStore {
   }
 
   @override
-  Future<List<PartisipasiChallenge>> getParticipations(String userId) async =>
-      (_participations[userId]?.values.toList() ?? const [])
-        ..sort(
-          (a, b) => (b.createdAt ?? DateTime(0)).compareTo(
-            a.createdAt ?? DateTime(0),
-          ),
-        );
+  Future<List<PartisipasiChallenge>> getParticipations(String userId) async {
+    final baselines = _participations[userId]?.values.toList() ?? const [];
+    if (baselines.isEmpty) return const [];
+    final effective = computeEffectiveParticipations(
+      baselines: baselines,
+      challenges: await getChallenges(userId),
+      activities: _activities.values
+          .where((a) => a.activity.userId == userId)
+          .toList(),
+    );
+    effective.sort(
+      (a, b) =>
+          (b.createdAt ?? DateTime(0)).compareTo(a.createdAt ?? DateTime(0)),
+    );
+    return effective;
+  }
 
   @override
   Future<PartisipasiChallenge> queueJoinChallenge(
@@ -513,9 +534,37 @@ class MemoryLocalStore implements LocalStore {
       userId: userId,
       opType: OutboxOp.joinChallenge,
       entityId: challengeId,
-      payload: {'id': p.id, 'challenge_id': challengeId},
+      payload: {
+        'id': p.id,
+        'challenge_id': challengeId,
+        'created_at': p.createdAt!.toIso8601String(),
+      },
     );
     return p;
+  }
+
+  @override
+  Future<void> applySyncedActivityChallengeDelta(
+    String userId,
+    Activity activity,
+  ) => _applyChallengeDelta(userId, activity, sign: 1);
+
+  Future<void> _applyChallengeDelta(
+    String userId,
+    Activity activity, {
+    required int sign,
+  }) async {
+    final map = _participations[userId];
+    if (map == null || map.isEmpty) return;
+    final chalMap = {for (final c in await getChallenges(userId)) c.id: c};
+    for (final entry in map.entries.toList()) {
+      map[entry.key] = applyActivityDeltaToBaseline(
+        baseline: entry.value,
+        challenge: chalMap[entry.key],
+        activity: activity,
+        sign: sign,
+      );
+    }
   }
 
   @override

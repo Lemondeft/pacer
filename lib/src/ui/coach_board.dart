@@ -155,11 +155,22 @@ class _CoachBoardScreenState extends State<CoachBoardScreen> {
       final actRepo = ActivityRepository();
       final Map<String, ({double progress, bool berhasil})> prog = {};
       if (challengeId != null) {
+        Challenge? selected;
+        for (final c in _challenges) {
+          if (c.id == challengeId) {
+            selected = c;
+            break;
+          }
+        }
+        selected ??= await ChallengeRepository().getChallengeById(challengeId);
         final parts = await ChallengeRepository().participationsForChallenge(
           challengeId,
         );
         for (final p in parts) {
-          prog[p.userId] = (progress: p.progressNilai, berhasil: p.berhasil);
+          final pct = selected != null
+              ? progressPercent(p.progressNilai, selected.targetNilai)
+              : (p.berhasil ? 100.0 : 0.0);
+          prog[p.userId] = (progress: pct, berhasil: p.berhasil);
         }
       }
       final localRows = <LocalCoachRow>[];
@@ -322,7 +333,7 @@ class _CoachBoardScreenState extends State<CoachBoardScreen> {
           DropdownMenuItem(
             value: c.id,
             child: Text(
-              '${c.jenis} • ${c.targetNilai}',
+              '${S.sportName(c.jenis)} • ${S.challengeTargetSummary(c.targetNilai, c.targetSatuan)}',
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
             ),

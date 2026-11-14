@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:latlong2/latlong.dart' hide Path;
 import 'package:pacer/core/responsive/responsive.dart';
@@ -219,6 +220,7 @@ class _RunSetupScreenState extends State<RunSetupScreen> {
   }
 
   void _handleStart() {
+    HapticFeedback.mediumImpact();
     final chosenSport = _sports[_selectedSport].key;
     final chosenGoal = _goals[_goal];
     if (widget.onStartWithConfig != null) {
@@ -290,113 +292,120 @@ class _RunSetupScreenState extends State<RunSetupScreen> {
                     itemBuilder: (context, index) {
                       final item = _sports[index];
                       final isSelected = _selectedSport == index;
-                      return InkWell(
-                        onTap: () => setState(() => _selectedSport = index),
-                        borderRadius: BorderRadius.circular(16),
-                        child: AnimatedContainer(
-                          duration: const Duration(milliseconds: 200),
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 16,
-                            vertical: 12,
-                          ),
-                          decoration: BoxDecoration(
-                            color: isSelected
-                                ? (scheme.isDark
-                                      ? const Color(0xFF1E293B)
-                                      : const Color(0xFFF1F5F9))
-                                : scheme.card,
-                            border: Border.all(
-                              color: isSelected
-                                  ? PacerColors.lime
-                                  : scheme.hairline,
-                              width: isSelected ? 2 : 1,
+                      return PacerTapScale(
+                        pressedScale: 0.97,
+                        child: InkWell(
+                          onTap: () {
+                            HapticFeedback.selectionClick();
+                            setState(() => _selectedSport = index);
+                          },
+                          borderRadius: BorderRadius.circular(16),
+                          child: AnimatedContainer(
+                            duration: const Duration(milliseconds: 200),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 16,
+                              vertical: 12,
                             ),
-                            borderRadius: BorderRadius.circular(16),
-                            boxShadow: isSelected
-                                ? [
-                                    BoxShadow(
-                                      color: PacerColors.lime.withValues(
-                                        alpha: 0.2,
-                                      ),
-                                      blurRadius: 10,
-                                      offset: const Offset(0, 4),
-                                    ),
-                                  ]
-                                : [scheme.shadowBox],
-                          ),
-                          child: Row(
-                            children: [
-                              Container(
-                                width: 44,
-                                height: 44,
-                                decoration: BoxDecoration(
-                                  color: isSelected
-                                      ? PacerColors.lime
-                                      : scheme.softBorder,
-                                  borderRadius: BorderRadius.circular(12),
-                                ),
-                                child: Icon(
-                                  item.icon,
-                                  size: 24,
-                                  color: isSelected
-                                      ? PacerColors.navy
-                                      : scheme.ink,
-                                ),
+                            decoration: BoxDecoration(
+                              color: isSelected
+                                  ? (scheme.isDark
+                                        ? const Color(0xFF1E293B)
+                                        : const Color(0xFFF1F5F9))
+                                  : scheme.card,
+                              border: Border.all(
+                                color: isSelected
+                                    ? PacerColors.lime
+                                    : scheme.hairline,
+                                width: isSelected ? 2 : 1,
                               ),
-                              const SizedBox(width: 12),
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  children: [
-                                    Text(
-                                      _sportTitle(index),
-                                      style: GoogleFonts.spaceGrotesk(
-                                        fontWeight: FontWeight.w700,
-                                        fontSize: 15,
-                                        color: scheme.chipFg,
+                              borderRadius: BorderRadius.circular(16),
+                              boxShadow: isSelected
+                                  ? [
+                                      BoxShadow(
+                                        color: PacerColors.lime.withValues(
+                                          alpha: 0.2,
+                                        ),
+                                        blurRadius: 10,
+                                        offset: const Offset(0, 4),
                                       ),
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                    ),
-                                    const SizedBox(height: 2),
-                                    Text(
-                                      _sportSubtitle(index),
-                                      style: GoogleFonts.hankenGrotesk(
-                                        fontSize: 11,
-                                        color: scheme.bodyGray,
-                                      ),
-                                      maxLines: 1,
-                                      overflow: TextOverflow.ellipsis,
-                                    ),
-                                  ],
-                                ),
-                              ),
-                              AnimatedContainer(
-                                duration: const Duration(milliseconds: 180),
-                                width: 22,
-                                height: 22,
-                                decoration: BoxDecoration(
-                                  color: isSelected
-                                      ? PacerColors.lime
-                                      : Colors.transparent,
-                                  shape: BoxShape.circle,
-                                  border: Border.all(
+                                    ]
+                                  : [scheme.shadowBox],
+                            ),
+                            child: Row(
+                              children: [
+                                Container(
+                                  width: 44,
+                                  height: 44,
+                                  decoration: BoxDecoration(
                                     color: isSelected
                                         ? PacerColors.lime
-                                        : scheme.chipBorder,
-                                    width: 1.5,
+                                        : scheme.softBorder,
+                                    borderRadius: BorderRadius.circular(12),
+                                  ),
+                                  child: Icon(
+                                    item.icon,
+                                    size: 24,
+                                    color: isSelected
+                                        ? PacerColors.navy
+                                        : scheme.ink,
                                   ),
                                 ),
-                                child: isSelected
-                                    ? const Icon(
-                                        Icons.check,
-                                        size: 14,
-                                        color: PacerColors.navy,
-                                      )
-                                    : null,
-                              ),
-                            ],
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    children: [
+                                      Text(
+                                        _sportTitle(index),
+                                        style: GoogleFonts.spaceGrotesk(
+                                          fontWeight: FontWeight.w700,
+                                          fontSize: 15,
+                                          color: scheme.chipFg,
+                                        ),
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                      const SizedBox(height: 2),
+                                      Text(
+                                        _sportSubtitle(index),
+                                        style: GoogleFonts.hankenGrotesk(
+                                          fontSize: 11,
+                                          color: scheme.bodyGray,
+                                        ),
+                                        maxLines: 1,
+                                        overflow: TextOverflow.ellipsis,
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                AnimatedContainer(
+                                  duration: const Duration(milliseconds: 180),
+                                  width: 22,
+                                  height: 22,
+                                  decoration: BoxDecoration(
+                                    color: isSelected
+                                        ? PacerColors.lime
+                                        : Colors.transparent,
+                                    shape: BoxShape.circle,
+                                    border: Border.all(
+                                      color: isSelected
+                                          ? PacerColors.lime
+                                          : scheme.chipBorder,
+                                      width: 1.5,
+                                    ),
+                                  ),
+                                  child: isSelected
+                                      ? const Icon(
+                                          Icons.check,
+                                          size: 14,
+                                          color: PacerColors.navy,
+                                        )
+                                      : null,
+                                ),
+                              ],
+                            ),
                           ),
                         ),
                       );
@@ -440,11 +449,16 @@ class _RunSetupScreenState extends State<RunSetupScreen> {
                       runSpacing: 8,
                       children: [
                         for (var i = 0; i < _goals.length; i++)
-                          GestureDetector(
-                            onTap: () => setState(() => _goal = i),
-                            child: GoalChip(
-                              label: _goals[i],
-                              selected: _goal == i,
+                          PacerTapScale(
+                            child: GestureDetector(
+                              onTap: () {
+                                HapticFeedback.selectionClick();
+                                setState(() => _goal = i);
+                              },
+                              child: GoalChip(
+                                label: _goals[i],
+                                selected: _goal == i,
+                              ),
                             ),
                           ),
                       ],
@@ -453,25 +467,28 @@ class _RunSetupScreenState extends State<RunSetupScreen> {
                 ),
               ),
               const SizedBox(height: 24),
-              SizedBox(
-                width: double.infinity,
-                height: 52,
-                child: ElevatedButton(
-                  onPressed: _handleStart,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: scheme.chipSelBg,
-                    foregroundColor: scheme.chipSelFg,
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(12),
+              PacerTapScale(
+                pressedScale: 0.98,
+                child: SizedBox(
+                  width: double.infinity,
+                  height: 52,
+                  child: ElevatedButton(
+                    onPressed: _handleStart,
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: scheme.chipSelBg,
+                      foregroundColor: scheme.chipSelFg,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      elevation: 1,
                     ),
-                    elevation: 1,
-                  ),
-                  child: Text(
-                    S.startRun,
-                    style: GoogleFonts.spaceGrotesk(
-                      fontWeight: FontWeight.w600,
-                      fontSize: 16,
-                      height: 24 / 16,
+                    child: Text(
+                      S.startRun,
+                      style: GoogleFonts.spaceGrotesk(
+                        fontWeight: FontWeight.w600,
+                        fontSize: 16,
+                        height: 24 / 16,
+                      ),
                     ),
                   ),
                 ),
@@ -515,8 +532,9 @@ class _RunTrackerScreenState extends State<RunTrackerScreen> {
   /// True while start/finish network calls are in flight (double-tap guard).
   bool _opBusy = false;
 
-  /// Minimal map mode (offline canvas instead of OSM tiles).
-  bool _minimalMap = false;
+  /// Interactive Map Focus mode: collapses the hero readout into a compact
+  /// top HUD strip so the live vector map can be explored and zoomed freely.
+  bool _mapFocus = false;
 
   @override
   void initState() {
@@ -576,10 +594,11 @@ class _RunTrackerScreenState extends State<RunTrackerScreen> {
   Future<void> _handleBack() async {
     if (!await _confirmDiscard()) return;
     if (!mounted) return;
+    HapticFeedback.selectionClick();
     if (widget.onBack != null) {
       widget.onBack!();
-    } else {
-      Navigator.of(context).maybePop();
+    } else if (Navigator.of(context).canPop()) {
+      Navigator.of(context).pop();
     }
   }
 
@@ -601,7 +620,7 @@ class _RunTrackerScreenState extends State<RunTrackerScreen> {
                   // Grabbed synchronously: safe to use after the awaits.
                   final messenger = ScaffoldMessenger.of(context);
                   try {
-                    await _recorder.simulate();
+                    await _recorder.simulate(widget.sportType);
                   } catch (_) {
                     messenger.showSnackBar(
                       SnackBar(content: Text(S.errSaveFailed)),
@@ -639,11 +658,13 @@ class _RunTrackerScreenState extends State<RunTrackerScreen> {
   }
 
   void _pause() {
+    HapticFeedback.lightImpact();
     _recorder.pause();
     setState(() => _running = true);
   }
 
   void _resume() {
+    HapticFeedback.lightImpact();
     _recorder.resume();
     setState(() => _running = false);
   }
@@ -654,6 +675,7 @@ class _RunTrackerScreenState extends State<RunTrackerScreen> {
     try {
       final summary = await _recorder.finish();
       if (mounted) {
+        HapticFeedback.mediumImpact();
         setState(() {
           _summary = summary;
           _finished = true;
@@ -669,61 +691,63 @@ class _RunTrackerScreenState extends State<RunTrackerScreen> {
 
   @override
   Widget build(BuildContext context) {
-    if (_finished) {
-      return RunFinishScreen(
-        summary: _summary,
-        title: S.sportName(_summary?.jenis ?? widget.sportType),
-        isHistoryDetail: (_summary?.pointCount ?? 0) > 0,
-        aktivitasId: _summary?.aktivitasId,
-        onBack: widget.onBack ?? () => setState(() => _finished = false),
-      );
-    }
+    final disableAnims = MediaQuery.disableAnimationsOf(context);
+    return AnimatedSwitcher(
+      duration:
+          disableAnims ? Duration.zero : const Duration(milliseconds: 300),
+      switchInCurve: Curves.easeOutCubic,
+      switchOutCurve: Curves.easeInCubic,
+      child: _finished
+          ? KeyedSubtree(
+              key: const ValueKey('finish'),
+              child: RunFinishScreen(
+                summary: _summary,
+                title: S.sportName(_summary?.jenis ?? widget.sportType),
+                isHistoryDetail: true,
+                aktivitasId: _summary?.aktivitasId,
+                onBack: widget.onBack ??
+                    () {
+                      if (Navigator.of(context).canPop()) {
+                        Navigator.of(context).pop();
+                      } else {
+                        setState(() => _finished = false);
+                      }
+                    },
+              ),
+            )
+          : KeyedSubtree(
+              key: const ValueKey('tracker'),
+              child: _buildActiveTracker(context),
+            ),
+    );
+  }
+
+  Widget _buildActiveTracker(BuildContext context) {
     // Back mid-run asks to discard instead of leaking an unfinished row
     // (dispose cancels GPS but never finishes).
     return PopScope(
-      canPop: !_recorder.started,
+      canPop: widget.onBack == null && !_recorder.started,
       onPopInvokedWithResult: (didPop, _) async {
         if (didPop) return;
-        final discard = await showDialog<bool>(
-          context: context,
-          builder: (context) => AlertDialog(
-            title: Text(S.discardTitle),
-            content: Text(S.discardBody),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.of(context).pop(false),
-                child: Text(S.back),
-              ),
-              TextButton(
-                onPressed: () => Navigator.of(context).pop(true),
-                child: Text(S.discardYes),
-              ),
-            ],
-          ),
-        );
-        if (discard == true) {
-          await _recorder.discard();
-          if (!context.mounted) return;
-          // The tracker is a tab, not a pushed route: popping here removes
-          // the whole app shell (black screen). Go home instead.
-          if (widget.onBack != null) {
-            widget.onBack!();
-          } else {
-            Navigator.of(context).pop();
-          }
-        }
+        await _handleBack();
       },
       child: Scaffold(
         body: Stack(
           children: [
-            // Live OSM map behind the stats; falls back to Jakarta when empty.
-            ListenableBuilder(
-              listenable: _recorder,
-              builder: (context, _) => Positioned.fill(
-                child: RouteMap(
+            // Live vector map behind the HUD; unobstructed & interactive in Map Focus mode.
+            Positioned.fill(
+              child: ListenableBuilder(
+                listenable: _recorder,
+                builder: (context, _) => RouteMap(
                   points: _recorder.points,
                   height: double.infinity,
-                  minimal: _minimalMap,
+                  fitBounds: _mapFocus,
+                  showControls: _mapFocus,
+                  showEmptyChip: false,
+                  controlsPadding: EdgeInsets.only(
+                    top: MediaQuery.paddingOf(context).top + 148,
+                    right: 24,
+                  ),
                 ),
               ),
             ),
@@ -831,6 +855,11 @@ class _RunTrackerScreenState extends State<RunTrackerScreen> {
                     final paceText = paceSecs == null
                         ? "0'00''"
                         : "${paceSecs ~/ 60}'${(paceSecs % 60).toString().padLeft(2, '0')}\"";
+                    final kcal = estimateCaloriesKcal(
+                      jenis: widget.sportType,
+                      durasiS: _recorder.elapsed.inSeconds,
+                      jarakM: _recorder.distanceM,
+                    );
                     Widget stats = Center(
                       child: ConstrainedBox(
                         constraints: const BoxConstraints(maxWidth: 560),
@@ -858,7 +887,7 @@ class _RunTrackerScreenState extends State<RunTrackerScreen> {
                                 child: TrackerStatColumn(
                                   avatarSize: 30,
                                   initials: 'C',
-                                  value: '0 kcal',
+                                  value: '$kcal ${S.unitKcal}',
                                   label: S.calories,
                                 ),
                               ),
@@ -877,8 +906,12 @@ class _RunTrackerScreenState extends State<RunTrackerScreen> {
                             children: [
                               MapCircleButton(
                                 size: circle,
+                                active: _mapFocus,
+                                icon: _mapFocus
+                                    ? Icons.speed_rounded
+                                    : Icons.map_outlined,
                                 onTap: () =>
-                                    setState(() => _minimalMap = !_minimalMap),
+                                    setState(() => _mapFocus = !_mapFocus),
                               ),
                               if (!_started)
                                 CircleAction(
@@ -921,6 +954,26 @@ class _RunTrackerScreenState extends State<RunTrackerScreen> {
                         ),
                       ),
                     );
+                    if (_mapFocus) {
+                      return Column(
+                        children: [
+                          header,
+                          const SizedBox(height: 12),
+                          _buildMapFocusHud(
+                            context,
+                            scheme,
+                            paceText: paceText,
+                            kcal: kcal,
+                          ),
+                          // Non-blocking spacer lets pan/zoom gestures pass to RouteMap.
+                          const Expanded(
+                            child: IgnorePointer(child: SizedBox.expand()),
+                          ),
+                          actions,
+                          const SizedBox(height: 24),
+                        ],
+                      );
+                    }
                     if (w >= Breakpoints.expanded) {
                       // Two panes: route visual left, stats + actions right.
                       return Column(
@@ -968,6 +1021,85 @@ class _RunTrackerScreenState extends State<RunTrackerScreen> {
       ),
     );
   }
+
+  Widget _buildMapFocusHud(
+    BuildContext context,
+    PacerScheme scheme, {
+    required String paceText,
+    required int kcal,
+  }) {
+    final items = <(String, String)>[
+      ('${fmtKmNum(_recorder.distanceM)} km', S.metricDistance),
+      (paceText, S.pace),
+      (fmtDurasi(_recorder.elapsed.inSeconds), S.metricDuration),
+      ('$kcal ${S.unitKcal}', S.metricCalories),
+    ];
+    return Center(
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 560),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 24),
+          child: Container(
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+            decoration: BoxDecoration(
+              color: scheme.card.withValues(alpha: 0.92),
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(color: scheme.softBorder),
+              boxShadow: [scheme.shadowBox],
+            ),
+            child: IntrinsicHeight(
+              child: Row(
+                children: [
+                  for (var i = 0; i < items.length; i++) ...[
+                    if (i > 0)
+                      VerticalDivider(
+                        width: 1,
+                        thickness: 1,
+                        indent: 4,
+                        endIndent: 4,
+                        color: scheme.softBorder,
+                      ),
+                    Expanded(
+                      child: Padding(
+                        padding: const EdgeInsets.symmetric(horizontal: 6),
+                        child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            FittedBox(
+                              fit: BoxFit.scaleDown,
+                              child: Text(
+                                items[i].$1,
+                                maxLines: 1,
+                                style: GoogleFonts.spaceGrotesk(
+                                  fontSize: 15,
+                                  fontWeight: FontWeight.w700,
+                                  color: scheme.ink,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(height: 2),
+                            Text(
+                              items[i].$2,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                fontSize: 11,
+                                color: scheme.muted,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
+                ],
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
 }
 
 class _RouteGridPainter extends CustomPainter {
@@ -985,43 +1117,24 @@ class _RouteGridPainter extends CustomPainter {
     for (double y = 0; y < size.height; y += 32) {
       canvas.drawLine(Offset(0, y), Offset(size.width, y), linePaint);
     }
-    final route = Paint()
-      ..color = PacerColors.lime
-      ..strokeWidth = 5
-      ..style = PaintingStyle.stroke
-      ..strokeJoin = StrokeJoin.round
-      ..strokeCap = StrokeCap.round;
-    final path = Path()
-      ..moveTo(size.width * 0.3, size.height * 0.25)
-      ..quadraticBezierTo(
-        size.width * 0.6,
-        size.height * 0.3,
-        size.width * 0.55,
-        size.height * 0.45,
-      )
-      ..quadraticBezierTo(
-        size.width * 0.5,
-        size.height * 0.6,
-        size.width * 0.7,
-        size.height * 0.62,
-      );
-    canvas.drawPath(path, route);
   }
 
   @override
-  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
+  bool shouldRepaint(covariant _RouteGridPainter oldDelegate) =>
+      oldDelegate.line != line;
 }
 
-/// Figma RUNNING FINISH: lime 329x92 summary + four 329x75 metric cards.
-class RunFinishScreen extends StatelessWidget {
+/// Post-activity summary screen showing the recorded OSM route, totals, and
+/// derived biomechanical/physiological metrics.
+class RunFinishScreen extends StatefulWidget {
   final String? title;
   final bool isHistoryDetail;
   final VoidCallback? onBack;
 
-  /// Real totals from a just-finished recording; null shows mock values.
+  /// Real totals from a just-finished recording or selected history item.
   final RunSummary? summary;
 
-  /// Loads and draws the saved GPS route in history-detail mode.
+  /// Loads and draws the saved GPS route when [summary.points] is empty.
   final String? aktivitasId;
   const RunFinishScreen({
     super.key,
@@ -1033,169 +1146,311 @@ class RunFinishScreen extends StatelessWidget {
   });
 
   @override
+  State<RunFinishScreen> createState() => _RunFinishScreenState();
+}
+
+class _RunFinishScreenState extends State<RunFinishScreen> {
+  Future<List<RutePoint>>? _routeFuture;
+  Future<UserProfile?>? _profileFuture;
+
+  @override
+  void initState() {
+    super.initState();
+    _routeFuture = _loadRoute();
+    _profileFuture = _loadProfile();
+  }
+
+  @override
+  void didUpdateWidget(covariant RunFinishScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.aktivitasId != oldWidget.aktivitasId ||
+        widget.summary?.points != oldWidget.summary?.points) {
+      _routeFuture = _loadRoute();
+    }
+  }
+
+  Future<List<RutePoint>> _loadRoute() async {
+    final pts = widget.summary?.points;
+    if (pts != null && pts.isNotEmpty) return pts;
+    final id = widget.aktivitasId;
+    if (id == null || id.isEmpty) return const [];
+    try {
+      return await ActivityRepository().getRoute(id);
+    } catch (_) {
+      return const [];
+    }
+  }
+
+  Future<UserProfile?> _loadProfile() async {
+    try {
+      return await AuthRepository().getProfile();
+    } catch (_) {
+      return null;
+    }
+  }
+
+  void _goBack() {
+    HapticFeedback.selectionClick();
+    if (widget.onBack != null) {
+      widget.onBack!();
+    } else {
+      Navigator.of(context).maybePop();
+    }
+  }
+
+  List<(String, String, String, String)> _buildMetrics(
+    RunSummary? summary,
+    List<RutePoint> routePts,
+    UserProfile? profile,
+  ) {
+    if (summary == null) {
+      return [
+        (S.stepLength, S.distanceBetweenSteps, '–', ''),
+        (S.calories, S.totalEnergyBurned, '–', ''),
+        (S.cadence, S.stepsPerMinute, '–', ''),
+        (S.elevationGain, S.totalHeightClimb, '–', ''),
+      ];
+    }
+    final m = computeRunMetrics(
+      jenis: summary.jenis,
+      durasiS: summary.durasiS,
+      jarakM: summary.jarakM,
+      points: routePts,
+      weightKg: profile?.beratKg,
+      heightCm: profile?.tinggiCm,
+    );
+    return [
+      (
+        S.stepLength,
+        S.distanceBetweenSteps,
+        m.stepLengthCm == null ? '–' : m.stepLengthCm!.round().toString(),
+        m.stepLengthCm == null ? '' : 'cm',
+      ),
+      (S.calories, S.totalEnergyBurned, m.caloriesKcal.toString(), S.unitKcal),
+      (
+        S.cadence,
+        S.stepsPerMinute,
+        m.cadenceSpm == null ? '–' : m.cadenceSpm.toString(),
+        m.cadenceSpm == null ? '' : 'spm',
+      ),
+      (
+        S.elevationGain,
+        S.totalHeightClimb,
+        m.elevationGainM.round().toString(),
+        'm',
+      ),
+    ];
+  }
+
+  @override
   Widget build(BuildContext context) {
     final scheme = PacerScheme.of(context);
-    final metrics = [
-      (S.stepLength, S.distanceBetweenSteps, '1,00', 'ft'),
-      (S.calories, S.totalEnergyBurned, '854', 'kcal'),
-      (S.cadence, S.stepsPerMinute, '212', 'spm'),
-      (S.elevationGain, S.totalHeightClimb, '100', 'ft'),
-    ];
-    return Scaffold(
-      body: Stack(
-        children: [
-          Positioned.fill(
-            child: Container(
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  colors: [scheme.finishTop, scheme.finishBottom],
-                  begin: Alignment.topCenter,
-                  end: Alignment.bottomCenter,
+    final summary = widget.summary;
+    final hasInlinePts = summary?.points.isNotEmpty ?? false;
+    final hasLookupId =
+        widget.aktivitasId != null && widget.aktivitasId!.isNotEmpty;
+    final initialRouteData = hasInlinePts
+        ? summary!.points
+        : (!hasLookupId ? const <RutePoint>[] : null);
+    final rawPace = summary != null
+        ? fmtPace(summary.durasiS, summary.jarakM)
+        : '';
+    final paceText = summary != null
+        ? (rawPace.isEmpty ? "0'00\"" : rawPace)
+        : (widget.isHistoryDetail ? "5'00\"" : "0'00\"");
+
+    return PopScope(
+      canPop: widget.onBack == null,
+      onPopInvokedWithResult: (didPop, _) {
+        if (didPop) return;
+        widget.onBack?.call();
+      },
+      child: Scaffold(
+        body: Stack(
+          children: [
+            Positioned.fill(
+              child: Container(
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: [scheme.finishTop, scheme.finishBottom],
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                  ),
+                ),
+                child: CustomPaint(
+                  painter: _RouteGridPainter(line: scheme.gridLine),
                 ),
               ),
-              child: CustomPaint(
-                painter: _RouteGridPainter(line: scheme.gridLine),
-              ),
             ),
-          ),
-          SafeArea(
-            child: ResponsiveScroll(
-              maxWidth: 720,
-              padding: const EdgeInsets.only(bottom: 120),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  const SizedBox(height: 41),
-                  Row(
-                    children: [
-                      IconButton(
-                        onPressed: onBack ?? () => Navigator.maybePop(context),
-                        icon: Icon(
-                          Icons.arrow_back,
-                          size: 32,
-                          color: scheme.ink,
-                        ),
-                      ),
-                      const Spacer(),
-                      Container(
-                        width: 20,
-                        height: 20,
-                        alignment: Alignment.center,
-                        child: Icon(Icons.edit, size: 20, color: scheme.ink),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 15),
-                  Text(
-                    title ?? S.running,
-                    style: TextStyle(fontSize: 24, color: scheme.ink),
-                  ),
-                  const SizedBox(height: 24),
-                  Container(height: 1, color: scheme.border),
-                  if (isHistoryDetail) ...[
-                    const SizedBox(height: 28),
-                    if (aktivitasId != null)
-                      FutureBuilder<List<RutePoint>>(
-                        future: ActivityRepository().getRoute(aktivitasId!),
-                        builder: (context, snap) {
-                          final pts = snap.data;
-                          if (pts == null || pts.isEmpty) {
-                            return const MapPlaceholder(
-                              height: 185,
-                              label: 'Belum ada rute tersimpan',
-                            );
-                          }
-                          return RouteMap(
-                            points: [for (final p in pts) LatLng(p.lat, p.lng)],
-                            height: 185,
-                          );
-                        },
-                      )
-                    else
-                      Container(
-                        width: 161,
-                        height: 158,
-                        alignment: Alignment.center,
-                        decoration: BoxDecoration(
-                          border: Border.all(color: PacerColors.lime, width: 5),
-                          borderRadius: BorderRadius.circular(20),
-                        ),
-                        child: Container(
-                          width: 20,
-                          height: 20,
-                          decoration: BoxDecoration(
-                            color: scheme.ink,
-                            shape: BoxShape.circle,
-                          ),
-                        ),
-                      ),
-                    const SizedBox(height: 28),
-                  ] else
-                    const SizedBox(height: 216),
-                  SummaryLimeCard(
-                    distance: summary != null
-                        ? fmtKm(summary!.jarakM)
-                        : (isHistoryDetail ? '3,00 Km' : '0,00 Km'),
-                    duration: summary != null
-                        ? fmtDurasi(summary!.durasiS)
-                        : (isHistoryDetail ? '15.00' : '00.00'),
-                    pace: summary != null
-                        ? fmtPace(summary!.durasiS, summary!.jarakM)
-                        : (isHistoryDetail ? "5'00''" : "0'00''"),
-                  ),
-                  const SizedBox(height: 18),
-                  LayoutBuilder(
-                    builder: (context, c) {
-                      final cards = [
-                        for (final m in metrics)
-                          MetricCard(
-                            title: m.$1,
-                            sub: m.$2,
-                            value: isHistoryDetail ? m.$3 : null,
-                            unit: isHistoryDetail ? m.$4 : null,
-                          ),
-                      ];
-                      if (screenSizeOf(c.maxWidth) == ScreenSize.compact) {
-                        return Column(
+            SafeArea(
+              child: ResponsiveScroll(
+                maxWidth: 720,
+                padding: const EdgeInsets.only(bottom: 120),
+                child: FutureBuilder<List<RutePoint>>(
+                  future: _routeFuture,
+                  initialData: initialRouteData,
+                  builder: (context, routeSnap) {
+                    final waitingRoute =
+                        routeSnap.connectionState == ConnectionState.waiting &&
+                        !routeSnap.hasData;
+                    final routePts = routeSnap.data ?? const <RutePoint>[];
+                    final latLngs = [
+                      for (final p in routePts) LatLng(p.lat, p.lng),
+                    ];
+                    final anchor =
+                        (summary?.anchorLat != null &&
+                            summary?.anchorLng != null)
+                        ? LatLng(summary!.anchorLat!, summary.anchorLng!)
+                        : null;
+
+                    return Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const SizedBox(height: 24),
+                        Row(
                           children: [
-                            for (final card in cards)
-                              Padding(
-                                padding: const EdgeInsets.only(bottom: 9),
-                                child: card,
+                            PacerTapScale(
+                              child: IconButton(
+                                onPressed: _goBack,
+                                icon: Icon(
+                                  Icons.arrow_back,
+                                  size: 28,
+                                  color: scheme.ink,
+                                ),
                               ),
-                          ],
-                        );
-                      }
-                      // medium and up: metric cards flow into a 2+ column
-                      // grid that grows with the width. Cells are 108 tall so
-                      // two-line Indonesian subs never overflow the card.
-                      return GridView(
-                        shrinkWrap: true,
-                        physics: const NeverScrollableScrollPhysics(),
-                        gridDelegate:
-                            const SliverGridDelegateWithMaxCrossAxisExtent(
-                              maxCrossAxisExtent: 400,
-                              mainAxisSpacing: 9,
-                              crossAxisSpacing: 9,
-                              mainAxisExtent: 108,
                             ),
-                        children: cards,
-                      );
-                    },
-                  ),
-                  const SizedBox(height: 12),
-                  LimeActionBar(
-                    S.done,
-                    // Embedded in the tracker (not a pushed route) onBack
-                    // returns to the tracker; pushed detail screens pop.
-                    onPressed: onBack ?? () => Navigator.of(context).pop(),
-                  ),
-                  const SizedBox(height: 24),
-                ],
+                          ],
+                        ),
+                        const SizedBox(height: 12),
+                        Text(
+                          widget.title ?? S.running,
+                          style: TextStyle(fontSize: 24, color: scheme.ink),
+                        ),
+                        const SizedBox(height: 20),
+                        Container(height: 1, color: scheme.border),
+                        const SizedBox(height: 20),
+                        if (waitingRoute)
+                          Container(
+                            height: 250,
+                            decoration: BoxDecoration(
+                              color: scheme.card,
+                              borderRadius: BorderRadius.circular(20),
+                              border: Border.all(color: scheme.hairline),
+                            ),
+                            alignment: Alignment.center,
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const SizedBox(
+                                  width: 24,
+                                  height: 24,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                  ),
+                                ),
+                                const SizedBox(height: 10),
+                                Text(
+                                  S.loadingRoute,
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    color: scheme.soft,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          )
+                        else
+                          RouteMap(
+                            points: latLngs,
+                            height: 250,
+                            fitBounds: true,
+                            showControls: true,
+                            fallbackCenter: anchor,
+                            emptyLabel: S.noGpsPoints,
+                            borderRadius: 20,
+                          ),
+                        const SizedBox(height: 20),
+                        SummaryLimeCard(
+                          distance: summary != null
+                              ? fmtKm(summary.jarakM)
+                              : (widget.isHistoryDetail
+                                    ? '3,00 Km'
+                                    : '0,00 Km'),
+                          duration: summary != null
+                              ? fmtDurasi(summary.durasiS)
+                              : (widget.isHistoryDetail ? '15.00' : '00.00'),
+                          pace: paceText,
+                        ),
+                        const SizedBox(height: 18),
+                        FutureBuilder<UserProfile?>(
+                          future: _profileFuture,
+                          builder: (context, profileSnap) {
+                            final metrics = _buildMetrics(
+                              summary,
+                              routePts,
+                              profileSnap.data,
+                            );
+                            return LayoutBuilder(
+                              builder: (context, c) {
+                                final cards = [
+                                  for (final m in metrics)
+                                    MetricCard(
+                                      title: m.$1,
+                                      sub: m.$2,
+                                      value: m.$3,
+                                      unit: m.$4,
+                                    ),
+                                ];
+                                if (screenSizeOf(c.maxWidth) ==
+                                    ScreenSize.compact) {
+                                  return Column(
+                                    children: [
+                                      for (final card in cards)
+                                        Padding(
+                                          padding: const EdgeInsets.only(
+                                            bottom: 9,
+                                          ),
+                                          child: card,
+                                        ),
+                                    ],
+                                  );
+                                }
+                                // medium and up: metric cards flow into a 2+
+                                // column grid that grows with the width. Cells
+                                // are 108 tall so two-line Indonesian subs
+                                // never overflow the card.
+                                return GridView(
+                                  shrinkWrap: true,
+                                  physics: const NeverScrollableScrollPhysics(),
+                                  gridDelegate:
+                                      const SliverGridDelegateWithMaxCrossAxisExtent(
+                                        maxCrossAxisExtent: 400,
+                                        mainAxisSpacing: 9,
+                                        crossAxisSpacing: 9,
+                                        mainAxisExtent: 108,
+                                      ),
+                                  children: cards,
+                                );
+                              },
+                            );
+                          },
+                        ),
+                        const SizedBox(height: 12),
+                        LimeActionBar(
+                          S.done,
+                          // Embedded in the tracker (not a pushed route)
+                          // onBack returns cleanly; pushed detail screens pop.
+                          onPressed: _goBack,
+                        ),
+                        const SizedBox(height: 24),
+                      ],
+                    );
+                  },
+                ),
               ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
@@ -2766,14 +3021,70 @@ class _HistoryScreenState extends State<HistoryScreen> {
 
 /// Figma challenge detail full page.
 /// [challengeId] null in demo mode (join button shows a demo snackbar).
+class _ChallengeBadge extends StatelessWidget {
+  final String label;
+  final Color bg;
+  final Color fg;
+
+  const _ChallengeBadge(this.label, {required this.bg, required this.fg});
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+      decoration: BoxDecoration(
+        color: bg,
+        borderRadius: BorderRadius.circular(999),
+      ),
+      child: Text(
+        label,
+        style: TextStyle(
+          color: fg,
+          fontSize: 12,
+          fontWeight: FontWeight.w700,
+        ),
+      ),
+    );
+  }
+}
+
+String _challengeWindowText(Challenge c) {
+  final start = c.waktuMulai;
+  final end = c.waktuSelesai;
+  if (start != null && end != null) {
+    return '${fmtDate(start)} - ${fmtDate(end)}';
+  }
+  if (end != null) return 's/d ${fmtDate(end)}';
+  if (start != null) return '${fmtDate(start)} - ${S.challengeOpenEnded}';
+  return S.challengeOpenEnded;
+}
+
 class ChallengeDetailSheet extends StatefulWidget {
   final String? challengeId;
-  const ChallengeDetailSheet({super.key, this.challengeId});
+  final Challenge? challenge;
+  final PartisipasiChallenge? participation;
 
-  static void show(BuildContext context, {String? challengeId}) {
-    showModalBottomSheet(
+  const ChallengeDetailSheet({
+    super.key,
+    this.challengeId,
+    this.challenge,
+    this.participation,
+  });
+
+  static Future<bool?> show(
+    BuildContext context, {
+    String? challengeId,
+    Challenge? challenge,
+    PartisipasiChallenge? participation,
+  }) {
+    return showModalBottomSheet<bool>(
       context: context,
-      builder: (_) => ChallengeDetailSheet(challengeId: challengeId),
+      isScrollControlled: true,
+      builder: (_) => ChallengeDetailSheet(
+        challengeId: challengeId ?? challenge?.id,
+        challenge: challenge,
+        participation: participation,
+      ),
     );
   }
 
@@ -2782,38 +3093,120 @@ class ChallengeDetailSheet extends StatefulWidget {
 }
 
 class _ChallengeDetailSheetState extends State<ChallengeDetailSheet> {
+  Challenge? _challenge;
+  PartisipasiChallenge? _participation;
   bool? _joined;
   bool _busy = false;
+  bool _changed = false;
 
   @override
   void initState() {
     super.initState();
-    _check();
+    _challenge = widget.challenge;
+    _participation = widget.participation;
+    if (widget.participation != null) _joined = true;
+    _load();
   }
 
-  Future<bool> _isLive() async =>
-      !(await isDemoAccount()) && widget.challengeId != null;
+  @override
+  void didUpdateWidget(covariant ChallengeDetailSheet oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.challengeId != widget.challengeId ||
+        oldWidget.challenge != widget.challenge ||
+        oldWidget.participation != widget.participation) {
+      _challenge = widget.challenge;
+      _participation = widget.participation;
+      _joined = widget.participation != null ? true : null;
+      _load();
+    }
+  }
 
-  Future<void> _check() async {
-    if (!await _isLive()) return;
-    try {
-      final parts = await ChallengeRepository().myParticipations();
+  String? get _resolvedId => widget.challengeId ?? _challenge?.id;
+
+  Future<bool> _isLive() async =>
+      !(await isDemoAccount()) && _resolvedId != null;
+
+  Challenge? _findDemoChallenge(String? id) {
+    if (id != null) {
+      for (final c in PacerDummyData.challenges) {
+        if (c.id == id) return c;
+      }
+    }
+    return PacerDummyData.challenges.isEmpty
+        ? null
+        : PacerDummyData.challenges.first;
+  }
+
+  PartisipasiChallenge? _matchParticipation(
+    List<PartisipasiChallenge> parts,
+    String id,
+  ) {
+    for (final p in parts) {
+      if (p.challengeId == id) return p;
+    }
+    return null;
+  }
+
+  Future<void> _load() async {
+    final id = _resolvedId;
+    if (await isDemoAccount()) {
+      final demo = _challenge ?? _findDemoChallenge(id);
       if (mounted) {
         setState(() {
-          _joined = parts.any((p) => p.challengeId == widget.challengeId);
+          _challenge = demo;
+          _joined ??= false;
+        });
+      }
+      return;
+    }
+    if (id == null) return;
+    try {
+      final repo = ChallengeRepository();
+      final chal = _challenge ?? await repo.getChallengeById(id);
+      final parts = await repo.myParticipations();
+      final matched = _matchParticipation(parts, id);
+      if (mounted) {
+        setState(() {
+          _challenge = chal ?? _challenge;
+          _participation = matched;
+          _joined = matched != null;
         });
       }
     } catch (_) {
-      /* stays null → join attempt reports errors */
+      /* stays in current state → toggle handles offline/network errors */
     }
   }
 
   Future<void> _toggle() async {
-    final id = widget.challengeId;
+    final id = _resolvedId;
     if (!await _isLive() || id == null) {
       if (mounted) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text(S.demoChallengeStarted)));
+        final next = !(_joined == true);
+        setState(() {
+          _joined = next;
+          _participation = next && _challenge != null
+              ? PartisipasiChallenge(
+                  id: 'demo-part-${_challenge!.id}',
+                  challengeId: _challenge!.id,
+                  userId: 'demo',
+                )
+              : null;
+          _changed = true;
+        });
+        if (next) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(S.demoChallengeStarted)),
+          );
+        }
+      }
+      return;
+    }
+    final chal = _challenge;
+    if (_joined != true && chal != null && !isChallengeActive(chal, DateTime.now())) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(S.challengeEndedJoinBlocked)),
+        );
       }
       return;
     }
@@ -2822,14 +3215,36 @@ class _ChallengeDetailSheetState extends State<ChallengeDetailSheet> {
       final repo = ChallengeRepository();
       if (_joined == true) {
         await repo.leaveChallenge(id);
-        if (mounted) setState(() => _joined = false);
+        if (mounted) {
+          setState(() {
+            _joined = false;
+            _participation = null;
+            _changed = true;
+          });
+        }
       } else {
         await repo.joinChallenge(id);
-        if (mounted) setState(() => _joined = true);
+        final parts = await repo.myParticipations();
+        final matched = _matchParticipation(parts, id);
+        if (mounted) {
+          setState(() {
+            _joined = true;
+            _participation =
+                matched ??
+                PartisipasiChallenge(
+                  id: 'local-$id',
+                  challengeId: id,
+                  userId: '',
+                  createdAt: DateTime.now(),
+                );
+            _changed = true;
+          });
+        }
       }
       if (mounted && !ConnectivityService.instance.value) {
-        ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text(S.queuedOfflineSaved)));
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(S.queuedOfflineSaved)),
+        );
       }
     } catch (e) {
       if (mounted) {
@@ -2844,6 +3259,17 @@ class _ChallengeDetailSheetState extends State<ChallengeDetailSheet> {
 
   @override
   Widget build(BuildContext context) {
+    final scheme = PacerScheme.of(context);
+    final chal = _challenge;
+    final part = _participation;
+    final active = chal == null || isChallengeActive(chal, DateTime.now());
+    final canToggle = _joined == true || active;
+    final pct = (chal != null && part != null)
+        ? progressPercent(part.progressNilai, chal.targetNilai)
+        : 0.0;
+    final pctLabel = pct == pct.truncateToDouble()
+        ? '${pct.toInt()}%'
+        : '${pct.toStringAsFixed(1)}%';
     // Sheets cap at ~560 on wide screens instead of stretching edge to edge.
     return Center(
       child: ConstrainedBox(
@@ -2864,51 +3290,164 @@ class _ChallengeDetailSheetState extends State<ChallengeDetailSheet> {
                       ),
                     ),
                     IconButton(
-                      onPressed: () => Navigator.of(context).pop(),
-                      icon: const Icon(Icons.close, color: PacerColors.ink),
+                      onPressed: () => Navigator.of(context).pop(_changed),
+                      icon: Icon(Icons.close, color: scheme.ink),
                     ),
                   ],
                 ),
-                SizedBox(
-                  width: double.infinity,
-                  child: FittedBox(
-                    fit: BoxFit.scaleDown,
-                    alignment: Alignment.centerLeft,
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      crossAxisAlignment: CrossAxisAlignment.end,
-                      children: [
-                        Text(
-                          '10 ',
-                          style: PacerText.giantNum(96)
-                              .copyWith(color: PacerColors.primary),
+                if (chal == null) ...[
+                  const SizedBox(height: 24),
+                  const Center(child: CircularProgressIndicator()),
+                  const SizedBox(height: 24),
+                ] else ...[
+                  const SizedBox(height: 8),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [
+                      _ChallengeBadge(
+                        S.sportName(chal.jenis),
+                        bg: scheme.card,
+                        fg: scheme.ink,
+                      ),
+                      if (part?.berhasil == true)
+                        _ChallengeBadge(
+                          S.challengeCompletedLabel,
+                          bg: scheme.success.withValues(alpha: 0.16),
+                          fg: scheme.success,
+                        )
+                      else if (!active)
+                        _ChallengeBadge(
+                          S.challengeEnded,
+                          bg: scheme.error.withValues(alpha: 0.14),
+                          fg: scheme.error,
+                        )
+                      else
+                        _ChallengeBadge(
+                          S.challengeActive,
+                          bg: PacerColors.primary.withValues(alpha: 0.22),
+                          fg: scheme.ink,
                         ),
-                        Text('KM', style: PacerText.kmSuffix),
-                      ],
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  SizedBox(
+                    width: double.infinity,
+                    child: FittedBox(
+                      fit: BoxFit.scaleDown,
+                      alignment: Alignment.centerLeft,
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        crossAxisAlignment: CrossAxisAlignment.end,
+                        children: [
+                          Text(
+                            S.challengeTargetValue(
+                              chal.targetNilai,
+                              chal.targetSatuan,
+                            ),
+                            style: PacerText.giantNum(88)
+                                .copyWith(color: PacerColors.primary),
+                          ),
+                          const SizedBox(width: 6),
+                          Text(
+                            S.challengeTargetUnit(chal.targetSatuan),
+                            style: PacerText.kmSuffix,
+                          ),
+                        ],
+                      ),
                     ),
                   ),
-                ),
-                Text(
-                  S.distance,
-                  style: TextStyle(fontWeight: FontWeight.w600, fontSize: 24),
-                ),
-                const Text(
-                  'Waktu: 1,30 Jam',
-                  style: TextStyle(fontWeight: FontWeight.w600, fontSize: 24),
-                ),
-                const Text(
-                  'Tanggal: 29-10-2009',
-                  style: TextStyle(fontWeight: FontWeight.w600, fontSize: 24),
-                ),
-                const SizedBox(height: 12),
-                const MapPlaceholder(
-                  height: 185,
-                  label: 'Track — placeholder bebas hak cipta',
-                ),
-                const SizedBox(height: 16),
+                  const SizedBox(height: 8),
+                  Text(
+                    '${chal.targetSatuan == 'jarak_m' ? S.distance : S.targetTime}: '
+                    '${S.challengeTargetSummary(chal.targetNilai, chal.targetSatuan)}',
+                    style: TextStyle(
+                      fontWeight: FontWeight.w600,
+                      fontSize: 18,
+                      color: scheme.ink,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    '${S.date}: ${_challengeWindowText(chal)}',
+                    style: TextStyle(
+                      fontWeight: FontWeight.w500,
+                      fontSize: 16,
+                      color: scheme.soft,
+                    ),
+                  ),
+                  if (_joined == true && part != null) ...[
+                    const SizedBox(height: 16),
+                    Container(
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: scheme.card,
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(color: scheme.softBorder),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              Expanded(
+                                child: Text(
+                                  S.challengeProgressLabel,
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.w700,
+                                    fontSize: 15,
+                                    color: scheme.ink,
+                                  ),
+                                ),
+                              ),
+                              Text(
+                                pctLabel,
+                                style: TextStyle(
+                                  fontWeight: FontWeight.w800,
+                                  fontSize: 16,
+                                  color: part.berhasil
+                                      ? scheme.success
+                                      : PacerColors.primary,
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 8),
+                          ClipRRect(
+                            borderRadius: BorderRadius.circular(6),
+                            child: LinearProgressIndicator(
+                              value: (pct / 100).clamp(0.0, 1.0),
+                              minHeight: 8,
+                              backgroundColor: scheme.softBorder,
+                              valueColor: AlwaysStoppedAnimation<Color>(
+                                part.berhasil
+                                    ? scheme.success
+                                    : PacerColors.primary,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            '${S.challengeTargetSummary(part.progressNilai, chal.targetSatuan)} / '
+                            '${S.challengeTargetSummary(chal.targetNilai, chal.targetSatuan)}'
+                            '${part.berhasil ? ' • ${S.challengeCompletedLabel}' : ''}',
+                            style: TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w600,
+                              color: scheme.soft,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ],
+                const SizedBox(height: 20),
                 LimeActionBar(
-                  _joined == true ? S.leaveChallenge : S.startChallenge,
-                  onPressed: _busy ? null : _toggle,
+                  _joined == true
+                      ? S.leaveChallenge
+                      : (!active ? S.challengeEnded : S.startChallenge),
+                  onPressed: (_busy || !canToggle) ? null : _toggle,
                 ),
                 const SizedBox(height: 16),
               ],
@@ -3177,11 +3716,27 @@ class StatisticScreen extends StatefulWidget {
 
 class _StatisticScreenState extends State<StatisticScreen> {
   Future<({double km, int seconds})?>? _future;
+  Future<List<LatLng>>? _latestRouteFuture;
 
   @override
   void initState() {
     super.initState();
     _future = _load();
+    _latestRouteFuture = _loadLatestRoute();
+  }
+
+  /// Loads GPS route points from the most recent recorded workout for OSM.
+  Future<List<LatLng>> _loadLatestRoute() async {
+    if (await isDemoAccount()) return const [];
+    try {
+      final repo = ActivityRepository();
+      final acts = await repo.listLocalActivities(limit: 1);
+      if (acts.isEmpty) return const [];
+      final pts = await repo.getRoute(acts.first.activity.id);
+      return [for (final p in pts) LatLng(p.lat, p.lng)];
+    } catch (_) {
+      return const [];
+    }
   }
 
   /// This week's distance + time; null when signed in and empty.
@@ -3216,7 +3771,17 @@ class _StatisticScreenState extends State<StatisticScreen> {
               const SizedBox(height: 12),
               LayoutBuilder(
                 builder: (context, c) {
-                  Widget map = const MapPlaceholder(height: 160);
+                  Widget map = FutureBuilder<List<LatLng>>(
+                    future: _latestRouteFuture,
+                    builder: (context, snap) => RouteMap(
+                      points: snap.data ?? const [],
+                      height: 180,
+                      fitBounds: true,
+                      showControls: true,
+                      emptyLabel: S.noGpsPoints,
+                      borderRadius: 16,
+                    ),
+                  );
                   Widget total = FutureBuilder<({double km, int seconds})?>(
                     future: _future,
                     builder: (context, snap) {
@@ -3563,6 +4128,11 @@ class _StreaksScreenState extends State<StreaksScreen> {
 
 /// Figma CHALLENGE list: 10 KM + 8 KM hero cards.
 /// Live challenges when signed in; Figma mock cards in demo mode.
+typedef _ChallengeListData = ({
+  List<Challenge> challenges,
+  Map<String, PartisipasiChallenge> participations,
+});
+
 class ChallengeListScreen extends StatefulWidget {
   const ChallengeListScreen({super.key});
 
@@ -3571,7 +4141,7 @@ class ChallengeListScreen extends StatefulWidget {
 }
 
 class _ChallengeListScreenState extends State<ChallengeListScreen> {
-  Future<List<Challenge>>? _future;
+  Future<_ChallengeListData>? _future;
 
   @override
   void initState() {
@@ -3579,31 +4149,185 @@ class _ChallengeListScreenState extends State<ChallengeListScreen> {
     _future = _load();
   }
 
-  Future<List<Challenge>> _load() async {
+  void _reload() {
+    if (!mounted) return;
+    setState(() => _future = _load());
+  }
+
+  Future<_ChallengeListData> _load() async {
     if (await isDemoAccount()) {
-      return PacerDummyData.challenges;
+      return (
+        challenges: PacerDummyData.challenges
+            .where((c) => c.diumumkan)
+            .toList(),
+        participations: const <String, PartisipasiChallenge>{},
+      );
     }
     try {
-      return await ChallengeRepository().listChallenges();
+      final repo = ChallengeRepository();
+      final challenges = (await repo.listChallenges())
+          .where((c) => c.diumumkan)
+          .toList();
+      final parts = await repo.myParticipations();
+      return (
+        challenges: challenges,
+        participations: {for (final p in parts) p.challengeId: p},
+      );
     } catch (_) {
-      return const [];
+      return (
+        challenges: const <Challenge>[],
+        participations: const <String, PartisipasiChallenge>{},
+      );
     }
   }
-
-  /// Hero number: km for jarak_m targets, minutes for waktu_s.
-  String _heroValue(Challenge c) {
-    final v = c.targetSatuan == 'jarak_m'
-        ? c.targetNilai / 1000
-        : c.targetNilai / 60;
-    return v == v.truncateToDouble() ? '${v.toInt()}' : v.toStringAsFixed(1);
-  }
-
-  String _heroUnit(Challenge c) => c.targetSatuan == 'jarak_m' ? ' KM' : ' MNT';
 
   String _heroDate(Challenge c) {
     final d = c.waktuSelesai ?? c.waktuMulai;
-    if (d == null) return '-';
+    if (d == null) return S.challengeOpenEnded;
     return '${d.day}-${d.month}-${d.year}';
+  }
+
+  Widget _challengeCard(
+    BuildContext context,
+    double w,
+    Challenge c,
+    PartisipasiChallenge? part,
+  ) {
+    final active = isChallengeActive(c, DateTime.now());
+    final pct = part == null
+        ? 0.0
+        : progressPercent(part.progressNilai, c.targetNilai);
+    final statusLabel = part?.berhasil == true
+        ? S.challengeCompletedLabel
+        : !active
+        ? S.challengeEnded
+        : part != null
+        ? S.joinedChallenge
+        : S.challengeActive;
+    final statusBg = part?.berhasil == true
+        ? Colors.green.withValues(alpha: 0.25)
+        : !active
+        ? Colors.white12
+        : part != null
+        ? PacerColors.primary.withValues(alpha: 0.25)
+        : Colors.white12;
+    final statusFg = part?.berhasil == true
+        ? Colors.greenAccent
+        : !active
+        ? Colors.white70
+        : part != null
+        ? PacerColors.primary
+        : Colors.white;
+
+    return GestureDetector(
+      onTap: () async {
+        await ChallengeDetailSheet.show(
+          context,
+          challengeId: c.id,
+          challenge: c,
+          participation: part,
+        );
+        _reload();
+      },
+      child: Container(
+        width: double.infinity,
+        constraints: BoxConstraints(minHeight: fluid(w, 179, 220)),
+        margin: const EdgeInsets.only(bottom: 12),
+        padding: const EdgeInsets.all(20),
+        decoration: BoxDecoration(
+          borderRadius: BorderRadius.circular(20),
+          gradient: const LinearGradient(
+            colors: [
+              PacerColors.teamShade,
+              PacerColors.streakBg,
+            ],
+          ),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Row(
+              children: [
+                _ChallengeBadge(
+                  S.sportName(c.jenis),
+                  bg: Colors.white12,
+                  fg: Colors.white,
+                ),
+                const Spacer(),
+                _ChallengeBadge(
+                  statusLabel,
+                  bg: statusBg,
+                  fg: statusFg,
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.end,
+              children: [
+                // Hero number flexes and scales down so long
+                // live values never push the date off-screen.
+                Flexible(
+                  child: FittedBox(
+                    fit: BoxFit.scaleDown,
+                    alignment: Alignment.bottomLeft,
+                    child: Text(
+                      S.challengeTargetValue(c.targetNilai, c.targetSatuan),
+                      style: PacerText.giantNum(
+                        fluid(w, 84, 128),
+                      ).copyWith(color: PacerColors.primary),
+                    ),
+                  ),
+                ),
+                Text(
+                  ' ${S.challengeTargetUnit(c.targetSatuan)}',
+                  style: PacerText.kmSuffix.copyWith(fontSize: 36),
+                ),
+                const SizedBox(width: 8),
+                Flexible(
+                  child: Text(
+                    _heroDate(c),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.w600,
+                      fontSize: 16,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            if (part != null) ...[
+              const SizedBox(height: 10),
+              ClipRRect(
+                borderRadius: BorderRadius.circular(4),
+                child: LinearProgressIndicator(
+                  value: (pct / 100).clamp(0.0, 1.0),
+                  minHeight: 6,
+                  backgroundColor: Colors.white24,
+                  valueColor: AlwaysStoppedAnimation<Color>(
+                    part.berhasil ? Colors.greenAccent : PacerColors.primary,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 4),
+              Text(
+                '${S.challengeTargetSummary(part.progressNilai, c.targetSatuan)} / '
+                '${S.challengeTargetSummary(c.targetNilai, c.targetSatuan)} • '
+                '${pct.toInt()}%',
+                style: const TextStyle(
+                  color: Colors.white70,
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
   }
 
   @override
@@ -3621,10 +4345,11 @@ class _ChallengeListScreenState extends State<ChallengeListScreen> {
               const SizedBox(height: 16),
               Text(S.challenge, style: PacerText.pageTitleOf(context)),
               const SizedBox(height: 12),
-              FutureBuilder<List<Challenge>>(
+              FutureBuilder<_ChallengeListData>(
                 future: _future,
                 builder: (context, snap) {
-                  final live = snap.data;
+                  final data = snap.data;
+                  final live = data?.challenges;
                   // No mocks: offline and empty both show the empty state.
                   if (live == null || live.isEmpty) {
                     return PacerEmptyState(
@@ -3632,73 +4357,11 @@ class _ChallengeListScreenState extends State<ChallengeListScreen> {
                       icon: Icons.emoji_events_outlined,
                     );
                   }
-                  final cards = [
-                    for (final c in live)
-                      (_heroValue(c), _heroUnit(c), _heroDate(c), c.id),
-                  ];
+                  final parts = data!.participations;
                   return Column(
                     children: [
-                      for (final c in cards)
-                        GestureDetector(
-                          onTap: () => showModalBottomSheet(
-                            context: context,
-                            builder: (_) =>
-                                ChallengeDetailSheet(challengeId: c.$4),
-                          ),
-                          child: Container(
-                            width: double.infinity,
-                            height: fluid(w, 179, 220),
-                            margin: const EdgeInsets.only(bottom: 12),
-                            padding: const EdgeInsets.all(20),
-                            decoration: BoxDecoration(
-                              borderRadius: BorderRadius.circular(20),
-                              gradient: const LinearGradient(
-                                colors: [
-                                  PacerColors.teamShade,
-                                  PacerColors.streakBg,
-                                ],
-                              ),
-                            ),
-                            child: Row(
-                              crossAxisAlignment: CrossAxisAlignment.end,
-                              children: [
-                                // Hero number flexes and scales down so long
-                                // live values never push the date off-screen.
-                                Flexible(
-                                  child: FittedBox(
-                                    fit: BoxFit.scaleDown,
-                                    alignment: Alignment.bottomLeft,
-                                    child: Text(
-                                      c.$1,
-                                      style: PacerText.giantNum(
-                                        fluid(w, 96, 140),
-                                      ).copyWith(color: PacerColors.primary),
-                                    ),
-                                  ),
-                                ),
-                                Text(
-                                  c.$2,
-                                  style: PacerText.kmSuffix.copyWith(
-                                    fontSize: 40,
-                                  ),
-                                ),
-                                const SizedBox(width: 8),
-                                Flexible(
-                                  child: Text(
-                                    c.$3,
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
-                                    style: const TextStyle(
-                                      color: Colors.white,
-                                      fontWeight: FontWeight.w600,
-                                      fontSize: 16,
-                                    ),
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
+                      for (final c in live)
+                        _challengeCard(context, w, c, parts[c.id]),
                     ],
                   );
                 },
@@ -3708,11 +4371,14 @@ class _ChallengeListScreenState extends State<ChallengeListScreen> {
                 width: double.infinity,
                 height: 48,
                 child: OutlinedButton(
-                  onPressed: () => Navigator.of(context).push(
-                    MaterialPageRoute(
-                      builder: (_) => const CreateChallengeScreen(),
-                    ),
-                  ),
+                  onPressed: () async {
+                    await Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (_) => const CreateChallengeScreen(),
+                      ),
+                    );
+                    _reload();
+                  },
                   child: Text(S.createChallenge),
                 ),
               ),
@@ -4010,6 +4676,7 @@ class CreateChallengeScreen extends StatefulWidget {
 }
 
 class _CreateChallengeScreenState extends State<CreateChallengeScreen> {
+  int _jenisIdx = 0; // 'lari'
   int _jarak = 1; // '5 km'
   int _durasi = 2; // week
   int _target = -1; // untouched
@@ -4080,7 +4747,7 @@ class _CreateChallengeScreenState extends State<CreateChallengeScreen> {
     setState(() => _busy = true);
     try {
       await ChallengeRepository().createChallenge(
-        jenis: 'lari',
+        jenis: aktivitasJenis[_jenisIdx],
         targetNilai: targetKm * 1000,
         targetSatuan: 'jarak_m',
         waktuMulai: now,
@@ -4154,11 +4821,23 @@ class _CreateChallengeScreenState extends State<CreateChallengeScreen> {
                 style: PacerText.pageTitleOf(context).copyWith(fontSize: 26),
               ),
               const SizedBox(height: 12),
+              _group(
+                S.challengeSportLabel,
+                [for (final j in aktivitasJenis) S.sportName(j)],
+                _jenisIdx,
+                (i) => setState(() => _jenisIdx = i),
+              ),
               _group('JARAK', ['3 km', '5 km', '10 km', S.other], _jarak, (i) {
                 if (i == 3) {
-                  _tapCustom((_) => _jarak = 3);
+                  _tapCustom((_) {
+                    _jarak = 3;
+                    _target = -1;
+                  });
                 } else {
-                  setState(() => _jarak = i);
+                  setState(() {
+                    _jarak = i;
+                    _target = -1;
+                  });
                 }
               }),
               _group(
@@ -4171,9 +4850,15 @@ class _CreateChallengeScreenState extends State<CreateChallengeScreen> {
                 i,
               ) {
                 if (i == 3) {
-                  _tapCustom((_) => _target = 3);
+                  _tapCustom((_) {
+                    _target = 3;
+                    _jarak = -1;
+                  });
                 } else {
-                  setState(() => _target = i);
+                  setState(() {
+                    _target = i;
+                    _jarak = -1;
+                  });
                 }
               }),
               if (_error != null) ...[

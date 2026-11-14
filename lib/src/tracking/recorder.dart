@@ -56,6 +56,9 @@ class RunRecorder extends ChangeNotifier {
   bool _finishing = false;
   double _distanceM = 0;
   String? _error;
+  double? _anchorLat;
+  double? _anchorLng;
+  bool _disposed = false;
 
   int _checkpointedCount = 0;
   DateTime _lastCheckpointAt = DateTime.fromMillisecondsSinceEpoch(0);
@@ -69,6 +72,12 @@ class RunRecorder extends ChangeNotifier {
   String? get error => _error;
   String? get aktivitasId => _aktivitasId;
   String get jenis => _jenis;
+
+  LatLng? get anchor => _fixes.isNotEmpty
+      ? LatLng(_fixes.first.lat, _fixes.first.lng)
+      : (_anchorLat != null && _anchorLng != null
+            ? LatLng(_anchorLat!, _anchorLng!)
+            : null);
 
   List<LatLng> get points => [for (final f in _fixes) LatLng(f.lat, f.lng)];
 
@@ -129,6 +138,8 @@ class RunRecorder extends ChangeNotifier {
       _fixes.clear();
       _checkpointedCount = 0;
       _distanceM = 0;
+      _anchorLat = null;
+      _anchorLng = null;
       _baseElapsed = Duration.zero;
       _clock.reset();
       _lastCheckpointAt = DateTime.now();
@@ -142,8 +153,9 @@ class RunRecorder extends ChangeNotifier {
 
   /// Synthetic-fix mode for GPS-less platforms (Linux desktop): creates a local
   /// draft offline-first and feeds drifting fixes through the real pipeline.
-  Future<void> simulate() async {
+  Future<void> simulate([String jenis = 'lari']) async {
     if (_started || _starting) return;
+    final sport = aktivitasJenis.contains(jenis) ? jenis : 'lari';
     _starting = true;
     try {
       final uid = await _requireUserId();
@@ -152,16 +164,18 @@ class RunRecorder extends ChangeNotifier {
       await _store.saveDraftStart(
         id: id,
         userId: uid,
-        jenis: 'lari',
+        jenis: sport,
         mulaiAt: now,
       );
       _aktivitasId = id;
       _userId = uid;
       _mulaiAt = now;
-      _jenis = 'lari';
+      _jenis = sport;
       _fixes.clear();
       _checkpointedCount = 0;
       _distanceM = 0;
+      _anchorLat = null;
+      _anchorLng = null;
       _baseElapsed = Duration.zero;
       _clock.reset();
       _lastCheckpointAt = DateTime.now();
@@ -276,6 +290,37 @@ class RunRecorder extends ChangeNotifier {
         );
     _clock.start();
     _recording = true;
+    unawaited(_captureInitialFix());
+  }
+
+  Future<void> _captureInitialFix() async {
+    try {
+      final last = await Geolocator.getLastKnownPosition();
+      if (_disposed || !_started || _simMode) return;
+      if (last != null) {
+        _anchorLat = last.latitude;
+        _anchorLng = last.longitude;
+        if (_fixes.isEmpty && last.accuracy <= maxAccuracyM && _recording) {
+          _onFix(last);
+        } else {
+          notifyListeners();
+        }
+      }
+      final current = await Geolocator.getCurrentPosition(
+        locationSettings: const LocationSettings(
+          accuracy: LocationAccuracy.high,
+          timeLimit: Duration(seconds: 5),
+        ),
+      );
+      if (_disposed || !_started || !_recording || _simMode) return;
+      _anchorLat = current.latitude;
+      _anchorLng = current.longitude;
+      if (_fixes.isEmpty) {
+        _onFix(current);
+      }
+    } catch (_) {
+      // Optional initial seed; continuous stream remains primary.
+    }
   }
 
   @visibleForTesting
@@ -377,6 +422,8 @@ class RunRecorder extends ChangeNotifier {
     _fixes.clear();
     _checkpointedCount = 0;
     _distanceM = 0;
+    _anchorLat = null;
+    _anchorLng = null;
     notifyListeners();
     if (id == null) return false;
     await _store.discardDraft(id);
@@ -417,6 +464,8 @@ class RunRecorder extends ChangeNotifier {
       ];
       final totalDist = _distanceM;
       final sport = _jenis;
+      final anchorLat = _fixes.isNotEmpty ? _fixes.first.lat : _anchorLat;
+      final anchorLng = _fixes.isNotEmpty ? _fixes.first.lng : _anchorLng;
 
       await _store.finalizeRunAtomic(
         id: id,
@@ -444,6 +493,8 @@ class RunRecorder extends ChangeNotifier {
       _fixes.clear();
       _checkpointedCount = 0;
       _distanceM = 0;
+      _anchorLat = null;
+      _anchorLng = null;
       _baseElapsed = Duration.zero;
       _clock.reset();
       notifyListeners();
@@ -454,6 +505,9 @@ class RunRecorder extends ChangeNotifier {
         jarakM: totalDist,
         durasiS: totalDurationS,
         pointCount: points.length,
+        points: List<RutePoint>.unmodifiable(points),
+        anchorLat: anchorLat,
+        anchorLng: anchorLng,
       );
     } finally {
       _finishing = false;
@@ -466,6 +520,7 @@ class RunRecorder extends ChangeNotifier {
 
   @override
   void dispose() {
+    _disposed = true;
     _sub?.cancel();
     _simTimer?.cancel();
     if (_started) {
@@ -497,11 +552,17 @@ class RunSummary {
   final double jarakM;
   final int durasiS;
   final int pointCount;
+  final List<RutePoint> points;
+  final double? anchorLat;
+  final double? anchorLng;
   const RunSummary({
     required this.aktivitasId,
     required this.jenis,
     required this.jarakM,
     required this.durasiS,
     required this.pointCount,
+    this.points = const [],
+    this.anchorLat,
+    this.anchorLng,
   });
 }

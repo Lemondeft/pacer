@@ -139,6 +139,10 @@ abstract class LocalStore {
     String challengeId,
   );
   Future<void> queueLeaveChallenge(String userId, String challengeId);
+  Future<void> applySyncedActivityChallengeDelta(
+    String userId,
+    Activity activity,
+  );
 
   // ---- Leaderboards ----
   Future<void> saveLeaderboards(String userId, List<Leaderboard> boards);

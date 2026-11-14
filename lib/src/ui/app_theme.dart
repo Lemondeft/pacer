@@ -1,3 +1,4 @@
+import 'package:flutter/cupertino.dart' show CupertinoPageTransitionsBuilder;
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
@@ -418,9 +419,21 @@ class PacerScheme {
 }
 
 class PacerTheme {
+  static const PageTransitionsTheme _pageTransitions = PageTransitionsTheme(
+    builders: {
+      TargetPlatform.android: FadeForwardsPageTransitionsBuilder(),
+      TargetPlatform.iOS: CupertinoPageTransitionsBuilder(),
+      TargetPlatform.macOS: CupertinoPageTransitionsBuilder(),
+      TargetPlatform.linux: FadeForwardsPageTransitionsBuilder(),
+      TargetPlatform.windows: FadeForwardsPageTransitionsBuilder(),
+      TargetPlatform.fuchsia: FadeForwardsPageTransitionsBuilder(),
+    },
+  );
+
   static ThemeData light() {
     return ThemeData(
       useMaterial3: true,
+      pageTransitionsTheme: _pageTransitions,
       scaffoldBackgroundColor: Colors.white,
       textTheme: TextTheme(
         displaySmall: PacerText.authTitle,
@@ -477,6 +490,7 @@ class PacerTheme {
     return ThemeData(
       useMaterial3: true,
       brightness: Brightness.dark,
+      pageTransitionsTheme: _pageTransitions,
       scaffoldBackgroundColor: scheme.scaffold,
       textTheme: TextTheme(
         displaySmall: PacerText.authTitle.copyWith(color: scheme.ink),

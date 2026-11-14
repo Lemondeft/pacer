@@ -215,6 +215,33 @@ class S {
   static String get teamCreated => _en ? 'Team created.' : 'Tim dibuat.';
   static String get createChallenge =>
       _en ? 'Create challenge' : 'Buat challenge';
+  static String get challengeActive => _en ? 'Active' : 'Aktif';
+  static String get challengeEnded => _en ? 'Ended' : 'Berakhir';
+  static String get challengeCompletedLabel =>
+      _en ? 'Target Achieved' : 'Target Tercapai';
+  static String get challengeOpenEnded =>
+      _en ? 'Ongoing' : 'Berjalan terus';
+  static String get challengeSportLabel => _en ? 'Sport' : 'Olahraga';
+  static String get challengeProgressLabel => _en ? 'Progress' : 'Progres';
+  static String get targetTime => _en ? 'Time Target' : 'Target Waktu';
+  static String get challengeEndedJoinBlocked => _en
+      ? 'This challenge has already ended.'
+      : 'Challenge ini sudah berakhir.';
+  static String get joinedChallenge => _en ? 'Joined' : 'Diikuti';
+
+  static String challengeTargetValue(double targetNilai, String targetSatuan) {
+    final v = targetSatuan == 'jarak_m' ? targetNilai / 1000 : targetNilai / 60;
+    return v == v.truncateToDouble() ? '${v.toInt()}' : v.toStringAsFixed(1);
+  }
+
+  static String challengeTargetUnit(String targetSatuan) =>
+      targetSatuan == 'jarak_m' ? 'KM' : 'MNT';
+
+  static String challengeTargetSummary(
+    double targetNilai,
+    String targetSatuan,
+  ) =>
+      '${challengeTargetValue(targetNilai, targetSatuan)} ${challengeTargetUnit(targetSatuan)}';
 
   // Account
   static String get account => _en ? 'ACCOUNT' : 'AKUN';
@@ -453,4 +480,18 @@ class S {
   static String get noLeaderboardCachedEmpty => _en
       ? 'Leaderboard data not cached yet.'
       : 'Data papan peringkat belum tersimpan.';
+
+  // OSM route & navigation micro-interactions
+  static String get noGpsPoints => _en
+      ? 'No GPS route points recorded'
+      : 'Belum ada titik rute GPS';
+  static String get loadingRoute =>
+      _en ? 'Loading route...' : 'Memuat rute...';
+  static String get recenterRoute => _en ? 'Fit route' : 'Paskan rute';
+  static String get toggleMapStyle =>
+      _en ? 'Switch map view' : 'Ganti tampilan peta';
+  static String get pressBackAgainToExit => _en
+      ? 'Press back again to exit'
+      : 'Tekan kembali lagi untuk keluar';
+  static String get unitKcal => _en ? 'kcal' : 'kkal';
 }

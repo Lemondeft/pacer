@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:pacer/src/auth/auth_repository.dart';
 import 'package:pacer/src/local/local_store.dart';
@@ -99,33 +100,56 @@ class _RootState extends State<_Root> {
 
   @override
   Widget build(BuildContext context) {
-    switch (_route) {
-      case 'loading':
-        return LoadingScreen(
-          onDone: () {
-            if (!mounted) return;
-            _resolveInitialRoute();
-          },
-        );
-      case 'create':
-        return CreateAccountScreen(
+    final disableAnims = MediaQuery.disableAnimationsOf(context);
+    final Widget screen = switch (_route) {
+      'loading' => LoadingScreen(
+        key: const ValueKey('loading'),
+        onDone: () {
+          if (!mounted) return;
+          _resolveInitialRoute();
+        },
+      ),
+      'create' => PopScope(
+        key: const ValueKey('create'),
+        canPop: false,
+        onPopInvokedWithResult: (didPop, _) {
+          if (!didPop) {
+            HapticFeedback.lightImpact();
+            setState(() => _route = 'getStarted');
+          }
+        },
+        child: CreateAccountScreen(
           onSubmitted: _enterMain,
           // Root-switched screens have no route to pop: back means GetStarted.
           onBack: () => setState(() => _route = 'getStarted'),
-        );
-      case 'login':
-        return LoginScreen(
+        ),
+      ),
+      'login' => PopScope(
+        key: const ValueKey('login'),
+        canPop: false,
+        onPopInvokedWithResult: (didPop, _) {
+          if (!didPop) {
+            HapticFeedback.lightImpact();
+            setState(() => _route = 'getStarted');
+          }
+        },
+        child: LoginScreen(
           onLoggedIn: _enterMain,
           onBack: () => setState(() => _route = 'getStarted'),
-        );
-      case 'main':
-        return const MainShell();
-      case 'getStarted':
-      default:
-        return GetStartedScreen(
-          onSignIn: () => setState(() => _route = 'create'),
-          onLogIn: () => setState(() => _route = 'login'),
-        );
-    }
+        ),
+      ),
+      'main' => const MainShell(key: ValueKey('main')),
+      _ => GetStartedScreen(
+        key: const ValueKey('getStarted'),
+        onSignIn: () => setState(() => _route = 'create'),
+        onLogIn: () => setState(() => _route = 'login'),
+      ),
+    };
+    return AnimatedSwitcher(
+      duration: disableAnims ? Duration.zero : const Duration(milliseconds: 240),
+      switchInCurve: Curves.easeOutCubic,
+      switchOutCurve: Curves.easeInCubic,
+      child: screen,
+    );
   }
 }
