@@ -1,10 +1,17 @@
+import 'dart:async' show Timer;
+import 'dart:ui' show ImageFilter;
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:pacer/core/responsive/responsive.dart';
 import 'package:pacer/src/aktivitas/activity_model.dart';
 import 'package:pacer/src/aktivitas/activity_repository.dart';
 import 'package:pacer/src/auth/auth_repository.dart';
+import 'package:pacer/src/challenge/challenge_model.dart';
+import 'package:pacer/src/challenge/challenge_repository.dart';
 import 'package:pacer/src/demo/pacer_dummy_data.dart';
+import 'package:pacer/src/leaderboard/leaderboard_repository.dart';
 import 'package:pacer/src/local/local_models.dart';
 import 'package:pacer/src/local/local_store.dart';
 import 'package:pacer/src/local/swr_helper.dart';
@@ -21,6 +28,7 @@ import 'app_strings.dart';
 import 'app_theme.dart';
 import 'format.dart';
 import 'more_screens.dart';
+import 'pacer_glass.dart';
 import 'widgets.dart';
 
 /// Figma LOADING SCREEN: the one PacerLogo + blue progress rectangle 218x18 r2.
@@ -308,16 +316,37 @@ class _CreateAccountScreenState extends State<CreateAccountScreen> {
   }
 }
 
-/// Figma HOME: PACER header + streak hero + History cards + Pacer Teams.
-/// compact: single column. medium: streak full width, history + teams in
-/// 2 columns. expanded: streak pane left, history + teams pane right.
-///
-/// Live data when signed in (streak row, own activities, own teams);
-/// Figma mock cards when in demo mode or while loading.
+/// Live home dashboard: PACER header, streak card, quick workout actions,
+/// weekly summary chart, active/available challenges, history, teams,
+/// and leaderboard snapshot. Responsive across compact/medium/expanded.
+typedef _HomeChallengeItem = ({
+  Challenge challenge,
+  PartisipasiChallenge? participation,
+  String? teamName,
+});
+
+typedef _HomeRankSummary = ({
+  String boardName,
+  int rank,
+  int total,
+  double value,
+  String kriteria,
+});
+
 class HomeScreen extends StatefulWidget {
   final VoidCallback? onSeeTeams;
   final VoidCallback? onSeeHistory;
-  const HomeScreen({super.key, this.onSeeTeams, this.onSeeHistory});
+  final VoidCallback? onSeeLeaderboard;
+  final ValueChanged<String>? onStartSport;
+  final VoidCallback? onContentUpdated;
+  const HomeScreen({
+    super.key,
+    this.onSeeTeams,
+    this.onSeeHistory,
+    this.onSeeLeaderboard,
+    this.onStartSport,
+    this.onContentUpdated,
+  });
 
   @override
   State<HomeScreen> createState() => HomeScreenState();
@@ -332,6 +361,14 @@ class _HomeData {
   final String initials;
   final bool isDemo;
   final AppNotification? assignedBanner;
+  final double weeklyKm;
+  final int weeklySeconds;
+  final int weeklyWorkouts;
+  final List<double> dailyKmThisWeek;
+  final List<_HomeChallengeItem> featuredChallenges;
+  final bool hasJoinedChallenges;
+  final _HomeRankSummary? rankSummary;
+
   const _HomeData({
     this.activities = const [],
     this.streak = 0,
@@ -340,6 +377,13 @@ class _HomeData {
     this.initials = '?',
     this.isDemo = false,
     this.assignedBanner,
+    this.weeklyKm = 0,
+    this.weeklySeconds = 0,
+    this.weeklyWorkouts = 0,
+    this.dailyKmThisWeek = const [0, 0, 0, 0, 0, 0, 0],
+    this.featuredChallenges = const [],
+    this.hasJoinedChallenges = false,
+    this.rankSummary,
   });
 
   _HomeData copyWith({AppNotification? Function()? assignedBanner}) => _HomeData(
@@ -352,6 +396,13 @@ class _HomeData {
     assignedBanner: assignedBanner != null
         ? assignedBanner()
         : this.assignedBanner,
+    weeklyKm: weeklyKm,
+    weeklySeconds: weeklySeconds,
+    weeklyWorkouts: weeklyWorkouts,
+    dailyKmThisWeek: dailyKmThisWeek,
+    featuredChallenges: featuredChallenges,
+    hasJoinedChallenges: hasJoinedChallenges,
+    rankSummary: rankSummary,
   );
 }
 
@@ -397,29 +448,90 @@ class HomeScreenState extends State<HomeScreen> {
   /// Reloads home dashboard cards. When [forceRefresh] is true, cache is bypassed.
   Future<void> reload({bool forceRefresh = false}) async {
     final d = await _load(forceRefresh: forceRefresh);
-    if (mounted) setState(() => _data = d);
+    if (mounted) {
+      setState(() => _data = d);
+      widget.onContentUpdated?.call();
+    }
+  }
+
+  ({int count, List<double> dailyKm}) _weeklyBreakdown(
+    List<LocalActivity> activities,
+    DateTime now,
+  ) {
+    final thisKey = periodeKey(now);
+    final bars = List<double>.filled(7, 0);
+    var count = 0;
+    for (final item in activities) {
+      final ts = (item.activity.mulaiAt ?? item.activity.selesaiAt)?.toLocal();
+      if (ts == null || periodeKey(ts) != thisKey) continue;
+      count++;
+      final dayIdx = (ts.weekday - 1).clamp(0, 6);
+      bars[dayIdx] += (item.activity.jarakM ?? 0) / 1000.0;
+    }
+    return (count: count, dailyKm: bars);
   }
 
   Future<_HomeData> _demoData() async {
     final now = DateTime.now();
     final notifs = await _notifRepo.listNotifications();
+    final demoActs = PacerDummyData.activities
+        .take(5)
+        .map(
+          (a) => LocalActivity(
+            activity: a,
+            syncState: SyncState.synced,
+            updatedAt: a.selesaiAt ?? a.mulaiAt ?? now,
+          ),
+        )
+        .toList();
+    final demoTeams = PacerDummyData.demoMyTeams;
+    final teamNames = {for (final t in PacerDummyData.demoTeams) t.id: t.nama};
+    final partsByChal = {
+      for (final p in PacerDummyData.getDemoParticipations()) p.challengeId: p,
+    };
+    final featured = <_HomeChallengeItem>[];
+    for (final c in PacerDummyData.demoChallenges) {
+      if (!c.diumumkan || !isChallengeActive(c, now.toUtc())) continue;
+      final p = partsByChal[c.id];
+      if (p != null && p.isActive && !p.berhasil) {
+        featured.add((
+          challenge: c,
+          participation: p,
+          teamName: c.teamId != null ? teamNames[c.teamId] : null,
+        ));
+      }
+      if (featured.length >= 3) break;
+    }
+    final lb = PacerDummyData.getLeaderboardData(scope: 'team');
+    _HomeRankSummary? rankSummary;
+    for (final row in lb.rows) {
+      if (row.entry.userId == lb.uid) {
+        rankSummary = (
+          boardName: lb.boardNama,
+          rank: row.entry.posisi ?? 1,
+          total: lb.rows.length,
+          value: row.entry.nilai,
+          kriteria: 'jarak',
+        );
+        break;
+      }
+    }
+    final dailyDemo = <double>[5.4, 0, 8.2, 6.5, 10.1, 7.8, 7.2];
     return _HomeData(
-      activities: PacerDummyData.activities
-          .take(3)
-          .map(
-            (a) => LocalActivity(
-              activity: a,
-              syncState: SyncState.synced,
-              updatedAt: a.selesaiAt ?? a.mulaiAt ?? now,
-            ),
-          )
-          .toList(),
+      activities: demoActs,
       streak: 5,
       streakLast: now.subtract(const Duration(hours: 4)),
-      teams: PacerDummyData.demoMyTeams,
+      teams: demoTeams,
       initials: 'PD',
       isDemo: true,
       assignedBanner: NotificationRepository.topAssignedBannerFrom(notifs),
+      weeklyKm: PacerDummyData.statistics.km,
+      weeklySeconds: PacerDummyData.statistics.seconds,
+      weeklyWorkouts: 5,
+      dailyKmThisWeek: dailyDemo,
+      featuredChallenges: featured,
+      hasJoinedChallenges: featured.isNotEmpty,
+      rankSummary: rankSummary,
     );
   }
 
@@ -428,19 +540,101 @@ class HomeScreenState extends State<HomeScreen> {
       if (await isDemoAccount()) {
         return await _demoData();
       }
+      final now = DateTime.now();
       final repo = ActivityRepository();
       final auth = AuthRepository();
+      final uid = await auth.resolveUserId();
       final activities = await repo.listLocalActivities(
-        limit: 5,
+        limit: 15,
         forceRefresh: forceRefresh,
       );
       final streak = await repo.getStreak(forceRefresh: forceRefresh);
+      final stats = await repo.getStatistik(
+        periodeKey(now),
+        forceRefresh: forceRefresh,
+      );
       final teams = await TeamRepository().myTeams(forceRefresh: forceRefresh);
       final profile = await auth.getProfile(forceRefresh: forceRefresh);
       final email = await auth.getSavedEmail();
       final notifs = await _notifRepo.listNotifications(
         forceRefresh: forceRefresh,
       );
+      final teamNames = {for (final t in teams) t.id: t.nama};
+
+      // Challenges: prioritized joined active items; fall back to open challenges.
+      final featured = <_HomeChallengeItem>[];
+      var hasJoined = false;
+      try {
+        final chalRepo = ChallengeRepository();
+        final allChals = await chalRepo.listChallenges(
+          forceRefresh: forceRefresh,
+        );
+        final parts = await chalRepo.myParticipations(
+          forceRefresh: forceRefresh,
+        );
+        final partMap = {for (final p in parts) p.challengeId: p};
+        final nowUtc = now.toUtc();
+        final activeChals = allChals
+            .where((c) => c.diumumkan && isChallengeActive(c, nowUtc))
+            .toList();
+        for (final c in activeChals) {
+          final p = partMap[c.id];
+          if (p != null && p.isActive && !p.berhasil) {
+            hasJoined = true;
+            featured.add((
+              challenge: c,
+              participation: p,
+              teamName: c.teamId != null ? teamNames[c.teamId] : null,
+            ));
+          }
+          if (featured.length >= 3) break;
+        }
+        if (featured.isEmpty) {
+          for (final c in activeChals) {
+            if (partMap.containsKey(c.id)) continue;
+            featured.add((
+              challenge: c,
+              participation: null,
+              teamName: c.teamId != null ? teamNames[c.teamId] : null,
+            ));
+            if (featured.length >= 2) break;
+          }
+        }
+      } catch (_) {}
+
+      // Top leaderboard snapshot (pure offline-first SWR, never throws).
+      _HomeRankSummary? rankSummary;
+      if (uid != null) {
+        try {
+          final lbRepo = LeaderboardRepository();
+          final boards = await lbRepo.listLeaderboards(
+            limit: 5,
+            forceRefresh: forceRefresh,
+          );
+          if (boards.isNotEmpty) {
+            final topBoard = boards.first;
+            final rows = await lbRepo.getPeringkatWithNames(
+              topBoard.id,
+              limit: 50,
+              forceRefresh: forceRefresh,
+            );
+            for (var i = 0; i < rows.length; i++) {
+              if (rows[i].entry.userId == uid) {
+                rankSummary = (
+                  boardName: topBoard.nama,
+                  rank: rows[i].entry.posisi ?? (i + 1),
+                  total: rows.length,
+                  value: rows[i].entry.nilai,
+                  kriteria: topBoard.kriteria,
+                );
+                break;
+              }
+            }
+          }
+        } catch (_) {}
+      }
+
+      final weekly = _weeklyBreakdown(activities, now);
       final name = (profile?.nama ?? '').trim();
       final label = name.isNotEmpty ? name : (email ?? 'P');
       return _HomeData(
@@ -451,6 +645,13 @@ class HomeScreenState extends State<HomeScreen> {
         initials: initialsOf(label),
         isDemo: false,
         assignedBanner: NotificationRepository.topAssignedBannerFrom(notifs),
+        weeklyKm: (stats?.jarakM ?? 0) / 1000.0,
+        weeklySeconds: stats?.waktuS ?? 0,
+        weeklyWorkouts: weekly.count,
+        dailyKmThisWeek: weekly.dailyKm,
+        featuredChallenges: featured,
+        hasJoinedChallenges: hasJoined,
+        rankSummary: rankSummary,
       );
     } catch (_) {
       if (await isDemoAccount()) {
@@ -563,6 +764,53 @@ class HomeScreenState extends State<HomeScreen> {
     );
   }
 
+  void _openStreaks() => Navigator.of(context)
+      .push(MaterialPageRoute(builder: (_) => const StreaksScreen()))
+      .then((_) => reload());
+
+  void _openStatistics() => Navigator.of(context)
+      .push(MaterialPageRoute(builder: (_) => const StatisticScreen()))
+      .then((_) => reload());
+
+  void _openChallenges() => Navigator.of(context)
+      .push(MaterialPageRoute(builder: (_) => const ChallengeListScreen()))
+      .then((_) => reload());
+
+  void _openLeaderboard() {
+    if (widget.onSeeLeaderboard != null) {
+      widget.onSeeLeaderboard!();
+    } else {
+      Navigator.of(context)
+          .push(
+            MaterialPageRoute(
+              builder: (ctx) =>
+                  LeaderboardScreen(onBack: () => Navigator.of(ctx).pop()),
+            ),
+          )
+          .then((_) => reload());
+    }
+  }
+
+  void _openTeams() {
+    if (widget.onSeeTeams != null) {
+      widget.onSeeTeams!();
+    } else {
+      Navigator.of(context)
+          .push(MaterialPageRoute(builder: (_) => const TeamsScreen()))
+          .then((_) => reload());
+    }
+  }
+
+  void _startSport(String sport) {
+    if (widget.onStartSport != null) {
+      widget.onStartSport!(sport);
+    } else {
+      Navigator.of(context)
+          .push(MaterialPageRoute(builder: (_) => RunSetupScreen(initialSport: sport)))
+          .then((_) => reload());
+    }
+  }
+
   Widget _streak() {
     // The card carries its own header pill, so no separate SectionHeader —
     // count, week strip, and record read as one unit.
@@ -572,39 +820,862 @@ class HomeScreenState extends State<HomeScreen> {
     final last = _data?.streakLast;
     final raw = _data?.streak ?? 0;
     final count = effectiveStreak(count: raw, last: last, now: now);
-    return StreakCard(
-      count: count,
-      done: streakWeek(count: count, last: last, now: now),
-      todayIndex: now.weekday - 1,
-      status: streakStatusOf(count: raw, last: last, now: now),
+    return GestureDetector(
+      onTap: _openStreaks,
+      behavior: HitTestBehavior.opaque,
+      child: PacerTapScale(
+        child: StreakCard(
+          count: count,
+          done: streakWeek(count: count, last: last, now: now),
+          todayIndex: now.weekday - 1,
+          status: streakStatusOf(count: raw, last: last, now: now),
+        ),
+      ),
+    );
+  }
+
+  Widget _quickActions() {
+    final scheme = PacerScheme.of(context);
+    final dark = Theme.of(context).brightness == Brightness.dark;
+    final items = [
+      (key: 'lari', icon: Icons.directions_run_rounded, accent: scheme.accent),
+      (key: 'joging', icon: Icons.directions_walk_rounded, accent: PacerColors.primary),
+      (key: 'bersepeda', icon: Icons.directions_bike_rounded, accent: const Color(0xFF7C4DFF)),
+      (key: 'berjalan', icon: Icons.nordic_walking_rounded, accent: const Color(0xFFFF8A00)),
+    ];
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.only(bottom: 12),
+          child: Row(
+            children: [
+              Container(
+                width: 4,
+                height: 18,
+                decoration: BoxDecoration(
+                  color: scheme.accent,
+                  borderRadius: BorderRadius.circular(99),
+                ),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  S.quickStartTitle,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: GoogleFonts.spaceGrotesk(
+                    fontWeight: FontWeight.w700,
+                    fontSize: 18.5,
+                    letterSpacing: -0.3,
+                    color: scheme.ink,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+        Row(
+          children: [
+            for (var i = 0; i < items.length; i++) ...[
+              if (i > 0) const SizedBox(width: 8),
+              Expanded(
+                child: GestureDetector(
+                  onTap: () => _startSport(items[i].key),
+                  behavior: HitTestBehavior.opaque,
+                  child: PacerTapScale(
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 6,
+                        vertical: 12,
+                      ),
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                          colors: [
+                            Color.lerp(
+                              scheme.card,
+                              items[i].accent,
+                              dark ? 0.08 : 0.06,
+                            )!,
+                            scheme.card,
+                          ],
+                        ),
+                        borderRadius: BorderRadius.circular(18),
+                        border: Border.all(
+                          color: items[i].accent.withValues(
+                            alpha: dark ? 0.28 : 0.35,
+                          ),
+                        ),
+                      ),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Container(
+                            width: 38,
+                            height: 38,
+                            decoration: BoxDecoration(
+                              color: items[i].accent.withValues(
+                                alpha: dark ? 0.16 : 0.14,
+                              ),
+                              borderRadius: BorderRadius.circular(12),
+                              border: Border.all(
+                                color: items[i].accent.withValues(alpha: 0.32),
+                              ),
+                            ),
+                            child: Icon(
+                              items[i].icon,
+                              size: 20,
+                              color: items[i].accent,
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          FittedBox(
+                            fit: BoxFit.scaleDown,
+                            child: Text(
+                              S.sportName(items[i].key),
+                              maxLines: 1,
+                              style: GoogleFonts.spaceGrotesk(
+                                fontSize: 12.5,
+                                fontWeight: FontWeight.w700,
+                                color: scheme.ink,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ],
+        ),
+      ],
+    );
+  }
+
+  Widget _weeklyOverview() {
+    final scheme = PacerScheme.of(context);
+    final dark = Theme.of(context).brightness == Brightness.dark;
+    final d = _data;
+    final weeklyKm = d?.weeklyKm ?? 0;
+    final weeklySec = d?.weeklySeconds ?? 0;
+    final weeklyCount = d?.weeklyWorkouts ?? 0;
+    final bars = d?.dailyKmThisWeek ?? const [0, 0, 0, 0, 0, 0, 0];
+    final maxBar = bars.fold<double>(1.0, (m, v) => v > m ? v : m);
+    final paceText = weeklyKm > 0 && weeklySec > 0
+        ? fmtPace(weeklySec, weeklyKm * 1000)
+        : '—';
+    final dayLetters = S.dayLetters;
+    final todayIdx = DateTime.now().weekday - 1;
+
+    return GestureDetector(
+      onTap: _openStatistics,
+      behavior: HitTestBehavior.opaque,
+      child: PacerTapScale(
+        child: Container(
+          width: double.infinity,
+          clipBehavior: Clip.antiAlias,
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [
+                Color.lerp(
+                  scheme.card,
+                  scheme.accent,
+                  dark ? 0.08 : 0.05,
+                )!,
+                Color.lerp(scheme.scaffold, scheme.card, 0.55)!,
+              ],
+            ),
+            borderRadius: BorderRadius.circular(24),
+            border: Border.all(
+              color: dark
+                  ? scheme.accent.withValues(alpha: 0.25)
+                  : scheme.border,
+            ),
+          ),
+          child: Stack(
+            children: [
+              Positioned(
+                right: -24,
+                top: -24,
+                child: IgnorePointer(
+                  child: Container(
+                    width: 110,
+                    height: 110,
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      gradient: RadialGradient(
+                        colors: [
+                          scheme.accent.withValues(
+                            alpha: dark ? 0.16 : 0.10,
+                          ),
+                          Colors.transparent,
+                        ],
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+              Padding(
+                padding: const EdgeInsets.all(20),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Row(
+                      children: [
+                        Container(
+                          width: 26,
+                          height: 26,
+                          decoration: BoxDecoration(
+                            color: scheme.accent.withValues(alpha: 0.16),
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Icon(
+                            Icons.insights_rounded,
+                            size: 15,
+                            color: scheme.accent,
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            S.weeklyOverviewTitle,
+                            style: GoogleFonts.spaceGrotesk(
+                              fontSize: 16,
+                              fontWeight: FontWeight.w700,
+                              color: scheme.ink,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                        ),
+                        const SizedBox(width: 6),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 4,
+                          ),
+                          decoration: BoxDecoration(
+                            color: scheme.accent.withValues(
+                              alpha: dark ? 0.14 : 0.12,
+                            ),
+                            borderRadius: BorderRadius.circular(999),
+                            border: Border.all(
+                              color: scheme.accent.withValues(
+                                alpha: dark ? 0.35 : 0.28,
+                              ),
+                            ),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Text(
+                                S.viewStats,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w700,
+                                  color: dark ? scheme.accent : scheme.ink,
+                                ),
+                              ),
+                              const SizedBox(width: 2),
+                              Icon(
+                                Icons.chevron_right_rounded,
+                                size: 15,
+                                color: dark ? scheme.accent : scheme.ink,
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 14),
+                    Row(
+                      crossAxisAlignment: CrossAxisAlignment.end,
+                      children: [
+                        Expanded(
+                          child: Align(
+                            alignment: Alignment.bottomLeft,
+                            child: FittedBox(
+                              fit: BoxFit.scaleDown,
+                              alignment: Alignment.bottomLeft,
+                              child: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                crossAxisAlignment: CrossAxisAlignment.end,
+                                children: [
+                                  Text(
+                                    weeklyKm.toStringAsFixed(2),
+                                    style: GoogleFonts.spaceGrotesk(
+                                      fontSize: 34,
+                                      fontWeight: FontWeight.w800,
+                                      color: scheme.ink,
+                                      height: 1.0,
+                                    ),
+                                  ),
+                                  const SizedBox(width: 6),
+                                  Padding(
+                                    padding: const EdgeInsets.only(bottom: 3),
+                                    child: Text(
+                                      'km',
+                                      style: GoogleFonts.spaceGrotesk(
+                                        fontSize: 14.5,
+                                        fontWeight: FontWeight.w700,
+                                        color: scheme.accent,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 9,
+                            vertical: 4,
+                          ),
+                          decoration: BoxDecoration(
+                            color: scheme.searchBg.withValues(alpha: 0.75),
+                            borderRadius: BorderRadius.circular(999),
+                          ),
+                          child: Text(
+                            S.runsCount(weeklyCount),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                            textAlign: TextAlign.end,
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                              color: scheme.muted,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
+                    // Inset 7-day volume chart well
+                    Container(
+                      padding: const EdgeInsets.fromLTRB(12, 12, 12, 10),
+                      decoration: BoxDecoration(
+                        color: scheme.scaffold.withValues(
+                          alpha: dark ? 0.55 : 0.75,
+                        ),
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(
+                          color: scheme.border.withValues(alpha: 0.55),
+                        ),
+                      ),
+                      child: SizedBox(
+                        height: 60,
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.end,
+                          children: [
+                            for (var i = 0; i < 7; i++) ...[
+                              if (i > 0) const SizedBox(width: 8),
+                              Expanded(
+                                child: Column(
+                                  mainAxisAlignment: MainAxisAlignment.end,
+                                  children: [
+                                    Expanded(
+                                      child: Container(
+                                        width: double.infinity,
+                                        decoration: BoxDecoration(
+                                          color: scheme.border.withValues(
+                                            alpha: dark ? 0.35 : 0.45,
+                                          ),
+                                          borderRadius: BorderRadius.circular(8),
+                                        ),
+                                        alignment: Alignment.bottomCenter,
+                                        child: FractionallySizedBox(
+                                          widthFactor: 1.0,
+                                          heightFactor: bars[i] <= 0
+                                              ? 0.16
+                                              : (bars[i] / maxBar).clamp(
+                                                  0.24,
+                                                  1.0,
+                                                ),
+                                          child: Container(
+                                            decoration: BoxDecoration(
+                                              gradient: bars[i] > 0
+                                                  ? LinearGradient(
+                                                      begin: Alignment.topCenter,
+                                                      end: Alignment.bottomCenter,
+                                                      colors: i == todayIdx
+                                                          ? [
+                                                              PacerColors.primary,
+                                                              const Color(
+                                                                0xFF38BDF8,
+                                                              ),
+                                                            ]
+                                                          : [
+                                                              scheme.accent,
+                                                              Color.lerp(
+                                                                scheme.accent,
+                                                                PacerColors.neon,
+                                                                0.4,
+                                                              )!,
+                                                            ],
+                                                    )
+                                                  : null,
+                                              color: bars[i] <= 0
+                                                  ? scheme.border.withValues(
+                                                      alpha: 0.65,
+                                                    )
+                                                  : null,
+                                              borderRadius:
+                                                  BorderRadius.circular(8),
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                    ),
+                                    const SizedBox(height: 6),
+                                    Text(
+                                      dayLetters[i],
+                                      style: TextStyle(
+                                        fontSize: 10.5,
+                                        fontWeight: i == todayIdx
+                                            ? FontWeight.w800
+                                            : FontWeight.w600,
+                                        color: i == todayIdx
+                                            ? scheme.accent
+                                            : scheme.muted,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ],
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: _WeeklyStatMetric(
+                            icon: Icons.timer_outlined,
+                            label: S.time,
+                            value: weeklySec > 0 ? fmtDurasi(weeklySec) : '0m',
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: _WeeklyStatMetric(
+                            icon: Icons.speed_rounded,
+                            label: S.avgPaceShort,
+                            value: paceText,
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: _WeeklyStatMetric(
+                            icon: Icons.bolt_rounded,
+                            label: S.workoutsShort,
+                            value: '$weeklyCount',
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _challenges() {
+    final scheme = PacerScheme.of(context);
+    final items = _data?.featuredChallenges ?? const [];
+    final hasJoined = _data?.hasJoinedChallenges ?? false;
+    final title = hasJoined ? S.activeChallengesTitle : S.openChallengesTitle;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        SectionHeader(title: title, onSeeAll: _openChallenges),
+        const SizedBox(height: 14),
+        if (items.isEmpty)
+          GestureDetector(
+            onTap: _openChallenges,
+            behavior: HitTestBehavior.opaque,
+            child: PacerTapScale(
+              child: Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(18),
+                decoration: BoxDecoration(
+                  color: scheme.card,
+                  borderRadius: BorderRadius.circular(20),
+                  border: Border.all(color: scheme.border),
+                ),
+                child: Row(
+                  children: [
+                    Container(
+                      width: 42,
+                      height: 42,
+                      decoration: BoxDecoration(
+                        color: scheme.accent.withValues(alpha: 0.16),
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                      child: Icon(
+                        Icons.emoji_events_outlined,
+                        color: scheme.accent,
+                      ),
+                    ),
+                    const SizedBox(width: 14),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            S.browseChallengesCta,
+                            style: GoogleFonts.spaceGrotesk(
+                              fontSize: 15,
+                              fontWeight: FontWeight.w700,
+                              color: scheme.ink,
+                            ),
+                          ),
+                          const SizedBox(height: 3),
+                          Text(
+                            S.noChallengesHomeHint,
+                            style: TextStyle(
+                              fontSize: 12.5,
+                              color: scheme.muted,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    Icon(Icons.chevron_right_rounded, color: scheme.muted),
+                  ],
+                ),
+              ),
+            ),
+          )
+        else
+          for (var i = 0; i < items.length; i++) ...[
+            if (i > 0) const SizedBox(height: 12),
+            _HomeChallengeCard(
+              challenge: items[i].challenge,
+              participation: items[i].participation,
+              teamName: items[i].teamName,
+              onTap: () async {
+                final changed = await ChallengeDetailSheet.show(
+                  context,
+                  challenge: items[i].challenge,
+                  participation: items[i].participation,
+                );
+                if (changed == true && mounted) {
+                  reload(forceRefresh: true);
+                }
+              },
+            ),
+          ],
+      ],
+    );
+  }
+
+  Widget _standingCard() {
+    final scheme = PacerScheme.of(context);
+    final dark = Theme.of(context).brightness == Brightness.dark;
+    final summary = _data?.rankSummary;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        SectionHeader(
+          title: S.leaderboardSnapshotTitle,
+          onSeeAll: _openLeaderboard,
+        ),
+        const SizedBox(height: 14),
+        GestureDetector(
+          onTap: _openLeaderboard,
+          behavior: HitTestBehavior.opaque,
+          child: PacerTapScale(
+            child: Container(
+              width: double.infinity,
+              clipBehavior: Clip.antiAlias,
+              decoration: BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                  colors: [
+                    Color.lerp(
+                      scheme.card,
+                      scheme.accent,
+                      dark ? 0.09 : 0.06,
+                    )!,
+                    Color.lerp(scheme.scaffold, scheme.card, 0.55)!,
+                  ],
+                ),
+                borderRadius: BorderRadius.circular(22),
+                border: Border.all(
+                  color: summary != null
+                      ? scheme.accent.withValues(alpha: dark ? 0.45 : 0.65)
+                      : scheme.border,
+                ),
+              ),
+              child: Stack(
+                children: [
+                  Positioned(
+                    right: -12,
+                    bottom: -18,
+                    child: IgnorePointer(
+                      child: Icon(
+                        Icons.emoji_events_rounded,
+                        size: 96,
+                        color: (summary != null
+                                ? scheme.accent
+                                : PacerColors.primary)
+                            .withValues(alpha: dark ? 0.07 : 0.08),
+                      ),
+                    ),
+                  ),
+                  Padding(
+                    padding: const EdgeInsets.all(18),
+                    child: summary != null
+                        ? Row(
+                            children: [
+                              Container(
+                                width: 52,
+                                height: 52,
+                                decoration: BoxDecoration(
+                                  color: scheme.accent,
+                                  borderRadius: BorderRadius.circular(16),
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: scheme.accent.withValues(
+                                        alpha: dark ? 0.28 : 0.35,
+                                      ),
+                                      blurRadius: 12,
+                                      offset: const Offset(0, 4),
+                                    ),
+                                  ],
+                                ),
+                                alignment: Alignment.center,
+                                child: Text(
+                                  '#${summary.rank}',
+                                  style: GoogleFonts.spaceGrotesk(
+                                    fontSize: 18,
+                                    fontWeight: FontWeight.w800,
+                                    color:
+                                        ThemeData.estimateBrightnessForColor(
+                                              scheme.accent,
+                                            ) ==
+                                            Brightness.light
+                                        ? PacerColors.navy
+                                        : Colors.white,
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(width: 14),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      summary.boardName,
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                      style: GoogleFonts.spaceGrotesk(
+                                        fontSize: 15.5,
+                                        fontWeight: FontWeight.w700,
+                                        color: scheme.ink,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 5),
+                                    Row(
+                                      children: [
+                                        Container(
+                                          padding: const EdgeInsets.symmetric(
+                                            horizontal: 8,
+                                            vertical: 2,
+                                          ),
+                                          decoration: BoxDecoration(
+                                            color: scheme.searchBg.withValues(
+                                              alpha: 0.85,
+                                            ),
+                                            borderRadius: BorderRadius.circular(
+                                              999,
+                                            ),
+                                          ),
+                                          child: Text(
+                                            '${summary.rank} / ${summary.total}',
+                                            style: TextStyle(
+                                              fontSize: 11,
+                                              fontWeight: FontWeight.w700,
+                                              color: dark
+                                                  ? scheme.accent
+                                                  : scheme.ink,
+                                            ),
+                                          ),
+                                        ),
+                                        const SizedBox(width: 8),
+                                        Expanded(
+                                          child: Text(
+                                            '${summary.value.toStringAsFixed(1)} ${summary.kriteria == 'kalori' ? 'kcal' : summary.kriteria == 'durasi' ? S.unitMinutes : 'km'}',
+                                            maxLines: 1,
+                                            overflow: TextOverflow.ellipsis,
+                                            style: TextStyle(
+                                              fontSize: 12.5,
+                                              fontWeight: FontWeight.w600,
+                                              color: scheme.muted,
+                                            ),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              Container(
+                                width: 32,
+                                height: 32,
+                                decoration: BoxDecoration(
+                                  color: scheme.searchBg.withValues(alpha: 0.7),
+                                  shape: BoxShape.circle,
+                                ),
+                                child: Icon(
+                                  Icons.chevron_right_rounded,
+                                  size: 18,
+                                  color: scheme.ink,
+                                ),
+                              ),
+                            ],
+                          )
+                        : Row(
+                            children: [
+                              Container(
+                                width: 46,
+                                height: 46,
+                                decoration: BoxDecoration(
+                                  color: PacerColors.primary.withValues(
+                                    alpha: 0.14,
+                                  ),
+                                  borderRadius: BorderRadius.circular(14),
+                                  border: Border.all(
+                                    color: PacerColors.primary.withValues(
+                                      alpha: 0.28,
+                                    ),
+                                  ),
+                                ),
+                                child: const Icon(
+                                  Icons.leaderboard_rounded,
+                                  color: PacerColors.primary,
+                                ),
+                              ),
+                              const SizedBox(width: 14),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Text(
+                                      S.openLeaderboardCta,
+                                      style: GoogleFonts.spaceGrotesk(
+                                        fontSize: 15,
+                                        fontWeight: FontWeight.w700,
+                                        color: scheme.ink,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 3),
+                                    Text(
+                                      S.noRankingYet,
+                                      style: TextStyle(
+                                        fontSize: 12.5,
+                                        color: scheme.muted,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                              Container(
+                                width: 32,
+                                height: 32,
+                                decoration: BoxDecoration(
+                                  color: scheme.searchBg.withValues(alpha: 0.7),
+                                  shape: BoxShape.circle,
+                                ),
+                                child: Icon(
+                                  Icons.chevron_right_rounded,
+                                  size: 18,
+                                  color: scheme.ink,
+                                ),
+                              ),
+                            ],
+                          ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      ],
     );
   }
 
   Widget _history() {
+    final scheme = PacerScheme.of(context);
     final activities = _data?.activities;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         GestureDetector(
           onTap: widget.onSeeHistory,
+          behavior: HitTestBehavior.opaque,
           child: Padding(
-            padding: const EdgeInsets.symmetric(vertical: 12),
+            padding: const EdgeInsets.symmetric(vertical: 8),
             child: Row(
-              mainAxisSize: MainAxisSize.min,
               children: [
-                Text(
-                  S.history,
-                  style: const TextStyle(
-                    fontWeight: FontWeight.w500,
-                    fontSize: 20,
+                Container(
+                  width: 4,
+                  height: 18,
+                  decoration: BoxDecoration(
+                    color: scheme.accent,
+                    borderRadius: BorderRadius.circular(99),
                   ),
                 ),
-                const Icon(Icons.chevron_right, size: 20),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    S.history,
+                    style: GoogleFonts.spaceGrotesk(
+                      fontWeight: FontWeight.w700,
+                      fontSize: 18.5,
+                      letterSpacing: -0.3,
+                      color: scheme.ink,
+                    ),
+                  ),
+                ),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 5,
+                  ),
+                  decoration: BoxDecoration(
+                    color: scheme.card,
+                    borderRadius: BorderRadius.circular(999),
+                    border: Border.all(color: scheme.border),
+                  ),
+                  child: Icon(
+                    Icons.chevron_right_rounded,
+                    size: 16,
+                    color: scheme.ink,
+                  ),
+                ),
               ],
             ),
           ),
         ),
-        const SizedBox(height: 8),
+        const SizedBox(height: 10),
         // Empty state instead of mock cards when signed in.
         if (activities == null || activities.isEmpty)
           PacerEmptyState(
@@ -612,9 +1683,9 @@ class HomeScreenState extends State<HomeScreen> {
             icon: Icons.directions_run_outlined,
           )
         else
-          for (final item in activities.take(2))
+          for (final item in activities.take(3))
             Padding(
-              padding: const EdgeInsets.only(bottom: 16),
+              padding: const EdgeInsets.only(bottom: 14),
               child: RunSessionCard(
                 title: S.sportName(item.activity.jenis),
                 date: fmtDate(item.activity.mulaiAt),
@@ -667,12 +1738,21 @@ class HomeScreenState extends State<HomeScreen> {
                 children: [
                   // Compact variant: the carousel is only 150px tall.
                   if (teams == null || teams.isEmpty)
-                    PacerEmptyState(
-                      S.noTeamsCachedEmpty,
-                      icon: Icons.groups_outlined,
-                      compact: true,
+                    SizedBox(
+                      width: cardW,
+                      child: GestureDetector(
+                        onTap: _openTeams,
+                        behavior: HitTestBehavior.opaque,
+                        child: PacerTapScale(
+                          child: PacerEmptyState(
+                            S.noTeamsCachedEmpty,
+                            icon: Icons.groups_outlined,
+                            compact: true,
+                          ),
+                        ),
+                      ),
                     )
-                  else
+                  else ...[
                     for (var i = 0; i < teams.length; i++) ...[
                       if (i > 0) const SizedBox(width: 19),
                       GestureDetector(
@@ -699,6 +1779,9 @@ class HomeScreenState extends State<HomeScreen> {
                         ),
                       ),
                     ],
+                    const SizedBox(width: 19),
+                    _HomeExploreClubsCard(width: 168, onTap: _openTeams),
+                  ],
                 ],
               );
             },
@@ -756,23 +1839,49 @@ class HomeScreenState extends State<HomeScreen> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       _streak(),
-                      const SizedBox(height: 8),
+                      const SizedBox(height: 20),
+                      _quickActions(),
+                      const SizedBox(height: 24),
+                      _weeklyOverview(),
+                      const SizedBox(height: 28),
+                      _challenges(),
+                      const SizedBox(height: 24),
+                      _standingCard(),
+                      const SizedBox(height: 28),
                       _history(),
-                      const SizedBox(height: 32),
+                      const SizedBox(height: 28),
                       _teams(),
                     ],
                   ),
                   ScreenSize.medium => Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      _streak(),
-                      const SizedBox(height: 24),
                       Row(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Expanded(child: _history()),
+                          Expanded(child: _streak()),
                           const SizedBox(width: 24),
+                          Expanded(child: _weeklyOverview()),
+                        ],
+                      ),
+                      const SizedBox(height: 20),
+                      _quickActions(),
+                      const SizedBox(height: 28),
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Expanded(child: _challenges()),
+                          const SizedBox(width: 24),
+                          Expanded(child: _history()),
+                        ],
+                      ),
+                      const SizedBox(height: 28),
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
                           Expanded(child: _teams()),
+                          const SizedBox(width: 24),
+                          Expanded(child: _standingCard()),
                         ],
                       ),
                     ],
@@ -780,13 +1889,29 @@ class HomeScreenState extends State<HomeScreen> {
                   ScreenSize.expanded => Row(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Expanded(flex: 2, child: _streak()),
+                      Expanded(
+                        flex: 2,
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            _streak(),
+                            const SizedBox(height: 24),
+                            _weeklyOverview(),
+                            const SizedBox(height: 24),
+                            _standingCard(),
+                          ],
+                        ),
+                      ),
                       const SizedBox(width: 32),
                       Expanded(
                         flex: 3,
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
+                            _quickActions(),
+                            const SizedBox(height: 28),
+                            _challenges(),
+                            const SizedBox(height: 28),
                             _history(),
                             const SizedBox(height: 32),
                             _teams(),
@@ -825,18 +1950,83 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
   ActiveDraftRun? _resumedDraft;
   bool _draftPrompted = false;
   final GlobalKey<HomeScreenState> _homeKey = GlobalKey<HomeScreenState>();
+  final LiquidGlassViewController _glassController =
+      LiquidGlassViewController();
+  Timer? _glassScrollTimer;
+  bool _glassRealtime = false;
+  bool _glassCaptureScheduled = false;
+  Brightness? _lastBrightness;
 
   @override
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    WidgetsBinding.instance.addPostFrameCallback((_) => _checkPendingDraft());
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _checkPendingDraft();
+      _glassController.captureOnce();
+    });
   }
 
   @override
   void dispose() {
+    _glassScrollTimer?.cancel();
+    _glassScrollTimer = null;
+    if (_glassRealtime) {
+      _glassRealtime = false;
+      _glassController.stopRealtimeCapture();
+    }
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
+  }
+
+  void _scheduleGlassCapture() {
+    // When Impeller shader filters are available, LiquidGlassLens reads the
+    // live backdrop via BackdropFilter and never needs RepaintBoundary capture.
+    if (ImageFilter.isShaderFilterSupported ||
+        _index == 1 ||
+        _glassCaptureScheduled) {
+      return;
+    }
+    _glassCaptureScheduled = true;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _glassCaptureScheduled = false;
+      if (!mounted || _index == 1) return;
+      _glassController.captureOnce();
+    });
+  }
+
+  void _startGlassRealtime() {
+    if (ImageFilter.isShaderFilterSupported || _index == 1) return;
+    _glassScrollTimer?.cancel();
+    if (!_glassRealtime) {
+      _glassRealtime = true;
+      _glassController.startRealtimeCapture();
+    }
+    _glassScrollTimer = Timer(const Duration(milliseconds: 140), () {
+      _glassScrollTimer = null;
+      _stopGlassRealtime();
+    });
+  }
+
+  void _stopGlassRealtime() {
+    _glassScrollTimer?.cancel();
+    _glassScrollTimer = null;
+    if (_glassRealtime) {
+      _glassRealtime = false;
+      _glassController.stopRealtimeCapture();
+    }
+    _scheduleGlassCapture();
+  }
+
+  bool _handleGlassScroll(ScrollNotification notification) {
+    if (_index == 1) return false;
+    if (notification is ScrollStartNotification ||
+        notification is ScrollUpdateNotification) {
+      _startGlassRealtime();
+    } else if (notification is ScrollEndNotification) {
+      _stopGlassRealtime();
+    }
+    return false;
   }
 
   @override
@@ -934,6 +2124,7 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
       }
       return;
     }
+    if (i == 1) _stopGlassRealtime();
     setState(() {
       if (_index != 1 && (_tabHistory.isEmpty || _tabHistory.last != _index)) {
         _tabHistory.add(_index);
@@ -948,11 +2139,13 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
       }
       _index = i;
     });
+    if (i != 1) _scheduleGlassCapture();
   }
 
   void _goBackFromTab() {
     if (_tabHistory.isNotEmpty) {
       final prev = _tabHistory.removeLast();
+      if (prev == 1) _stopGlassRealtime();
       setState(() {
         if (_index == 1 && prev != 1) _activeChallengeIds = null;
         _resumedDraft = null;
@@ -961,6 +2154,7 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
       if (prev == 0) {
         _homeKey.currentState?.reload();
       }
+      if (prev != 1) _scheduleGlassCapture();
       return;
     }
     if (_index != 0) {
@@ -970,6 +2164,7 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
         _index = 0;
       });
       _homeKey.currentState?.reload();
+      _scheduleGlassCapture();
     }
   }
 
@@ -1000,65 +2195,83 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
 
   void _goHistory() => Navigator.of(context)
       .push(MaterialPageRoute(builder: (_) => const HistoryScreen()))
-      .then((_) => _homeKey.currentState?.reload());
+      .then((_) {
+        _homeKey.currentState?.reload();
+        _scheduleGlassCapture();
+      });
 
-  void _goSetup() => Navigator.of(context).push(
-    MaterialPageRoute(
-      builder: (_) => RunSetupScreen(
-        onStartWithChallenges: (sport, goal, challengeIds) {
-          Navigator.of(context).pop();
-          setState(() {
-            if (_index != 1 &&
-                (_tabHistory.isEmpty || _tabHistory.last != _index)) {
-              _tabHistory.add(_index);
-              if (_tabHistory.length > 12) _tabHistory.removeAt(0);
-            }
-            _resumedDraft = null;
-            _activeSport = sport;
-            _activeGoal = goal;
-            _activeChallengeIds = challengeIds;
-            _index = 1;
-          });
-        },
-        onStartWithConfig: (sport, goal) {
-          Navigator.of(context).pop();
-          setState(() {
-            if (_index != 1 &&
-                (_tabHistory.isEmpty || _tabHistory.last != _index)) {
-              _tabHistory.add(_index);
-              if (_tabHistory.length > 12) _tabHistory.removeAt(0);
-            }
-            _resumedDraft = null;
-            _activeSport = sport;
-            _activeGoal = goal;
-            _activeChallengeIds = null;
-            _index = 1;
-          });
-        },
-        onStart: () {
-          Navigator.of(context).pop();
-          setState(() {
-            if (_index != 1 &&
-                (_tabHistory.isEmpty || _tabHistory.last != _index)) {
-              _tabHistory.add(_index);
-              if (_tabHistory.length > 12) _tabHistory.removeAt(0);
-            }
-            _resumedDraft = null;
-            _activeChallengeIds = null;
-            _index = 1;
-          });
-        },
-      ),
-    ),
-  );
+  void _goSetup({String? initialSport}) => Navigator.of(context)
+      .push(
+        MaterialPageRoute(
+          builder: (_) => RunSetupScreen(
+            initialSport: initialSport,
+            onStartWithChallenges: (sport, goal, challengeIds) {
+              Navigator.of(context).pop();
+              _stopGlassRealtime();
+              setState(() {
+                if (_index != 1 &&
+                    (_tabHistory.isEmpty || _tabHistory.last != _index)) {
+                  _tabHistory.add(_index);
+                  if (_tabHistory.length > 12) _tabHistory.removeAt(0);
+                }
+                _resumedDraft = null;
+                _activeSport = sport;
+                _activeGoal = goal;
+                _activeChallengeIds = challengeIds;
+                _index = 1;
+              });
+            },
+            onStartWithConfig: (sport, goal) {
+              Navigator.of(context).pop();
+              _stopGlassRealtime();
+              setState(() {
+                if (_index != 1 &&
+                    (_tabHistory.isEmpty || _tabHistory.last != _index)) {
+                  _tabHistory.add(_index);
+                  if (_tabHistory.length > 12) _tabHistory.removeAt(0);
+                }
+                _resumedDraft = null;
+                _activeSport = sport;
+                _activeGoal = goal;
+                _activeChallengeIds = null;
+                _index = 1;
+              });
+            },
+            onStart: () {
+              Navigator.of(context).pop();
+              _stopGlassRealtime();
+              setState(() {
+                if (_index != 1 &&
+                    (_tabHistory.isEmpty || _tabHistory.last != _index)) {
+                  _tabHistory.add(_index);
+                  if (_tabHistory.length > 12) _tabHistory.removeAt(0);
+                }
+                _resumedDraft = null;
+                _activeChallengeIds = null;
+                _index = 1;
+              });
+            },
+          ),
+        ),
+      )
+      .then((_) => _scheduleGlassCapture());
 
   @override
   Widget build(BuildContext context) {
+    final brightness = Theme.of(context).brightness;
+    if (_lastBrightness != null && _lastBrightness != brightness) {
+      _scheduleGlassCapture();
+    }
+    _lastBrightness = brightness;
+
     final pages = [
       HomeScreen(
         key: _homeKey,
         onSeeTeams: () => _onPillTap(2),
         onSeeHistory: _goHistory,
+        onSeeLeaderboard: () => _onPillTap(3),
+        onStartSport: (sport) => _goSetup(initialSport: sport),
+        onContentUpdated: _scheduleGlassCapture,
       ),
       // Tracker gets the full screen: nav pill hidden (it covered PAUSE),
       // back button returns to the previous tab instead. Mounted only when active.
@@ -1077,6 +2290,12 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
     ];
     final w = MediaQuery.sizeOf(context).width;
     if (w >= Breakpoints.expanded) {
+      if (_glassRealtime) {
+        _glassRealtime = false;
+        _glassScrollTimer?.cancel();
+        _glassScrollTimer = null;
+        _glassController.stopRealtimeCapture();
+      }
       return PopScope(
         canPop: false,
         onPopInvokedWithResult: (didPop, _) {
@@ -1085,7 +2304,11 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
         child: Scaffold(
           body: Row(
             children: [
-              _PacerNavRail(index: _index, onTap: _onPillTap, onStart: _goSetup),
+              _PacerNavRail(
+                index: _index,
+                onTap: _onPillTap,
+                onStart: () => _goSetup(),
+              ),
               Expanded(child: _AnimatedTabStack(index: _index, children: pages)),
             ],
           ),
@@ -1097,40 +2320,51 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
     var pillW = fluid(w, 377, 480);
     if (pillW > w - 16) pillW = w - 16;
     final pillScale = pillW / 377;
+    final tabBackdrop = NotificationListener<ScrollNotification>(
+      onNotification: _handleGlassScroll,
+      child: _AnimatedTabStack(index: _index, children: pages),
+    );
     return PopScope(
       canPop: false,
       onPopInvokedWithResult: (didPop, _) {
         if (!didPop) _handleShellBack();
       },
       child: Scaffold(
-        body: Stack(
-          children: [
-            _AnimatedTabStack(index: _index, children: pages),
-            if (_index != 1)
-              Positioned(
-                left: 0,
-                right: 0,
-                // Sticks low: small margin above the bottom edge.
-                bottom: 16,
-                child: Center(
-                  child: SizedBox(
-                    width: pillW,
-                    height: 80.7 * pillScale,
-                    // Pill is authored at fixed 377x80.7 design size; the
-                    // FittedBox scales it uniformly (aspect ratios match, so
-                    // contain == exact proportional scale).
-                    child: FittedBox(
-                      fit: BoxFit.contain,
-                      child: BottomNavPill(
-                        index: _index,
-                        onTap: _onPillTap,
-                        onStart: _goSetup,
+        body: LiquidGlassView(
+          controller: _glassController,
+          pixelRatio: _index == 1 ? 0.5 : 0.85,
+          realTimeCapture: false,
+          refreshRate: LiquidGlassRefreshRate.high,
+          useSync: false,
+          batch: false,
+          backgroundWidget: tabBackdrop,
+          child: _index == 1
+              ? null
+              : Align(
+                  alignment: Alignment.bottomCenter,
+                  child: Padding(
+                    padding: const EdgeInsets.only(bottom: 16),
+                    child: SizedBox(
+                      width: pillW,
+                      height: 80.7 * pillScale,
+                      // Pill is authored at fixed 377x80.7 design size; the
+                      // FittedBox scales it uniformly (aspect ratios match, so
+                      // contain == exact proportional scale).
+                      child: FittedBox(
+                        fit: BoxFit.contain,
+                        child: PacerGlassScope(
+                          hasBackdropView: true,
+                          clarity: 0.85,
+                          child: BottomNavPill(
+                            index: _index,
+                            onTap: _onPillTap,
+                            onStart: () => _goSetup(),
+                          ),
+                        ),
                       ),
                     ),
                   ),
                 ),
-              ),
-          ],
         ),
       ),
     );
@@ -1208,12 +2442,12 @@ class _PacerNavRail extends StatelessWidget {
   Widget build(BuildContext context) {
     final scheme = PacerScheme.of(context);
     final dark = scheme.isDark;
-    final selFg = dark ? PacerColors.lime : const Color(0xFF102A43);
+    final selFg = dark ? scheme.accent : const Color(0xFF102A43);
     return NavigationRail(
       extended: true,
       minExtendedWidth: 220,
       backgroundColor: scheme.navBar,
-      indicatorColor: PacerColors.lime.withValues(alpha: dark ? 0.22 : 0.62),
+      indicatorColor: scheme.brandAccent.withValues(alpha: dark ? 0.22 : 0.62),
       unselectedIconTheme: IconThemeData(color: scheme.navIcon),
       unselectedLabelTextStyle: TextStyle(
         color: scheme.navIcon,
@@ -1292,6 +2526,7 @@ class _AssignedChallengeBanner extends StatelessWidget {
   Widget build(BuildContext context) {
     final scheme = PacerScheme.of(context);
     return Container(
+      key: const ValueKey('assigned_challenge_banner'),
       width: double.infinity,
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
       decoration: BoxDecoration(
@@ -1359,6 +2594,495 @@ class _AssignedChallengeBanner extends StatelessWidget {
             icon: Icon(Icons.close, size: 18, color: scheme.muted),
           ),
         ],
+      ),
+    );
+  }
+}
+
+class _WeeklyStatMetric extends StatelessWidget {
+  final IconData icon;
+  final String label;
+  final String value;
+  const _WeeklyStatMetric({
+    required this.icon,
+    required this.label,
+    required this.value,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = PacerScheme.of(context);
+    final dark = Theme.of(context).brightness == Brightness.dark;
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 9),
+      decoration: BoxDecoration(
+        color: scheme.scaffold.withValues(alpha: dark ? 0.52 : 0.65),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: scheme.border.withValues(alpha: 0.55)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Row(
+            children: [
+              Icon(
+                icon,
+                size: 13,
+                color: scheme.accent,
+              ),
+              const SizedBox(width: 4),
+              Expanded(
+                child: Text(
+                  label,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w600,
+                    color: scheme.muted,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 4),
+          FittedBox(
+            fit: BoxFit.scaleDown,
+            alignment: Alignment.centerLeft,
+            child: Text(
+              value,
+              maxLines: 1,
+              style: GoogleFonts.spaceGrotesk(
+                fontSize: 14.5,
+                fontWeight: FontWeight.w800,
+                color: scheme.ink,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+class _HomeChallengeCard extends StatelessWidget {
+  final Challenge challenge;
+  final PartisipasiChallenge? participation;
+  final String? teamName;
+  final VoidCallback onTap;
+
+  const _HomeChallengeCard({
+    required this.challenge,
+    required this.participation,
+    required this.teamName,
+    required this.onTap,
+  });
+
+  IconData _sportIcon(String? jenis) {
+    final j = (jenis ?? '').toLowerCase();
+    if (j.contains('sepeda') || j.contains('cycl')) {
+      return Icons.directions_bike_rounded;
+    }
+    if (j.contains('jalan') || j.contains('walk')) {
+      return Icons.nordic_walking_rounded;
+    }
+    if (j.contains('jog')) {
+      return Icons.directions_walk_rounded;
+    }
+    return Icons.directions_run_rounded;
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = PacerScheme.of(context);
+    final dark = Theme.of(context).brightness == Brightness.dark;
+    final title = challenge.judul?.trim().isNotEmpty == true
+        ? challenge.judul!.trim()
+        : '${S.sportName(challenge.jenis)} • ${S.challengeTargetSummary(challenge.targetNilai, challenge.targetSatuan)}';
+    final scopeText = challenge.isTeamChallenge
+        ? (teamName != null && teamName!.isNotEmpty
+              ? '${S.teamChallengeTag} • $teamName'
+              : S.teamChallengeTag)
+        : S.soloChallengeTag;
+    final windowText = challenge.waktuSelesai != null
+        ? fmtDate(challenge.waktuSelesai)
+        : S.challengeOpenEnded;
+    final pct = participation != null
+        ? progressPercent(participation!.progressNilai, challenge.targetNilai)
+        : null;
+    final isDone = participation?.berhasil == true;
+    final accent = isDone
+        ? PacerColors.primary
+        : (challenge.isTeamChallenge
+              ? scheme.brandAccent
+              : PacerColors.primary);
+
+    return GestureDetector(
+      onTap: onTap,
+      behavior: HitTestBehavior.opaque,
+      child: PacerTapScale(
+        child: Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: scheme.card,
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(
+              color: challenge.isTeamChallenge
+                  ? scheme.brandAccent.withValues(alpha: dark ? 0.26 : 0.45)
+                  : scheme.border,
+            ),
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                children: [
+                  Expanded(
+                    child: Align(
+                      alignment: Alignment.centerLeft,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 10,
+                          vertical: 4,
+                        ),
+                        decoration: BoxDecoration(
+                          color: challenge.isTeamChallenge
+                              ? scheme.brandAccent.withValues(
+                                  alpha: dark ? 0.16 : 0.25,
+                                )
+                              : scheme.searchBg,
+                          borderRadius: BorderRadius.circular(999),
+                          border: Border.all(
+                            color: challenge.isTeamChallenge
+                                ? scheme.brandAccent.withValues(alpha: 0.35)
+                                : scheme.border.withValues(alpha: 0.6),
+                          ),
+                        ),
+                        child: Text(
+                          scopeText,
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w700,
+                            color: challenge.isTeamChallenge && dark
+                                ? scheme.brandAccent
+                                : scheme.ink,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  ConstrainedBox(
+                    constraints: const BoxConstraints(maxWidth: 120),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 3.5,
+                      ),
+                      decoration: BoxDecoration(
+                        color: scheme.searchBg.withValues(alpha: 0.7),
+                        borderRadius: BorderRadius.circular(999),
+                      ),
+                      child: Row(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Icon(
+                            Icons.event_outlined,
+                            size: 12,
+                            color: scheme.muted,
+                          ),
+                          const SizedBox(width: 4),
+                          Flexible(
+                            child: Text(
+                              windowText,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w600,
+                                color: scheme.muted,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 4),
+                  Icon(
+                    Icons.chevron_right_rounded,
+                    size: 18,
+                    color: scheme.muted,
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              Row(
+                children: [
+                  Container(
+                    width: 40,
+                    height: 40,
+                    decoration: BoxDecoration(
+                      color: accent.withValues(alpha: dark ? 0.16 : 0.14),
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: accent.withValues(alpha: 0.3)),
+                    ),
+                    child: Icon(
+                      _sportIcon(challenge.jenis),
+                      size: 20,
+                      color:
+                          accent == PacerColors.lime && !dark
+                          ? PacerColors.navy
+                          : accent,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      title,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: GoogleFonts.spaceGrotesk(
+                        fontSize: 15.5,
+                        fontWeight: FontWeight.w700,
+                        color: scheme.ink,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              if (pct != null && participation != null) ...[
+                Container(
+                  height: 8,
+                  width: double.infinity,
+                  decoration: BoxDecoration(
+                    color: scheme.searchBg,
+                    borderRadius: BorderRadius.circular(999),
+                  ),
+                  alignment: Alignment.centerLeft,
+                  child: FractionallySizedBox(
+                    widthFactor: (pct / 100.0).clamp(0.04, 1.0),
+                    child: Container(
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          colors: isDone
+                              ? [PacerColors.primary, const Color(0xFF38BDF8)]
+                              : [
+                                  scheme.brandAccent,
+                                  Color.lerp(
+                                    scheme.brandAccent,
+                                    PacerColors.neon,
+                                    0.35,
+                                  )!,
+                                ],
+                        ),
+                        borderRadius: BorderRadius.circular(999),
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        '${S.challengeTargetSummary(participation!.progressNilai, challenge.targetSatuan)} / ${S.challengeTargetSummary(challenge.targetNilai, challenge.targetSatuan)}',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w600,
+                          color: scheme.muted,
+                        ),
+                      ),
+                    ),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 2,
+                      ),
+                      decoration: BoxDecoration(
+                        color:
+                            (isDone ? PacerColors.primary : scheme.brandAccent)
+                                .withValues(alpha: dark ? 0.16 : 0.22),
+                        borderRadius: BorderRadius.circular(999),
+                      ),
+                      child: Text(
+                        '${pct.round()}%',
+                        style: GoogleFonts.spaceGrotesk(
+                          fontSize: 12,
+                          fontWeight: FontWeight.w800,
+                          color: isDone
+                              ? PacerColors.primary
+                              : (dark ? scheme.brandAccent : scheme.ink),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ] else ...[
+                Row(
+                  children: [
+                    Expanded(
+                      child: Text(
+                        '${S.sportName(challenge.jenis)} • ${S.challengeTargetSummary(challenge.targetNilai, challenge.targetSatuan)}',
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: TextStyle(
+                          fontSize: 12.5,
+                          fontWeight: FontWeight.w600,
+                          color: scheme.muted,
+                        ),
+                      ),
+                    ),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 11,
+                        vertical: 4.5,
+                      ),
+                      decoration: BoxDecoration(
+                        color: scheme.brandAccent,
+                        borderRadius: BorderRadius.circular(999),
+                      ),
+                      child: Text(
+                        S.join,
+                        style: GoogleFonts.spaceGrotesk(
+                          fontSize: 11.5,
+                          fontWeight: FontWeight.w800,
+                          color: scheme.onBrandAccent,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+class _HomeExploreClubsCard extends StatelessWidget {
+  final double width;
+  final VoidCallback onTap;
+
+  const _HomeExploreClubsCard({required this.width, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = PacerScheme.of(context);
+    final dark = Theme.of(context).brightness == Brightness.dark;
+    return SizedBox(
+      width: width,
+      height: 150,
+      child: GestureDetector(
+        onTap: onTap,
+        behavior: HitTestBehavior.opaque,
+        child: PacerTapScale(
+          child: Container(
+            clipBehavior: Clip.antiAlias,
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+                colors: [
+                  Color.lerp(
+                    scheme.card,
+                    scheme.accent,
+                    dark ? 0.12 : 0.08,
+                  )!,
+                  Color.lerp(scheme.scaffold, scheme.card, 0.55)!,
+                ],
+              ),
+              borderRadius: BorderRadius.circular(20),
+              border: Border.all(
+                color: scheme.accent.withValues(
+                  alpha: dark ? 0.35 : 0.45,
+                ),
+              ),
+            ),
+            child: Stack(
+              children: [
+                Positioned(
+                  right: -12,
+                  top: -12,
+                  child: IgnorePointer(
+                    child: Icon(
+                      Icons.explore_rounded,
+                      size: 80,
+                      color: scheme.accent.withValues(alpha: 0.08),
+                    ),
+                  ),
+                ),
+                Padding(
+                  padding: const EdgeInsets.all(16),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Container(
+                        width: 38,
+                        height: 38,
+                        decoration: BoxDecoration(
+                          color: scheme.accent.withValues(alpha: 0.16),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(
+                            color: scheme.accent.withValues(alpha: 0.3),
+                          ),
+                        ),
+                        child: Icon(
+                          Icons.explore_outlined,
+                          size: 20,
+                          color: scheme.accent,
+                        ),
+                      ),
+                      const Spacer(),
+                      Text(
+                        S.findClubsCta,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: GoogleFonts.spaceGrotesk(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w700,
+                          color: scheme.ink,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Row(
+                        children: [
+                          Flexible(
+                            child: Text(
+                              S.seeAll,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.w700,
+                                color: scheme.accent,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(width: 4),
+                          Icon(
+                            Icons.arrow_forward_rounded,
+                            size: 14,
+                            color: scheme.accent,
+                          ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
       ),
     );
   }

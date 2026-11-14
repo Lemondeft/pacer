@@ -8,6 +8,7 @@ import 'package:pacer/src/notifications/notification_model.dart';
 import 'package:pacer/src/notifications/notification_repository.dart';
 import 'package:pacer/src/ui/app_strings.dart';
 import 'package:pacer/src/ui/app_theme.dart';
+import 'package:pacer/src/ui/coach_board.dart';
 import 'package:pacer/src/ui/more_screens.dart';
 import 'package:pacer/src/ui/screens.dart';
 import 'package:pacer/src/ui/widgets.dart';
@@ -20,6 +21,7 @@ void main() {
   });
 
   tearDown(() {
+    langNotifier.value = Lang.id;
     PacerDummyData.resetDemoTeams();
     NotificationRepository.resetBannerDismissals();
     NotificationRepository.syncDemoUnread();
@@ -210,11 +212,22 @@ void main() {
         );
         await tester.pumpAndSettle();
 
+        final bannerFinder = find.byKey(const ValueKey('assigned_challenge_banner'));
         expect(find.byIcon(Icons.notifications_active_outlined), findsOneWidget);
         expect(find.text('2'), findsWidgets);
-        expect(find.text('Challenge Tim · GBK Runners Elite'), findsOneWidget);
+        expect(bannerFinder, findsOneWidget);
         expect(
-          find.textContaining('Target Lari Mingguan Tim'),
+          find.descendant(
+            of: bannerFinder,
+            matching: find.text('Challenge Tim · GBK Runners Elite'),
+          ),
+          findsOneWidget,
+        );
+        expect(
+          find.descendant(
+            of: bannerFinder,
+            matching: find.textContaining('Target Lari Mingguan Tim'),
+          ),
           findsOneWidget,
         );
 
@@ -222,18 +235,24 @@ void main() {
         await tester.tap(find.byIcon(Icons.close));
         await tester.pumpAndSettle();
         expect(
-          find.textContaining('Target Lari Mingguan Tim'),
+          find.descendant(
+            of: bannerFinder,
+            matching: find.textContaining('Target Lari Mingguan Tim'),
+          ),
           findsNothing,
         );
         expect(
-          find.textContaining('Challenge Endurance 10K'),
+          find.descendant(
+            of: bannerFinder,
+            matching: find.textContaining('Challenge Endurance 10K'),
+          ),
           findsOneWidget,
         );
 
         // Dismiss second unread banner -> banner hides completely.
         await tester.tap(find.byIcon(Icons.close));
         await tester.pumpAndSettle();
-        expect(find.text('Challenge Tim · GBK Runners Elite'), findsNothing);
+        expect(bannerFinder, findsNothing);
       },
     );
 
@@ -271,5 +290,137 @@ void main() {
         await sqlite.close();
       }
     });
+  });
+
+  group('Challenge Creation Custom Duration, Team Scoping & Language Consistency', () {
+    testWidgets(
+      'CreateChallengeScreen unifies distance target, supports custom duration (days), and excludes non-joined teams',
+      (tester) async {
+        langNotifier.value = Lang.en;
+        tester.view.physicalSize = const Size(720, 1600);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(tester.view.reset);
+
+        await tester.pumpWidget(
+          MaterialApp(
+            theme: PacerTheme.dark(),
+            home: Navigator(
+              onGenerateRoute: (_) => MaterialPageRoute<void>(
+                builder: (_) => const CreateChallengeScreen(
+                  initialTeamId: '11111111-1111-1111-1111-111111111111',
+                ),
+              ),
+            ),
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        // Unified Distance Target in English (no leftover Indonesian 'JARAK').
+        expect(find.text('JARAK'), findsNothing);
+        expect(find.text('DISTANCE TARGET'), findsOneWidget);
+        expect(find.text('TARGET'), findsNothing);
+
+        // Team dropdown only lists teams the user belongs to, not unjoined clubs.
+        expect(find.text('GBK Runners Elite'), findsOneWidget);
+        expect(find.text('Monas Morning Joggers'), findsNothing);
+
+        // Pick Custom Duration -> enter 14 days.
+        final customChips = find.text(S.custom);
+        expect(customChips, findsNWidgets(2));
+        await tester.ensureVisible(customChips.last);
+        await tester.tap(customChips.last);
+        await tester.pumpAndSettle();
+
+        expect(find.text(S.customDurationTitle), findsOneWidget);
+        await tester.enterText(find.byType(TextField).last, '14');
+        await tester.tap(find.text(S.saveLabel));
+        await tester.pumpAndSettle();
+
+        expect(find.text('Custom (14 Days)'), findsOneWidget);
+
+        await tester.enterText(
+          find.byType(TextField).first,
+          'Sprint 14 Hari Kustom',
+        );
+        await tester.ensureVisible(
+          find.widgetWithText(ElevatedButton, S.createTeamChallenge),
+        );
+        await tester.tap(
+          find.widgetWithText(ElevatedButton, S.createTeamChallenge),
+        );
+        await tester.pumpAndSettle();
+
+        final created = PacerDummyData.demoChallenges.firstWhere(
+          (c) => c.judul == 'Sprint 14 Hari Kustom',
+        );
+        final diffDays =
+            created.waktuSelesai!.difference(created.waktuMulai!).inDays;
+        expect(diffDays, 14);
+      },
+    );
+
+    testWidgets(
+      'English and Indonesian localization stay consistent on SearchField, CoachBoardScreen, and target units',
+      (tester) async {
+        tester.view.physicalSize = const Size(720, 1600);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(tester.view.reset);
+
+        langNotifier.value = Lang.en;
+        expect(S.challengeTargetSummary(1800, 'waktu_s'), '30 MIN');
+
+        await tester.pumpWidget(
+          MaterialApp(
+            key: const ValueKey('search-en'),
+            theme: PacerTheme.light(),
+            home: const Scaffold(body: SearchField()),
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        expect(
+          find.text('Search clubs, cities, or friends...'),
+          findsOneWidget,
+        );
+        expect(find.text('Cari klub, kota, atau teman...'), findsNothing);
+
+        await tester.pumpWidget(
+          MaterialApp(
+            key: const ValueKey('coach-en'),
+            theme: PacerTheme.light(),
+            home: const CoachBoardScreen(),
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        expect(find.text('Target Achieved'), findsWidgets);
+        expect(find.text('Target Tercapai'), findsNothing);
+
+        langNotifier.value = Lang.id;
+        expect(S.challengeTargetSummary(1800, 'waktu_s'), '30 MNT');
+
+        await tester.pumpWidget(
+          MaterialApp(
+            key: const ValueKey('search-id'),
+            theme: PacerTheme.light(),
+            home: const Scaffold(body: SearchField()),
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        expect(find.text('Cari klub, kota, atau teman...'), findsOneWidget);
+
+        await tester.pumpWidget(
+          MaterialApp(
+            key: const ValueKey('coach-id'),
+            theme: PacerTheme.light(),
+            home: const CoachBoardScreen(),
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        expect(find.text('Target Tercapai'), findsWidgets);
+      },
+    );
   });
 }

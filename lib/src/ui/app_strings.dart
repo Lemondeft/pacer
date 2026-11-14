@@ -174,7 +174,7 @@ class S {
   static String get periodDaily => _en ? 'Daily' : 'Harian';
   static String get periodWeekly => _en ? 'Weekly' : 'Mingguan';
   static String get periodMonthly => _en ? 'Monthly' : 'Bulanan';
-  static String get allTime => _en ? 'All Time' : 'Semua';
+  static String get allTime => _en ? 'All Time' : 'Sepanjang Waktu';
 
   // Notifications (per context diagram)
   static String get notifications => _en ? 'Notifications' : 'Notifikasi';
@@ -186,7 +186,7 @@ class S {
 
   // Teams
   static String get findTeamsNearby =>
-      _en ? 'Find Teams Near You' : 'Temukan Team Di Sekitarmu';
+      _en ? 'Find Teams Near You' : 'Temukan Tim Di Sekitarmu';
   static String get searchClubs => _en
       ? 'Search clubs, cities, or friends...'
       : 'Cari klub, kota, atau teman...';
@@ -267,7 +267,7 @@ class S {
       _en ? 'Only coaches can do that.' : 'Hanya coach yang bisa.';
   static String get teamCreated => _en ? 'Team created.' : 'Tim dibuat.';
   static String get createChallenge =>
-      _en ? 'Create challenge' : 'Buat challenge';
+      _en ? 'Create Challenge' : 'Buat Challenge';
   static String get challengeActive => _en ? 'Active' : 'Aktif';
   static String get challengeEnded => _en ? 'Ended' : 'Berakhir';
   static String get challengeCompletedLabel =>
@@ -288,7 +288,7 @@ class S {
   }
 
   static String challengeTargetUnit(String targetSatuan) =>
-      targetSatuan == 'jarak_m' ? 'KM' : 'MNT';
+      targetSatuan == 'jarak_m' ? 'KM' : (_en ? 'MIN' : 'MNT');
 
   static String challengeTargetSummary(
     double targetNilai,
@@ -398,7 +398,7 @@ class S {
   static String get writeMessage => _en ? 'Write a message…' : 'Tulis pesan…';
 
   // Create club / challenge forms
-  static String get teamName => _en ? 'Team Name' : 'Nama Teams';
+  static String get teamName => _en ? 'Team Name' : 'Nama Tim';
   static String get clubFocus => _en ? 'Club Focus' : 'Fokus Klub';
   static String get cityHQ => _en ? 'City / HQ' : 'Kota / Markas';
   static String get communityPrivacy =>
@@ -438,7 +438,7 @@ class S {
   static String get todayLabel => _en ? 'Today' : 'Hari Ini';
   static String get days3 => _en ? '3 Days' : '3 Hari';
   static String get week1 => _en ? '1 Week' : '1 Minggu';
-  static String get custom => _en ? 'Custom' : 'Custom';
+  static String get custom => _en ? 'Custom' : 'Kustom';
 
   // Persyaratan
   static String get clubRequirements => _en
@@ -617,4 +617,82 @@ class S {
       _en ? 'No notifications yet.' : 'Belum ada notifikasi.';
   static String get viewChallenge =>
       _en ? 'View Challenge' : 'Lihat Challenge';
+
+  // Challenge form (unified distance target + custom duration)
+  static String get targetDistanceLabel =>
+      _en ? 'DISTANCE TARGET' : 'TARGET JARAK';
+  static String get targetDistanceHint => _en
+      ? 'Total accumulated distance to reach within the challenge duration.'
+      : 'Total akumulasi jarak yang harus dicapai selama durasi challenge.';
+  static String get customDistanceTitle =>
+      _en ? 'Custom distance (km)' : 'Jarak kustom (km)';
+  static String get customDurationTitle =>
+      _en ? 'Custom duration (days)' : 'Durasi kustom (hari)';
+  static String get customDurationHint =>
+      _en ? 'Number of days (e.g. 14)' : 'Jumlah hari (mis. 14)';
+  static String get invalidCustomDuration =>
+      _en ? 'Enter 1 to 365 days.' : 'Masukkan 1 sampai 365 hari.';
+  static String customKmLabel(double km) {
+    final v = km == km.truncateToDouble()
+        ? '${km.toInt()}'
+        : km.toStringAsFixed(1);
+    return '$custom ($v km)';
+  }
+
+  static String customDaysLabel(int days) => _en
+      ? (days == 1 ? '$custom (1 Day)' : '$custom ($days Days)')
+      : '$custom ($days Hari)';
+
+  static String get challengeCreated =>
+      _en ? 'Challenge created.' : 'Challenge dibuat.';
+
+  // Consistency fixes across Teams, Coach Board, Stats, Chat & Language
+  static String get invalidTeamCode =>
+      _en ? 'Invalid code. Try again.' : 'Kode salah. Coba lagi.';
+  static String get enterTeamCodeFirst =>
+      _en ? 'Enter the team code first.' : 'Masukkan kode tim dulu.';
+  static String get teamTargetMeters =>
+      _en ? 'Team Target (m)' : 'Target Tim (m)';
+  static String get coachBoardTitle =>
+      _en ? 'Coach Board' : 'Papan Coach';
+  static String get kilometersUnit => _en ? 'Kilometers' : 'Kilometer';
+  static String runsCount(int n) =>
+      _en ? (n == 1 ? '1 Run' : '$n Runs') : '$n Lari';
+  static String get unitMinutes => _en ? 'min' : 'menit';
+  static String get langDefaultSub => _en ? 'Default' : 'Bawaan';
+  static String get langAlternativeSub => _en ? 'Alternative' : 'Alternatif';
+  static String get mapPlaceholderLabel => _en
+      ? 'Route map — placeholder'
+      : 'Peta rute — placeholder bebas hak cipta';
+  static String coachEvaluationLine(String pct, bool passed) => _en
+      ? 'Evaluation: $pct% • ${passed ? 'Passed' : 'In Progress'}'
+      : 'Evaluasi: $pct% • ${passed ? 'Lulus Evaluasi' : 'Dalam Proses'}';
+
+  // Enriched Home Dashboard
+  static String get quickStartTitle => _en ? 'Quick Start' : 'Mulai Cepat';
+  static String get weeklyOverviewTitle =>
+      _en ? 'This Week' : 'Ringkasan Minggu Ini';
+  static String get viewStats => _en ? 'View Stats' : 'Lihat Statistik';
+  static String get avgPaceShort => _en ? 'Avg Pace' : 'Pace Rata-rata';
+  static String get workoutsShort => _en ? 'Workouts' : 'Sesi';
+  static String get activeChallengesTitle =>
+      _en ? 'Active Challenges' : 'Challenge Aktif';
+  static String get openChallengesTitle =>
+      _en ? 'Available Challenges' : 'Challenge Tersedia';
+  static String get browseChallengesCta =>
+      _en ? 'Browse Challenges' : 'Jelajahi Challenge';
+  static String get noChallengesHomeHint => _en
+      ? 'Join a team or solo challenge to track targets alongside your workouts.'
+      : 'Ikuti challenge tim atau solo untuk memantau target di setiap latihan.';
+  static String get leaderboardSnapshotTitle =>
+      _en ? 'Your Standing' : 'Peringkatmu';
+  static String get openLeaderboardCta =>
+      _en ? 'Open Leaderboard' : 'Buka Peringkat';
+  static String get noRankingYet => _en
+      ? 'Log a workout or pull to refresh your team & global ranking.'
+      : 'Catat latihan atau tarik untuk memuat peringkat tim & globalmu.';
+  static String get findClubsCta => _en ? 'Find Clubs' : 'Cari Klub';
+  static List<String> get dayLetters => _en
+      ? const ['M', 'T', 'W', 'T', 'F', 'S', 'S']
+      : const ['S', 'S', 'R', 'K', 'J', 'S', 'M'];
 }

@@ -187,6 +187,108 @@ class PacerShadows {
   );
 }
 
+/// Classic Linux desktop theme presets (inspired by KDE Breeze, Linux Mint
+/// Cinnamon, GNOME Adwaita, Ubuntu Yaru, and Arch Nord).
+enum PacerLinuxTheme {
+  defaultPacer,
+  breeze,
+  cinnamon,
+  adwaita,
+  yaru,
+  nord,
+}
+
+/// Active Linux desktop theme preset. Defaults to [PacerLinuxTheme.defaultPacer]
+/// so all existing tests see the exact default Pacer palette unless switched.
+final ValueNotifier<PacerLinuxTheme> linuxThemeNotifier = ValueNotifier(
+  PacerLinuxTheme.defaultPacer,
+);
+
+void setLinuxTheme(PacerLinuxTheme preset) {
+  linuxThemeNotifier.value = preset;
+}
+
+/// Metadata & preview swatches for each classic Linux desktop theme.
+class PacerLinuxThemeInfo {
+  final PacerLinuxTheme id;
+  final String name;
+  final String desktopEnv;
+  final Color darkBg;
+  final Color darkSurface;
+  final Color accent;
+  final Color secondaryAccent;
+
+  const PacerLinuxThemeInfo({
+    required this.id,
+    required this.name,
+    required this.desktopEnv,
+    required this.darkBg,
+    required this.darkSurface,
+    required this.accent,
+    required this.secondaryAccent,
+  });
+
+  static const List<PacerLinuxThemeInfo> all = [
+    PacerLinuxThemeInfo(
+      id: PacerLinuxTheme.defaultPacer,
+      name: 'Pacer Argon',
+      desktopEnv: 'Default • Athletic Neon & Deep Navy',
+      darkBg: Color(0xFF0F172A),
+      darkSurface: Color(0xFF1E293B),
+      accent: Color(0xFFBAFF29),
+      secondaryAccent: Color(0xFF64B5F6),
+    ),
+    PacerLinuxThemeInfo(
+      id: PacerLinuxTheme.breeze,
+      name: 'KDE Breeze',
+      desktopEnv: 'KDE Plasma • Plasma Blue & Charcoal',
+      darkBg: Color(0xFF1B1E20),
+      darkSurface: Color(0xFF232629),
+      accent: Color(0xFF3DAEE9),
+      secondaryAccent: Color(0xFF1CDC9A),
+    ),
+    PacerLinuxThemeInfo(
+      id: PacerLinuxTheme.cinnamon,
+      name: 'Mint-Y Cinnamon',
+      desktopEnv: 'Linux Mint • Mint Leaf & Warm Slate',
+      darkBg: Color(0xFF1E1E1E),
+      darkSurface: Color(0xFF2B2B2B),
+      accent: Color(0xFF8FA876),
+      secondaryAccent: Color(0xFFA3BE8C),
+    ),
+    PacerLinuxThemeInfo(
+      id: PacerLinuxTheme.adwaita,
+      name: 'GNOME Adwaita',
+      desktopEnv: 'GNOME • Libadwaita Blue & Obsidian',
+      darkBg: Color(0xFF1E1E1E),
+      darkSurface: Color(0xFF303030),
+      accent: Color(0xFF62A0EA),
+      secondaryAccent: Color(0xFF3584E4),
+    ),
+    PacerLinuxThemeInfo(
+      id: PacerLinuxTheme.yaru,
+      name: 'Ubuntu Yaru',
+      desktopEnv: 'Ubuntu Desktop • Aubergine & Orange',
+      darkBg: Color(0xFF1E0B18),
+      darkSurface: Color(0xFF2C1224),
+      accent: Color(0xFFE95420),
+      secondaryAccent: Color(0xFF77216F),
+    ),
+    PacerLinuxThemeInfo(
+      id: PacerLinuxTheme.nord,
+      name: 'Arch Nord',
+      desktopEnv: 'Hyprland / i3wm • Polar Night & Frost',
+      darkBg: Color(0xFF242933),
+      darkSurface: Color(0xFF2E3440),
+      accent: Color(0xFF88C0D0),
+      secondaryAccent: Color(0xFF81A1C1),
+    ),
+  ];
+
+  static PacerLinuxThemeInfo of(PacerLinuxTheme preset) =>
+      all.firstWhere((e) => e.id == preset, orElse: () => all.first);
+}
+
 /// In-app theme mode. Defaults to the OS setting; the toggle persists
 /// in-memory for the session (mirrors langNotifier's rebuild pattern —
 /// PacerApp listens and rebuilds the whole tree). No backend column.
@@ -399,21 +501,276 @@ class PacerScheme {
     streakCardBg: PacerDark.streakCard,
   );
 
+  static PacerScheme _buildDarkPreset({
+    required Color scaffold,
+    required Color surface,
+    required Color border,
+    required Color chipBorder,
+    required Color accent,
+    required Color chipSelFg,
+    required Color streakCard,
+  }) =>
+      PacerScheme(
+        brightness: Brightness.dark,
+        scaffold: scaffold,
+        card: surface,
+        authField: surface,
+        formField: surface,
+        searchBg: Color.lerp(scaffold, surface, 0.65)!,
+        ink: PacerDark.text,
+        deepInk: PacerDark.text,
+        headline: PacerDark.text,
+        chipFg: PacerDark.text,
+        muted: PacerDark.muted,
+        soft: PacerDark.soft,
+        bodyGray: PacerDark.soft,
+        formMuted: PacerDark.soft,
+        subtle: PacerDark.subtle,
+        overlay: PacerDark.overlay,
+        hint: PacerDark.hint,
+        border: border,
+        softBorder: border,
+        hairline: border,
+        chipBorder: chipBorder,
+        formEdge: border,
+        error: PacerDark.error,
+        timeRed: PacerDark.timeRed,
+        paceOrange: PacerDark.paceOrange,
+        success: PacerDark.success,
+        accent: accent,
+        runCard: surface,
+        chatBubble: surface,
+        navBar: surface.withValues(alpha: 0.94),
+        navIcon: PacerDark.navIcon,
+        emptyIcon: chipBorder,
+        mapBtnB: surface,
+        finishTop: scaffold,
+        finishBottom: surface,
+        gridLine: chipBorder,
+        chipSelBg: accent,
+        chipSelFg: chipSelFg,
+        editBg: accent,
+        streakCardBg: streakCard,
+      );
+
+  static PacerScheme _buildLightPreset({
+    required Color scaffold,
+    required Color card,
+    required Color searchBg,
+    required Color ink,
+    required Color muted,
+    required Color border,
+    required Color accent,
+    required Color streakCardBg,
+  }) =>
+      PacerScheme(
+        brightness: Brightness.light,
+        scaffold: scaffold,
+        card: card,
+        authField: card,
+        formField: card,
+        searchBg: searchBg,
+        ink: ink,
+        deepInk: ink,
+        headline: ink,
+        chipFg: ink,
+        muted: muted,
+        soft: muted,
+        bodyGray: muted,
+        formMuted: muted,
+        subtle: ink.withValues(alpha: 0.6),
+        overlay: ink.withValues(alpha: 0.6),
+        hint: ink.withValues(alpha: 0.6),
+        border: border,
+        softBorder: border,
+        hairline: border,
+        chipBorder: border,
+        formEdge: border,
+        error: PacerColors.errorRed,
+        timeRed: PacerColors.timeRed,
+        paceOrange: PacerColors.paceOrange,
+        success: const Color(0xFF0E7A56),
+        accent: accent,
+        runCard: Color.lerp(card, scaffold, 0.35)!,
+        chatBubble: searchBg,
+        navBar: searchBg,
+        navIcon: ink,
+        emptyIcon: border,
+        mapBtnB: card,
+        finishTop: scaffold,
+        finishBottom: searchBg,
+        gridLine: border,
+        chipSelBg: accent,
+        chipSelFg: Colors.white,
+        editBg: accent,
+        streakCardBg: streakCardBg,
+      );
+
+  static PacerScheme forPreset(Brightness brightness, PacerLinuxTheme preset) {
+    final isDark = brightness == Brightness.dark;
+    switch (preset) {
+      case PacerLinuxTheme.defaultPacer:
+        return isDark ? PacerScheme.dark : PacerScheme.light;
+      case PacerLinuxTheme.breeze:
+        return isDark
+            ? _buildDarkPreset(
+                scaffold: const Color(0xFF1B1E20),
+                surface: const Color(0xFF232629),
+                border: const Color(0xFF363B40),
+                chipBorder: const Color(0xFF474E54),
+                accent: const Color(0xFF3DAEE9),
+                chipSelFg: const Color(0xFF0D151C),
+                streakCard: const Color(0xFF1F2A34),
+              )
+            : _buildLightPreset(
+                scaffold: const Color(0xFFEFF0F1),
+                card: const Color(0xFFFCFDFD),
+                searchBg: const Color(0xFFE3E5E7),
+                ink: const Color(0xFF232629),
+                muted: const Color(0xFF5E656D),
+                border: const Color(0xFFCFD3D7),
+                accent: const Color(0xFF2980B9),
+                streakCardBg: const Color(0xFFDCEEFB),
+              );
+      case PacerLinuxTheme.cinnamon:
+        return isDark
+            ? _buildDarkPreset(
+                scaffold: const Color(0xFF1E1F1E),
+                surface: const Color(0xFF2B2C2B),
+                border: const Color(0xFF3E403E),
+                chipBorder: const Color(0xFF505450),
+                accent: const Color(0xFF8FA876),
+                chipSelFg: const Color(0xFF141A10),
+                streakCard: const Color(0xFF232B20),
+              )
+            : _buildLightPreset(
+                scaffold: const Color(0xFFEDEDEC),
+                card: const Color(0xFFF8F8F7),
+                searchBg: const Color(0xFFE1E3DF),
+                ink: const Color(0xFF2B2B2B),
+                muted: const Color(0xFF5D625B),
+                border: const Color(0xFFCFD3CC),
+                accent: const Color(0xFF688949),
+                streakCardBg: const Color(0xFFE1ECD9),
+              );
+      case PacerLinuxTheme.adwaita:
+        return isDark
+            ? _buildDarkPreset(
+                scaffold: const Color(0xFF1E1E1E),
+                surface: const Color(0xFF303030),
+                border: const Color(0xFF454545),
+                chipBorder: const Color(0xFF575757),
+                accent: const Color(0xFF62A0EA),
+                chipSelFg: const Color(0xFF0E1724),
+                streakCard: const Color(0xFF242B35),
+              )
+            : _buildLightPreset(
+                scaffold: const Color(0xFFF2F1F0),
+                card: const Color(0xFFFAFAFA),
+                searchBg: const Color(0xFFE6E5E3),
+                ink: const Color(0xFF241F31),
+                muted: const Color(0xFF5E5C64),
+                border: const Color(0xFFD5D3CF),
+                accent: const Color(0xFF3584E4),
+                streakCardBg: const Color(0xFFDFECFA),
+              );
+      case PacerLinuxTheme.yaru:
+        return isDark
+            ? _buildDarkPreset(
+                scaffold: const Color(0xFF1E0B18),
+                surface: const Color(0xFF2C1224),
+                border: const Color(0xFF4B213E),
+                chipBorder: const Color(0xFF612B50),
+                accent: const Color(0xFFE95420),
+                chipSelFg: Colors.white,
+                streakCard: const Color(0xFF351329),
+              )
+            : _buildLightPreset(
+                scaffold: const Color(0xFFF5F1F3),
+                card: const Color(0xFFFCF9FA),
+                searchBg: const Color(0xFFEAE1E6),
+                ink: const Color(0xFF2C001E),
+                muted: const Color(0xFF664B5D),
+                border: const Color(0xFFD9C8D2),
+                accent: const Color(0xFFE95420),
+                streakCardBg: const Color(0xFFFCE5DC),
+              );
+      case PacerLinuxTheme.nord:
+        return isDark
+            ? _buildDarkPreset(
+                scaffold: const Color(0xFF242933),
+                surface: const Color(0xFF2E3440),
+                border: const Color(0xFF434C5E),
+                chipBorder: const Color(0xFF4C566A),
+                accent: const Color(0xFF88C0D0),
+                chipSelFg: const Color(0xFF1E242E),
+                streakCard: const Color(0xFF293242),
+              )
+            : _buildLightPreset(
+                scaffold: const Color(0xFFE5E9F0),
+                card: const Color(0xFFECEFF4),
+                searchBg: const Color(0xFFD8DEE9),
+                ink: const Color(0xFF2E3440),
+                muted: const Color(0xFF4C566A),
+                border: const Color(0xFFC8D0DF),
+                accent: const Color(0xFF5E81AC),
+                streakCardBg: const Color(0xFFD8E4F0),
+              );
+    }
+  }
+
   static PacerScheme of(BuildContext context) =>
-      Theme.of(context).brightness == Brightness.dark
-      ? PacerScheme.dark
-      : PacerScheme.light;
+      forPreset(Theme.of(context).brightness, linuxThemeNotifier.value);
 
   /// Ink-colored action label for lime/dark-selected fills; identical to
   /// [chipSelFg] in both modes (white text on black in light, ink on lime
   /// in dark).
   Color get actionFg => chipSelFg;
 
+  /// Theme-aware highlight accent for Join/Joined buttons, badges, and pills.
+  /// Resolves to [PacerColors.lime] in the default Pacer theme and to [accent]
+  /// when any classic Linux desktop theme is active.
+  Color get brandAccent =>
+      linuxThemeNotifier.value == PacerLinuxTheme.defaultPacer
+      ? PacerColors.lime
+      : accent;
+
+  /// High-contrast foreground color for text/icons placed on [brandAccent].
+  Color get onBrandAccent =>
+      ThemeData.estimateBrightnessForColor(brandAccent) == Brightness.light
+      ? PacerColors.ink
+      : Colors.white;
+
   bool get isDark => brightness == Brightness.dark;
 
-  List<Color> get heroCardGradient => isDark
-      ? const [PacerColors.teamShade, PacerColors.streakBg]
-      : const [Color(0xFF2855C7), Color(0xFF4748B8)];
+  List<Color> get heroCardGradient {
+    switch (linuxThemeNotifier.value) {
+      case PacerLinuxTheme.defaultPacer:
+        return isDark
+            ? const [PacerColors.teamShade, PacerColors.streakBg]
+            : const [Color(0xFF2855C7), Color(0xFF4748B8)];
+      case PacerLinuxTheme.breeze:
+        return isDark
+            ? const [Color(0xFF1A2936), Color(0xFF234766)]
+            : const [Color(0xFF1F6391), Color(0xFF2980B9)];
+      case PacerLinuxTheme.cinnamon:
+        return isDark
+            ? const [Color(0xFF212B1E), Color(0xFF364930)]
+            : const [Color(0xFF4A6632), Color(0xFF688949)];
+      case PacerLinuxTheme.adwaita:
+        return isDark
+            ? const [Color(0xFF1F2836), Color(0xFF2C456B)]
+            : const [Color(0xFF225EA8), Color(0xFF3584E4)];
+      case PacerLinuxTheme.yaru:
+        return isDark
+            ? const [Color(0xFF2C1224), Color(0xFF632145)]
+            : const [Color(0xFF5E2144), Color(0xFFB83E1B)];
+      case PacerLinuxTheme.nord:
+        return isDark
+            ? const [Color(0xFF2B3240), Color(0xFF3B4C63)]
+            : const [Color(0xFF435D7D), Color(0xFF5E81AC)];
+    }
+  }
 
   BoxShadow get shadowBox => BoxShadow(
     color: isDark ? PacerDark.shadow : const Color(0x1416243D),
@@ -434,8 +791,11 @@ class PacerTheme {
     },
   );
 
-  static ThemeData light() {
-    final scheme = PacerScheme.light;
+  static ThemeData light([PacerLinuxTheme? preset]) {
+    final scheme = PacerScheme.forPreset(
+      Brightness.light,
+      preset ?? linuxThemeNotifier.value,
+    );
     return ThemeData(
       useMaterial3: true,
       pageTransitionsTheme: _pageTransitions,
@@ -457,7 +817,7 @@ class PacerTheme {
         labelSmall: GoogleFonts.outfit(fontSize: 12, color: scheme.ink),
       ),
       colorScheme: ColorScheme.fromSeed(
-        seedColor: PacerColors.primary,
+        seedColor: scheme.accent,
         primary: scheme.accent,
         surface: scheme.card,
       ),
@@ -508,8 +868,11 @@ class PacerTheme {
   /// Dark theme: same structure as [light], navy surfaces, light text,
   /// lime accents. Brand fills (lime buttons, purple streak, medals)
   /// are untouched — only theme chrome adapts.
-  static ThemeData dark() {
-    final scheme = PacerScheme.dark;
+  static ThemeData dark([PacerLinuxTheme? preset]) {
+    final scheme = PacerScheme.forPreset(
+      Brightness.dark,
+      preset ?? linuxThemeNotifier.value,
+    );
     return ThemeData(
       useMaterial3: true,
       brightness: Brightness.dark,
@@ -532,28 +895,28 @@ class PacerTheme {
         labelSmall: GoogleFonts.outfit(fontSize: 12, color: scheme.ink),
       ),
       colorScheme: ColorScheme.dark(
-        primary: PacerColors.lime,
-        onPrimary: PacerColors.ink,
+        primary: scheme.accent,
+        onPrimary: scheme.chipSelFg,
         secondary: PacerColors.primary,
-        surface: PacerDark.surface,
-        onSurface: PacerDark.text,
-        error: PacerDark.error,
-        onError: PacerDark.text,
+        surface: scheme.card,
+        onSurface: scheme.ink,
+        error: scheme.error,
+        onError: scheme.ink,
       ),
-      iconTheme: const IconThemeData(color: PacerDark.text),
-      appBarTheme: const AppBarTheme(
-        backgroundColor: PacerDark.surface,
-        foregroundColor: PacerDark.text,
+      iconTheme: IconThemeData(color: scheme.ink),
+      appBarTheme: AppBarTheme(
+        backgroundColor: scheme.card,
+        foregroundColor: scheme.ink,
         elevation: 1,
       ),
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
-        fillColor: PacerDark.surface,
+        fillColor: scheme.card,
         hintStyle: PacerText.hint.copyWith(color: scheme.hint),
         border: OutlineInputBorder(borderRadius: BorderRadius.circular(5)),
         enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(5),
-          borderSide: const BorderSide(color: PacerDark.border),
+          borderSide: BorderSide(color: scheme.border),
         ),
         contentPadding: const EdgeInsets.symmetric(
           horizontal: 44,
@@ -570,20 +933,20 @@ class PacerTheme {
           elevation: 1,
         ),
       ),
-      snackBarTheme: const SnackBarThemeData(
-        backgroundColor: PacerDark.surface,
-        contentTextStyle: TextStyle(color: PacerDark.text),
-        actionTextColor: PacerColors.lime,
+      snackBarTheme: SnackBarThemeData(
+        backgroundColor: scheme.card,
+        contentTextStyle: TextStyle(color: scheme.ink),
+        actionTextColor: scheme.accent,
       ),
-      dialogTheme: const DialogThemeData(
-        backgroundColor: PacerDark.surface,
-        titleTextStyle: TextStyle(color: PacerDark.text, fontSize: 20),
-        contentTextStyle: TextStyle(color: PacerDark.text),
+      dialogTheme: DialogThemeData(
+        backgroundColor: scheme.card,
+        titleTextStyle: TextStyle(color: scheme.ink, fontSize: 20),
+        contentTextStyle: TextStyle(color: scheme.ink),
       ),
-      chipTheme: const ChipThemeData(
-        backgroundColor: PacerDark.surface,
-        labelStyle: TextStyle(color: PacerDark.text),
-        side: BorderSide(color: PacerDark.border),
+      chipTheme: ChipThemeData(
+        backgroundColor: scheme.card,
+        labelStyle: TextStyle(color: scheme.ink),
+        side: BorderSide(color: scheme.border),
       ),
     );
   }

@@ -6,7 +6,11 @@ import 'package:flutter/physics.dart';
 import 'package:liquid_glass_easy/liquid_glass_easy.dart';
 
 export 'package:liquid_glass_easy/liquid_glass_easy.dart'
-    show LiquidGlassBatch;
+    show
+        LiquidGlassBatch,
+        LiquidGlassRefreshRate,
+        LiquidGlassView,
+        LiquidGlassViewController;
 
 import 'app_theme.dart';
 
@@ -43,9 +47,12 @@ class PacerGlassTheme {
   static PacerGlassLevel levelOf(BuildContext context) =>
       PacerGlassScope.maybeOf(context)?.level ?? PacerGlassLevel.liquid;
 
+  static bool hasBackdropViewOf(BuildContext context) =>
+      PacerGlassScope.maybeOf(context)?.hasBackdropView ?? false;
+
   static double navigationOpacity(BuildContext context) {
     final dark = Theme.of(context).brightness == Brightness.dark;
-    return dark ? 0.36 : 0.49;
+    return dark ? 0.38 : 0.50;
   }
 }
 
@@ -56,12 +63,14 @@ class PacerGlassScope extends InheritedWidget {
     this.clarity = 0.75,
     this.outlines = true,
     this.level = PacerGlassLevel.liquid,
+    this.hasBackdropView = false,
     required super.child,
   });
 
   final double clarity;
   final bool outlines;
   final PacerGlassLevel level;
+  final bool hasBackdropView;
 
   static PacerGlassScope? maybeOf(BuildContext context) =>
       context.dependOnInheritedWidgetOfExactType<PacerGlassScope>();
@@ -70,7 +79,8 @@ class PacerGlassScope extends InheritedWidget {
   bool updateShouldNotify(PacerGlassScope oldWidget) =>
       clarity != oldWidget.clarity ||
       outlines != oldWidget.outlines ||
-      level != oldWidget.level;
+      level != oldWidget.level ||
+      hasBackdropView != oldWidget.hasBackdropView;
 }
 
 /// Marker that tells nested controls "you sit on glass, don't re-blur"
@@ -220,7 +230,7 @@ class _PacerGlassRim extends CustomPainter {
       highlightIntensity != oldDelegate.highlightIntensity;
 }
 
-/// Bounded LiquidGlass lens wrapper.
+/// Bounded LiquidGlass lens wrapper with configurable edge/border optics.
 class PacerLiquidBackdrop extends StatelessWidget {
   const PacerLiquidBackdrop({
     super.key,
@@ -232,7 +242,13 @@ class PacerLiquidBackdrop extends StatelessWidget {
     this.progress = 1.0,
     this.refractionDepth = 0.30,
     this.refractionWidth = 20.0,
+    this.refractionIndexOverride,
+    this.magnification = 1.0,
+    this.dispersionOverride,
+    this.saturation = 1.0,
+    this.lensTintColor,
     this.smoothCorners = false,
+    this.continuousCorners = false,
     this.highlightIntensity = 1.0,
   });
 
@@ -244,7 +260,13 @@ class PacerLiquidBackdrop extends StatelessWidget {
   final double progress;
   final double refractionDepth;
   final double refractionWidth;
+  final double? refractionIndexOverride;
+  final double magnification;
+  final double? dispersionOverride;
+  final double saturation;
+  final Color? lensTintColor;
   final bool smoothCorners;
+  final bool continuousCorners;
   final double highlightIntensity;
 
   @override
@@ -261,36 +283,51 @@ class PacerLiquidBackdrop extends StatelessWidget {
         effect *
         5 /
         70;
-    final index = 1 / math.sqrt(1 - math.pow(edgeBend.clamp(0.0, 0.95), 2));
+    final computedIndex =
+        1 / math.sqrt(1 - math.pow(edgeBend.clamp(0.0, 0.95), 2));
+    final effectiveIndex = refractionIndexOverride ?? computedIndex;
+    final effectiveDispersion = dispersionOverride ?? (1.32 * clarity * effect);
+
+    final cornerStyle = continuousCorners
+        ? LiquidGlassCornerStyle.continuousRoundedRectangle
+        : smoothCorners
+        ? LiquidGlassCornerStyle.squircle
+        : LiquidGlassCornerStyle.roundedRectangle;
+    final clipQuality = (continuousCorners || smoothCorners)
+        ? LiquidGlassClipQuality.exact
+        : LiquidGlassClipQuality.roundedRectangle;
 
     return LiquidGlassLens(
       style: LiquidGlassStyle(
         shape: LiquidGlassShape(
-          cornerStyle: smoothCorners
-              ? LiquidGlassCornerStyle.squircle
-              : LiquidGlassCornerStyle.roundedRectangle,
-          clipQuality: smoothCorners
-              ? LiquidGlassClipQuality.exact
-              : LiquidGlassClipQuality.roundedRectangle,
+          cornerStyle: cornerStyle,
+          clipQuality: clipQuality,
           cornerRadius: borderRadius.topLeft.x,
         ),
         specular: LiquidGlassLight.specular(
-          thickness: outlines ? 0.75 * 5.4 : 0,
-          angle: 0,
-          spread: 0.2,
+          thickness: outlines ? 3.5 : 0,
+          sharpness: 0.78,
+          angle: 39,
+          spread: 0.52,
           intensity: outlines
-              ? (dark ? 0.25 : 0.12) * effect * highlightIntensity
+              ? (dark ? 0.90 : 0.80) * effect * highlightIntensity
               : 0,
-          color: dark ? Colors.white : const Color(0x88ffffff),
         ),
         glow: LiquidGlassLight.glow(
-          thickness: outlines ? 0.75 * 29.4 : 0,
-          intensity: outlines ? 0.05 * highlightIntensity : 0,
+          thickness: outlines ? 8.0 : 0,
+          angle: 90,
+          spread: 0.45,
+          intensity: outlines
+              ? (dark ? 0.25 : 0.20) * effect * highlightIntensity
+              : 0,
         ),
+        color: lensTintColor ?? const Color(0x00000000),
         blur: blurSigma,
-        refractionIndex: index,
+        saturation: saturation,
+        magnification: magnification,
+        refractionIndex: effectiveIndex,
         refractionWidth: refractionWidth,
-        dispersion: 1.32 * clarity * effect,
+        dispersion: effectiveDispersion,
       ),
       child: child,
     );
@@ -312,10 +349,17 @@ class PacerGlass extends StatelessWidget {
     this.samplesBackdrop = true,
     this.highlightBorder = false,
     this.refractionDepth = 0.30,
+    this.refractionWidth = 20.0,
+    this.refractionIndexOverride,
+    this.magnification = 1.0,
+    this.dispersionOverride,
+    this.saturation = 1.0,
     this.smoothCorners = false,
+    this.continuousCorners = false,
     this.highlightIntensity = 1.0,
     this.glassProgress = 1.0,
     this.blurSigmaOverride,
+    this.lensBlurSigma,
   });
 
   const PacerGlass.navigation({
@@ -331,10 +375,17 @@ class PacerGlass extends StatelessWidget {
     this.samplesBackdrop = true,
     this.highlightBorder = false,
     this.refractionDepth = 0.30,
+    this.refractionWidth = 20.0,
+    this.refractionIndexOverride,
+    this.magnification = 1.0,
+    this.dispersionOverride,
+    this.saturation = 1.0,
     this.smoothCorners = false,
+    this.continuousCorners = false,
     this.highlightIntensity = 1.0,
     this.glassProgress = 1.0,
     this.blurSigmaOverride,
+    this.lensBlurSigma,
   });
 
   // Quantized pre-constructed blur sigmas bank (Spec §5.5)
@@ -358,10 +409,17 @@ class PacerGlass extends StatelessWidget {
   final bool samplesBackdrop;
   final bool highlightBorder;
   final double refractionDepth;
+  final double refractionWidth;
+  final double? refractionIndexOverride;
+  final double magnification;
+  final double? dispersionOverride;
+  final double saturation;
   final bool smoothCorners;
+  final bool continuousCorners;
   final double highlightIntensity;
   final double glassProgress;
   final double? blurSigmaOverride;
+  final double? lensBlurSigma;
 
   @override
   Widget build(BuildContext context) {
@@ -423,8 +481,10 @@ class PacerGlass extends StatelessWidget {
         !insideGlass &&
         clarity > blurThreshold;
 
+    final hasBackdropView = PacerGlassTheme.hasBackdropViewOf(context);
     final shaderSupported =
-        debugShaderFilterSupport ?? ImageFilter.isShaderFilterSupported;
+        debugShaderFilterSupport ??
+        (ImageFilter.isShaderFilterSupported || hasBackdropView);
     final useLens =
         sampleBackdrop &&
         firstInGroup &&
@@ -441,6 +501,7 @@ class PacerGlass extends StatelessWidget {
         : 3;
 
     final effectiveSigma = blurSigmaOverride ?? _blurSigmas[filterIndex];
+    final effectiveLensBlur = lensBlurSigma ?? effectiveSigma;
     final effectiveBlur = blurSigmaOverride != null
         ? ImageFilter.blur(
             sigmaX: blurSigmaOverride!,
@@ -450,6 +511,12 @@ class PacerGlass extends StatelessWidget {
 
     final clearFill = (dark ? const Color(0xff999999) : const Color(0xFFEAF1FA))
         .withValues(alpha: dark ? 0.17 : 0.48);
+    // Keep lens tint translucent so LiquidGlassLens edge refraction and rim
+    // specular highlights stay visible instead of painting an opaque slab on top.
+    final lensFillSource = tintColor ?? fallbackTint;
+    final lensTint = lensFillSource.withValues(
+      alpha: ((tintOpacity ?? (dark ? 0.38 : 0.50)) * reveal).clamp(0.24, 0.62),
+    );
 
     final fill = Color.lerp(
       fallbackTint,
@@ -460,12 +527,18 @@ class PacerGlass extends StatelessWidget {
     )!;
 
     final squircle = smoothCorners && firstInGroup && lastInGroup;
-    final surface = DecoratedBox(
-      decoration: squircle
-          ? ShapeDecoration(color: fill, shape: PacerSquircleBorder(radius))
-          : BoxDecoration(color: fill, borderRadius: shape),
-      child: _GlassBackdropScope(child: child),
-    );
+    final childScope = _GlassBackdropScope(child: child);
+    final surface = useLens
+        ? childScope
+        : DecoratedBox(
+            decoration: squircle
+                ? ShapeDecoration(
+                    color: fill,
+                    shape: PacerSquircleBorder(radius),
+                  )
+                : BoxDecoration(color: fill, borderRadius: shape),
+            child: childScope,
+          );
 
     // Single outer shadow (Spec §5.6.1)
     final shadows = firstInGroup && lastInGroup
@@ -483,21 +556,25 @@ class PacerGlass extends StatelessWidget {
         ? PacerLiquidBackdrop(
             borderRadius: shape,
             clarity: clarity,
-            blurSigma: effectiveSigma,
+            blurSigma: effectiveLensBlur,
             refractionDepth: refractionDepth * reveal,
+            refractionWidth: refractionWidth,
+            refractionIndexOverride: refractionIndexOverride,
+            magnification: magnification,
+            dispersionOverride: dispersionOverride,
+            saturation: saturation,
+            lensTintColor: lensTint,
             smoothCorners: squircle,
+            continuousCorners: continuousCorners,
             highlightIntensity: highlightIntensity * reveal,
             child: surface,
           )
         : null;
 
-    final backdrop = lens != null
-        ? LiquidGlassBatch.backdropIdOf(context) == null
-              ? LiquidGlassBatch(child: lens)
-              : lens
-        : sampleBackdrop
-        ? BackdropFilter(filter: effectiveBlur, child: surface)
-        : surface;
+    final backdrop = lens ??
+        (sampleBackdrop
+            ? BackdropFilter(filter: effectiveBlur, child: surface)
+            : surface);
 
     return DecoratedBox(
       decoration: squircle
@@ -519,7 +596,9 @@ class PacerGlass extends StatelessWidget {
                 highlightIntensity: highlightIntensity * reveal,
               )
             : null,
-        child: squircle
+        child: useLens
+            ? backdrop
+            : squircle
             ? ClipPath.shape(
                 shape: PacerSquircleBorder(radius),
                 child: backdrop,

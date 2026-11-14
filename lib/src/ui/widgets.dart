@@ -1,6 +1,7 @@
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:pacer/core/responsive/responsive.dart';
 import 'package:pacer/src/aktivitas/activity_model.dart';
 import 'package:pacer/src/local/local_models.dart';
@@ -142,20 +143,40 @@ class RunSessionCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = PacerScheme.of(context);
+    final dark = scheme.isDark;
     final showBadge = syncState != null && syncState != SyncState.synced;
+    final accentColor = limePill ? scheme.brandAccent : PacerColors.primary;
+    final iconFg =
+        limePill &&
+            !dark &&
+            ThemeData.estimateBrightnessForColor(accentColor) ==
+                Brightness.light
+        ? PacerColors.navy
+        : accentColor;
     final card = Container(
-      padding: const EdgeInsets.fromLTRB(16, 24, 16, 16),
+      padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: scheme.runCard,
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(20),
         border: Border.all(color: scheme.softBorder),
         boxShadow: [scheme.shadowBox],
       ),
       child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.center,
         children: [
-          Icon(Icons.directions_run, size: 34, color: scheme.ink),
-          const SizedBox(width: 8),
+          Container(
+            width: 44,
+            height: 44,
+            decoration: BoxDecoration(
+              color: accentColor.withValues(alpha: dark ? 0.15 : 0.20),
+              borderRadius: BorderRadius.circular(14),
+              border: Border.all(
+                color: accentColor.withValues(alpha: dark ? 0.30 : 0.35),
+              ),
+            ),
+            child: Icon(Icons.directions_run, size: 24, color: iconFg),
+          ),
+          const SizedBox(width: 12),
           // Left pane (3) / right pane (2): both flex so wide text can
           // never push the row past the card edge.
           Expanded(
@@ -179,10 +200,10 @@ class RunSessionCard extends StatelessWidget {
                     ],
                   ],
                 ),
-                const SizedBox(height: 16),
+                const SizedBox(height: 6),
                 Text(
                   title,
-                  style: PacerText.cardTitleOf(context),
+                  style: PacerText.cardTitleOf(context).copyWith(fontSize: 14),
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
                 ),
@@ -201,7 +222,7 @@ class RunSessionCard extends StatelessWidget {
                           Text(S.time, style: PacerText.cardSubOf(context)),
                         ],
                       ),
-                      const SizedBox(width: 24),
+                      const SizedBox(width: 20),
                       Column(
                         mainAxisSize: MainAxisSize.min,
                         crossAxisAlignment: CrossAxisAlignment.start,
@@ -216,11 +237,12 @@ class RunSessionCard extends StatelessWidget {
               ],
             ),
           ),
-          const SizedBox(width: 16),
+          const SizedBox(width: 14),
           Expanded(
             flex: 2,
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.end,
+              mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 FittedBox(
                   fit: BoxFit.scaleDown,
@@ -230,14 +252,27 @@ class RunSessionCard extends StatelessWidget {
                     style: PacerText.cardDistanceOf(context),
                   ),
                 ),
-                const SizedBox(height: 16),
-                // Pace pill spans the pane width — scales with the card.
+                const SizedBox(height: 10),
+                // Sleek capsule accent bar under distance.
                 Container(
-                  height: 12.5,
+                  height: 6,
                   decoration: BoxDecoration(
-                    color: (limePill ? PacerColors.lime : PacerColors.primary)
-                        .withValues(alpha: 0.8),
-                    borderRadius: BorderRadius.circular(2),
+                    gradient: LinearGradient(
+                      colors: limePill
+                          ? [
+                              scheme.brandAccent,
+                              Color.lerp(
+                                scheme.brandAccent,
+                                PacerColors.neon,
+                                0.35,
+                              )!,
+                            ]
+                          : [
+                              PacerColors.primary,
+                              PacerColors.primary.withValues(alpha: 0.45),
+                            ],
+                    ),
+                    borderRadius: BorderRadius.circular(999),
                   ),
                 ),
               ],
@@ -287,136 +322,158 @@ class TeamCard extends StatelessWidget {
     final showLoc = location.isNotEmpty || memberCount == null;
     return Container(
       width: width,
-      padding: const EdgeInsets.all(16),
+      clipBehavior: Clip.antiAlias,
       decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(12),
+        borderRadius: BorderRadius.circular(20),
         gradient: LinearGradient(
           colors: scheme.heroCardGradient,
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
+        border: Border.all(color: Colors.white.withValues(alpha: 0.14)),
         boxShadow: [scheme.shadowBox],
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisAlignment: showBadges
-            ? MainAxisAlignment.spaceBetween
-            : MainAxisAlignment.end,
+      child: Stack(
+        fit: StackFit.passthrough,
         children: [
-          if (showBadges)
-            Row(
-              children: [
-                if (isPrivate != null)
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 8,
-                      vertical: 3,
-                    ),
-                    decoration: BoxDecoration(
-                      color: Colors.white.withValues(alpha: 0.16),
-                      borderRadius: BorderRadius.circular(999),
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        Icon(
-                          isPrivate! ? Icons.lock_outline : Icons.public,
-                          size: 11,
-                          color: Colors.white,
-                        ),
-                        const SizedBox(width: 4),
-                        Text(
-                          isPrivate! ? S.privateBadge : S.publicBadge,
-                          style: PacerText.teamLoc.copyWith(
-                            fontSize: 10,
-                            fontWeight: FontWeight.w700,
-                            color: Colors.white,
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                if (isPrivate != null && isJoined) const SizedBox(width: 6),
-                if (isJoined)
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 8,
-                      vertical: 3,
-                    ),
-                    decoration: BoxDecoration(
-                      color: PacerColors.lime,
-                      borderRadius: BorderRadius.circular(999),
-                    ),
-                    child: Text(
-                      S.joinedBadge,
-                      style: PacerText.teamLoc.copyWith(
-                        fontSize: 10,
-                        fontWeight: FontWeight.w800,
-                        color: PacerColors.ink,
-                      ),
-                    ),
-                  ),
-              ],
-            ),
-          if (showBadges) const SizedBox(height: 6),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(
-                name,
-                style: PacerText.teamName,
-                maxLines: 1,
-                overflow: TextOverflow.ellipsis,
+          Positioned(
+            right: -18,
+            bottom: -22,
+            child: IgnorePointer(
+              child: Icon(
+                Icons.groups_rounded,
+                size: 108,
+                color: Colors.white.withValues(alpha: 0.07),
               ),
-              const SizedBox(height: 4),
-              Row(
-                children: [
-                  if (showLoc)
-                    Expanded(
-                      child: Row(
-                        children: [
-                          const Icon(
-                            Icons.location_on,
-                            size: 18,
-                            color: Colors.white,
+            ),
+          ),
+          Padding(
+            padding: const EdgeInsets.all(16),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisAlignment: showBadges
+                  ? MainAxisAlignment.spaceBetween
+                  : MainAxisAlignment.end,
+              children: [
+                if (showBadges)
+                  Row(
+                    children: [
+                      if (isPrivate != null)
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 3,
                           ),
-                          const SizedBox(width: 6),
-                          Expanded(
-                            child: Text(
-                              location,
-                              style: PacerText.teamLoc,
-                              maxLines: 1,
-                              overflow: TextOverflow.ellipsis,
+                          decoration: BoxDecoration(
+                            color: Colors.white.withValues(alpha: 0.16),
+                            borderRadius: BorderRadius.circular(999),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              Icon(
+                                isPrivate! ? Icons.lock_outline : Icons.public,
+                                size: 11,
+                                color: Colors.white,
+                              ),
+                              const SizedBox(width: 4),
+                              Text(
+                                isPrivate! ? S.privateBadge : S.publicBadge,
+                                style: PacerText.teamLoc.copyWith(
+                                  fontSize: 10,
+                                  fontWeight: FontWeight.w700,
+                                  color: Colors.white,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      if (isPrivate != null && isJoined)
+                        const SizedBox(width: 6),
+                      if (isJoined)
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 3,
+                          ),
+                          decoration: BoxDecoration(
+                            color: scheme.brandAccent,
+                            borderRadius: BorderRadius.circular(999),
+                          ),
+                          child: Text(
+                            S.joinedBadge,
+                            style: PacerText.teamLoc.copyWith(
+                              fontSize: 10,
+                              fontWeight: FontWeight.w800,
+                              color: scheme.onBrandAccent,
                             ),
                           ),
-                        ],
-                      ),
+                        ),
+                    ],
+                  ),
+                if (showBadges) const SizedBox(height: 6),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      name,
+                      style: PacerText.teamName,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
                     ),
-                  if (showLoc && memberCount != null) const SizedBox(width: 8),
-                  if (memberCount != null)
+                    const SizedBox(height: 4),
                     Row(
-                      mainAxisSize: MainAxisSize.min,
                       children: [
-                        const Icon(
-                          Icons.group_outlined,
-                          size: 16,
-                          color: Colors.white70,
-                        ),
-                        const SizedBox(width: 4),
-                        Text(
-                          S.membersCount(memberCount!),
-                          style: PacerText.teamLoc.copyWith(
-                            color: Colors.white.withValues(alpha: 0.9),
+                        if (showLoc)
+                          Expanded(
+                            child: Row(
+                              children: [
+                                const Icon(
+                                  Icons.location_on,
+                                  size: 18,
+                                  color: Colors.white,
+                                ),
+                                const SizedBox(width: 6),
+                                Expanded(
+                                  child: Text(
+                                    location,
+                                    style: PacerText.teamLoc,
+                                    maxLines: 1,
+                                    overflow: TextOverflow.ellipsis,
+                                  ),
+                                ),
+                              ],
+                            ),
                           ),
-                          maxLines: 1,
-                          overflow: TextOverflow.ellipsis,
-                        ),
+                        if (showLoc && memberCount != null)
+                          const SizedBox(width: 8),
+                        if (memberCount != null)
+                          Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              const Icon(
+                                Icons.group_outlined,
+                                size: 16,
+                                color: Colors.white70,
+                              ),
+                              const SizedBox(width: 4),
+                              Text(
+                                S.membersCount(memberCount!),
+                                style: PacerText.teamLoc.copyWith(
+                                  color: Colors.white.withValues(alpha: 0.9),
+                                ),
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                              ),
+                            ],
+                          ),
                       ],
                     ),
-                ],
-              ),
-            ],
+                  ],
+                ),
+              ],
+            ),
           ),
         ],
       ),
@@ -424,7 +481,7 @@ class TeamCard extends StatelessWidget {
   }
 }
 
-/// Section header row with "See all" (Outfit 500/20 + 15).
+/// Section header row with "See all" (SpaceGrotesk 700/18.5 + capsule CTA).
 class SectionHeader extends StatelessWidget {
   final String title;
   final VoidCallback? onSeeAll;
@@ -432,8 +489,18 @@ class SectionHeader extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final scheme = PacerScheme.of(context);
     return Row(
       children: [
+        Container(
+          width: 4,
+          height: 18,
+          decoration: BoxDecoration(
+            color: scheme.accent,
+            borderRadius: BorderRadius.circular(999),
+          ),
+        ),
+        const SizedBox(width: 10),
         // Title flexes and scales instead of overflowing with long
         // translations (e.g. "Lihat semua" + long section names).
         Expanded(
@@ -442,19 +509,43 @@ class SectionHeader extends StatelessWidget {
             alignment: Alignment.centerLeft,
             child: Text(
               title,
-              style: const TextStyle(fontWeight: FontWeight.w500, fontSize: 20),
+              style: GoogleFonts.spaceGrotesk(
+                fontWeight: FontWeight.w700,
+                fontSize: 18.5,
+                letterSpacing: -0.3,
+                color: scheme.ink,
+              ),
             ),
           ),
         ),
+        const SizedBox(width: 8),
         TextButton(
           onPressed: onSeeAll,
           style: TextButton.styleFrom(
-            minimumSize: const Size(48, 48),
+            minimumSize: const Size(48, 38),
+            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
             tapTargetSize: MaterialTapTargetSize.padded,
+            backgroundColor: scheme.card,
+            shape: StadiumBorder(side: BorderSide(color: scheme.border)),
           ),
-          child: Text(
-            S.seeAll,
-            style: TextStyle(color: PacerScheme.of(context).ink, fontSize: 15),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Text(
+                S.seeAll,
+                style: GoogleFonts.spaceGrotesk(
+                  color: scheme.ink,
+                  fontSize: 12.5,
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+              const SizedBox(width: 2),
+              Icon(
+                Icons.chevron_right_rounded,
+                size: 16,
+                color: scheme.accent,
+              ),
+            ],
           ),
         ),
       ],
@@ -987,7 +1078,8 @@ class BottomNavPill extends StatelessWidget {
       (Icons.groups_outlined, Icons.groups, S.teams),
       (Icons.leaderboard_outlined, Icons.leaderboard, S.leaderboard),
     ];
-    final tint = dark ? const Color(0xFF1E293B) : scheme.navBar;
+    final tint = dark ? scheme.card : scheme.navBar;
+    final pillAccent = dark ? scheme.accent : scheme.brandAccent;
 
     // Slot index mapping across 5 slots: [0: Home, 1: Run, 2: START, 3: Teams, 4: Rank]
     final slotIndex = index < 2 ? index : index + 1;
@@ -995,7 +1087,7 @@ class BottomNavPill extends StatelessWidget {
 
     Widget tab(int i) {
       final selected = index == i;
-      final selectedFg = dark ? PacerColors.lime : const Color(0xFF102A43);
+      final selectedFg = dark ? scheme.accent : const Color(0xFF102A43);
       return PacerGlassPress(
         radius: 24,
         child: Semantics(
@@ -1059,6 +1151,13 @@ class BottomNavPill extends StatelessWidget {
         tintColor: tint,
         tintOpacity: PacerGlassTheme.navigationOpacity(context),
         blurSigmaOverride: blurSigma,
+        lensBlurSigma: 2.8,
+        refractionWidth: 12.0,
+        refractionIndexOverride: 1.18,
+        magnification: 1.02,
+        dispersionOverride: 1.2,
+        saturation: 1.08,
+        continuousCorners: true,
         child: SizedBox(
           width: 377,
           height: 80.7,
@@ -1085,13 +1184,13 @@ class BottomNavPill extends StatelessWidget {
                           ),
                           child: DecoratedBox(
                             decoration: BoxDecoration(
-                              color: PacerColors.lime.withValues(
-                                alpha: dark ? 0.16 : 0.58,
+                              color: pillAccent.withValues(
+                                alpha: dark ? 0.18 : 0.58,
                               ),
                               borderRadius: BorderRadius.circular(22),
                               border: Border.all(
                                 color: dark
-                                    ? PacerColors.lime.withValues(alpha: 0.35)
+                                    ? pillAccent.withValues(alpha: 0.40)
                                     : const Color(0xFF82B800).withValues(
                                         alpha: 0.65,
                                       ),
@@ -1099,8 +1198,8 @@ class BottomNavPill extends StatelessWidget {
                               ),
                               boxShadow: [
                                 BoxShadow(
-                                  color: PacerColors.lime.withValues(
-                                    alpha: dark ? 0.18 : 0.26,
+                                  color: pillAccent.withValues(
+                                    alpha: dark ? 0.20 : 0.26,
                                   ),
                                   blurRadius: 12,
                                   spreadRadius: -2,
@@ -1613,6 +1712,7 @@ class LimeActionBar extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final scheme = PacerScheme.of(context);
     return PacerTapScale(
       enabled: onPressed != null,
       child: SizedBox(
@@ -1626,18 +1726,18 @@ class LimeActionBar extends StatelessWidget {
                   onPressed!();
                 },
           style: ElevatedButton.styleFrom(
-            backgroundColor: PacerColors.lime,
-            foregroundColor: PacerColors.ink,
+            backgroundColor: scheme.brandAccent,
+            foregroundColor: scheme.onBrandAccent,
             shape: RoundedRectangleBorder(
               borderRadius: BorderRadius.circular(10),
             ),
           ),
           child: Text(
             label,
-            style: const TextStyle(
+            style: TextStyle(
               fontWeight: FontWeight.w700,
               fontSize: 20,
-              color: PacerColors.ink,
+              color: scheme.onBrandAccent,
             ),
           ),
         ),
@@ -1648,12 +1748,12 @@ class LimeActionBar extends StatelessWidget {
 
 /// Clubs search field. Fills parent width, r12 #F8FAFC.
 class SearchField extends StatelessWidget {
-  final String hint;
+  final String? hint;
   final TextEditingController? controller;
   final ValueChanged<String>? onChanged;
   const SearchField({
     super.key,
-    this.hint = 'Cari klub, kota, atau teman...',
+    this.hint,
     this.controller,
     this.onChanged,
   });
@@ -1665,7 +1765,7 @@ class SearchField extends StatelessWidget {
       controller: controller,
       onChanged: onChanged,
       decoration: InputDecoration(
-        hintText: hint,
+        hintText: hint ?? S.searchClubs,
         hintStyle: TextStyle(color: scheme.soft, fontSize: 14),
         prefixIcon: Icon(Icons.search, size: 20, color: scheme.soft),
         filled: true,
@@ -1690,11 +1790,11 @@ class SearchField extends StatelessWidget {
 /// Gradient grid replacing all map/photo fills.
 class MapPlaceholder extends StatelessWidget {
   final double height;
-  final String label;
+  final String? label;
   const MapPlaceholder({
     super.key,
     this.height = 180,
-    this.label = 'Peta rute — placeholder bebas hak cipta',
+    this.label,
   });
 
   @override
@@ -1714,7 +1814,7 @@ class MapPlaceholder extends StatelessWidget {
               const Icon(Icons.route, color: PacerColors.lime, size: 40),
               const SizedBox(height: 8),
               Text(
-                label,
+                label ?? S.mapPlaceholderLabel,
                 textAlign: TextAlign.center,
                 maxLines: 2,
                 overflow: TextOverflow.ellipsis,

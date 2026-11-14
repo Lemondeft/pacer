@@ -146,12 +146,14 @@ class _LoginScreenState extends State<LoginScreen> {
 
 /// Figma "Pilih Olahraga" pre-run setup.
 class RunSetupScreen extends StatefulWidget {
+  final String? initialSport;
   final void Function(String jenis, String goal, List<String>? challengeIds)?
   onStartWithChallenges;
   final void Function(String jenis, String goal)? onStartWithConfig;
   final VoidCallback? onStart;
   const RunSetupScreen({
     super.key,
+    this.initialSport,
     this.onStartWithChallenges,
     this.onStartWithConfig,
     this.onStart,
@@ -171,6 +173,11 @@ class _RunSetupScreenState extends State<RunSetupScreen> {
   @override
   void initState() {
     super.initState();
+    final sportKey = widget.initialSport;
+    if (sportKey != null) {
+      final idx = _sports.indexWhere((s) => s.key == sportKey);
+      if (idx >= 0) _selectedSport = idx;
+    }
     _loadChallenges();
   }
 
@@ -1808,7 +1815,7 @@ class _TeamsScreenState extends State<TeamsScreen> {
         if (!mounted) return;
         if (joined == null) {
           messenger.showSnackBar(
-            const SnackBar(content: Text('Kode salah. Coba lagi.')),
+            SnackBar(content: Text(S.invalidTeamCode)),
           );
           return;
         }
@@ -1822,7 +1829,7 @@ class _TeamsScreenState extends State<TeamsScreen> {
       messenger.showSnackBar(SnackBar(content: Text(S.join)));
     } on PostgrestException {
       messenger.showSnackBar(
-        const SnackBar(content: Text('Kode salah. Coba lagi.')),
+        SnackBar(content: Text(S.invalidTeamCode)),
       );
     } catch (e) {
       messenger.showSnackBar(
@@ -1941,10 +1948,10 @@ class _TeamsScreenState extends State<TeamsScreen> {
         duration: const Duration(milliseconds: 150),
         padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
         decoration: BoxDecoration(
-          color: selected ? PacerColors.lime : scheme.card,
+          color: selected ? scheme.brandAccent : scheme.card,
           borderRadius: BorderRadius.circular(20),
           border: Border.all(
-            color: selected ? PacerColors.lime : scheme.border,
+            color: selected ? scheme.brandAccent : scheme.border,
             width: selected ? 1.5 : 1,
           ),
         ),
@@ -1953,7 +1960,7 @@ class _TeamsScreenState extends State<TeamsScreen> {
           style: TextStyle(
             fontSize: 12,
             fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
-            color: selected ? PacerColors.ink : scheme.ink,
+            color: selected ? scheme.onBrandAccent : scheme.ink,
           ),
         ),
       ),
@@ -2312,7 +2319,6 @@ class _TeamDashboardScreenState extends State<TeamDashboardScreen> {
       } catch (_) {
         /* keeps prior null */
       }
-      final isCoach = peran == 'coach' || peran == 'admin';
 
       if (uid == null) {
         if (!mounted) return;
@@ -2385,6 +2391,7 @@ class _TeamDashboardScreenState extends State<TeamDashboardScreen> {
       final isKetua =
           team?.dibuatOleh == uid ||
           roster.any((m) => m.userId == uid && m.peran == 'ketua');
+      final isCoach = peran == 'admin' || (peran == 'coach' && inTeam);
       // Strict client-side defense-in-depth matching SQL: private team codes
       // are shown ONLY when the signed-in user is creator or in the team.
       final canViewCode = code != null &&
@@ -2465,7 +2472,7 @@ class _TeamDashboardScreenState extends State<TeamDashboardScreen> {
     final isPublic = _team != null && !_team!.isPrivate;
     if (code.isEmpty && !isPublic) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Masukkan kode tim dulu.')),
+        SnackBar(content: Text(S.enterTeamCodeFirst)),
       );
       return;
     }
@@ -2477,7 +2484,7 @@ class _TeamDashboardScreenState extends State<TeamDashboardScreen> {
         if (!mounted) return;
         if (!ok) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text('Kode salah. Coba lagi.')),
+            SnackBar(content: Text(S.invalidTeamCode)),
           );
           return;
         }
@@ -2494,7 +2501,7 @@ class _TeamDashboardScreenState extends State<TeamDashboardScreen> {
     } on PostgrestException {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Kode salah. Coba lagi.')),
+          SnackBar(content: Text(S.invalidTeamCode)),
         );
       }
     } catch (e) {
@@ -2653,7 +2660,7 @@ class _TeamDashboardScreenState extends State<TeamDashboardScreen> {
               ),
               TextField(
                 controller: target,
-                decoration: const InputDecoration(labelText: 'Target (m)'),
+                decoration: InputDecoration(labelText: S.teamTargetMeters),
                 keyboardType: TextInputType.number,
               ),
               const SizedBox(height: 8),
@@ -2800,15 +2807,15 @@ class _TeamDashboardScreenState extends State<TeamDashboardScreen> {
                     vertical: 4,
                   ),
                   decoration: BoxDecoration(
-                    color: PacerColors.lime,
+                    color: scheme.brandAccent,
                     borderRadius: BorderRadius.circular(999),
                   ),
                   child: Text(
                     S.joinedBadge,
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 11,
                       fontWeight: FontWeight.w800,
-                      color: PacerColors.ink,
+                      color: scheme.onBrandAccent,
                     ),
                   ),
                 ),
@@ -2880,8 +2887,8 @@ class _TeamDashboardScreenState extends State<TeamDashboardScreen> {
                   value: progress,
                   minHeight: 6,
                   backgroundColor: Colors.white.withValues(alpha: 0.2),
-                  valueColor: const AlwaysStoppedAnimation<Color>(
-                    PacerColors.lime,
+                  valueColor: AlwaysStoppedAnimation<Color>(
+                    scheme.brandAccent,
                   ),
                 ),
               ),
@@ -3118,14 +3125,14 @@ class _TeamDashboardScreenState extends State<TeamDashboardScreen> {
                   onPressed: () => Navigator.of(context).push(
                     MaterialPageRoute(builder: (_) => const CoachBoardScreen()),
                   ),
-                  child: const Text('Coach Board'),
+                  child: Text(S.coachBoardTitle),
                 ),
               ),
               const SizedBox(width: 8),
               Expanded(
                 child: OutlinedButton(
                   onPressed: _editTeam,
-                  child: const Text('Ubah'),
+                  child: Text(S.editLabel),
                 ),
               ),
               const SizedBox(width: 8),
@@ -3135,7 +3142,7 @@ class _TeamDashboardScreenState extends State<TeamDashboardScreen> {
                   style: OutlinedButton.styleFrom(
                     foregroundColor: scheme.error,
                   ),
-                  child: const Text('Hapus'),
+                  child: Text(S.deleteLabel),
                 ),
               ),
             ],
@@ -3256,7 +3263,7 @@ class _TeamDashboardScreenState extends State<TeamDashboardScreen> {
                       ),
                       decoration: BoxDecoration(
                         color: isCaptain
-                            ? PacerColors.lime.withValues(alpha: 0.25)
+                            ? scheme.brandAccent.withValues(alpha: 0.25)
                             : scheme.searchBg,
                         borderRadius: BorderRadius.circular(999),
                       ),
@@ -3276,15 +3283,15 @@ class _TeamDashboardScreenState extends State<TeamDashboardScreen> {
                           vertical: 2,
                         ),
                         decoration: BoxDecoration(
-                          color: PacerColors.lime,
+                          color: scheme.brandAccent,
                           borderRadius: BorderRadius.circular(999),
                         ),
                         child: Text(
                           m.appPeran.toUpperCase(),
-                          style: const TextStyle(
+                          style: TextStyle(
                             fontSize: 10,
                             fontWeight: FontWeight.w800,
-                            color: PacerColors.ink,
+                            color: scheme.onBrandAccent,
                           ),
                         ),
                       ),
@@ -3403,7 +3410,7 @@ class _TeamDashboardScreenState extends State<TeamDashboardScreen> {
                   badgeFg = scheme.success;
                 } else if (part != null && part.isActive) {
                   badgeText = S.activeSlotBadge;
-                  badgeBg = PacerColors.lime.withValues(alpha: 0.28);
+                  badgeBg = scheme.brandAccent.withValues(alpha: 0.28);
                   badgeFg = scheme.ink;
                 } else if (part != null) {
                   badgeText = S.waitingSlotBadge;
@@ -3441,7 +3448,7 @@ class _TeamDashboardScreenState extends State<TeamDashboardScreen> {
                       borderRadius: BorderRadius.circular(16),
                       border: Border.all(
                         color: part?.isActive == true
-                            ? PacerColors.lime
+                            ? scheme.brandAccent
                             : scheme.border,
                       ),
                     ),
@@ -3744,8 +3751,10 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
       padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 16),
       decoration: BoxDecoration(
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: mine ? PacerColors.lime : scheme.border),
-        color: mine ? PacerColors.lime.withValues(alpha: 0.1) : scheme.card,
+        border: Border.all(color: mine ? scheme.brandAccent : scheme.border),
+        color: mine
+            ? scheme.brandAccent.withValues(alpha: 0.1)
+            : scheme.card,
       ),
       child: Row(
         children: [
@@ -3788,16 +3797,16 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
         duration: const Duration(milliseconds: 150),
         padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
         decoration: BoxDecoration(
-          color: selected ? PacerColors.lime : scheme.card,
+          color: selected ? scheme.brandAccent : scheme.card,
           borderRadius: BorderRadius.circular(20),
           border: Border.all(
-            color: selected ? PacerColors.lime : scheme.border,
+            color: selected ? scheme.brandAccent : scheme.border,
             width: selected ? 1.5 : 1,
           ),
           boxShadow: selected
               ? [
                   BoxShadow(
-                    color: PacerColors.lime.withValues(alpha: 0.25),
+                    color: scheme.brandAccent.withValues(alpha: 0.25),
                     blurRadius: 8,
                     offset: const Offset(0, 2),
                   ),
@@ -3811,7 +3820,7 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
               Icon(
                 icon,
                 size: 14,
-                color: selected ? PacerColors.navy : scheme.ink,
+                color: selected ? scheme.onBrandAccent : scheme.ink,
               ),
               const SizedBox(width: 4),
             ],
@@ -3820,7 +3829,7 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
               style: GoogleFonts.spaceGrotesk(
                 fontSize: 12,
                 fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
-                color: selected ? PacerColors.navy : scheme.ink,
+                color: selected ? scheme.onBrandAccent : scheme.ink,
               ),
             ),
           ],
@@ -3884,12 +3893,9 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
                 child: Row(
                   children: [
                     _filterChip(
-                      label: S.allTime,
-                      selected:
-                          _selectedMetric == 'semua' &&
-                          _selectedPeriod == 'semua',
-                      onTap: () =>
-                          _onFilterChanged(metric: 'semua', period: 'semua'),
+                      label: S.filterAll,
+                      selected: _selectedMetric == 'semua',
+                      onTap: () => _onFilterChanged(metric: 'semua'),
                     ),
                     const SizedBox(width: 8),
                     _filterChip(
@@ -3929,6 +3935,12 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
                       color: PacerScheme.of(context).border,
                     ),
                     const SizedBox(width: 16),
+                    _filterChip(
+                      label: S.allTime,
+                      selected: _selectedPeriod == 'semua',
+                      onTap: () => _onFilterChanged(period: 'semua'),
+                    ),
+                    const SizedBox(width: 8),
                     _filterChip(
                       label: S.periodWeekly,
                       selected: _selectedPeriod == 'mingguan',
@@ -4026,29 +4038,35 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
                         crossAxisAlignment: CrossAxisAlignment.end,
                         mainAxisAlignment: MainAxisAlignment.center,
                         children: [
-                          _podium(
-                            top[1].nama,
-                            _formatMetricValue(top[1].entry.nilai),
-                            68,
-                            PacerColors.podiumGray,
-                            rank: 2,
-                            medal: PacerColors.medalSilver,
+                          Flexible(
+                            child: _podium(
+                              top[1].nama,
+                              _formatMetricValue(top[1].entry.nilai),
+                              68,
+                              PacerColors.podiumGray,
+                              rank: 2,
+                              medal: PacerColors.medalSilver,
+                            ),
                           ),
-                          _podium(
-                            top[0].nama,
-                            _formatMetricValue(top[0].entry.nilai),
-                            89,
-                            PacerColors.medalGold,
-                            rank: 1,
-                            medal: PacerColors.medalGold,
+                          Flexible(
+                            child: _podium(
+                              top[0].nama,
+                              _formatMetricValue(top[0].entry.nilai),
+                              89,
+                              PacerColors.medalGold,
+                              rank: 1,
+                              medal: PacerColors.medalGold,
+                            ),
                           ),
-                          _podium(
-                            top[2].nama,
-                            _formatMetricValue(top[2].entry.nilai),
-                            63,
-                            PacerColors.medalBronze,
-                            rank: 3,
-                            medal: PacerColors.medalBronze,
+                          Flexible(
+                            child: _podium(
+                              top[2].nama,
+                              _formatMetricValue(top[2].entry.nilai),
+                              63,
+                              PacerColors.medalBronze,
+                              rank: 3,
+                              medal: PacerColors.medalBronze,
+                            ),
                           ),
                         ],
                       ),
@@ -4342,9 +4360,9 @@ class _HistoryScreenState extends State<HistoryScreen> {
                                   fluid(w, 88, 140),
                                 ),
                               ),
-                              const Text(
-                                'Kilometer',
-                                style: TextStyle(
+                              Text(
+                                S.kilometersUnit,
+                                style: const TextStyle(
                                   fontWeight: FontWeight.w300,
                                   fontSize: 24,
                                 ),
@@ -4360,7 +4378,7 @@ class _HistoryScreenState extends State<HistoryScreen> {
                         spacing: 12,
                         children: [
                           Text(
-                            '${list.length} Run',
+                            S.runsCount(list.length),
                             style: const TextStyle(
                               fontWeight: FontWeight.w500,
                               fontSize: 24,
@@ -4368,15 +4386,15 @@ class _HistoryScreenState extends State<HistoryScreen> {
                           ),
                           Text(
                             list.isEmpty
-                                ? '– Average Pace'
-                                : '${fmtPace(totalS, totalKm)} Average Pace',
+                                ? '– ${S.averagePace}'
+                                : '${fmtPace(totalS, totalKm)} ${S.averagePace}',
                             style: const TextStyle(
                               fontWeight: FontWeight.w300,
                               fontSize: 20,
                             ),
                           ),
                           Text(
-                            '${fmtDurasi(totalS)} Time',
+                            '${fmtDurasi(totalS)} ${S.time}',
                             style: const TextStyle(
                               fontWeight: FontWeight.w300,
                               fontSize: 20,
@@ -4474,11 +4492,13 @@ class _ChallengeScopeBadge extends StatelessWidget {
         : S.soloChallengeTag;
     final bg = lightOnDark
         ? (isTeam
-              ? PacerColors.lime.withValues(alpha: 0.25)
+              ? scheme.brandAccent.withValues(alpha: 0.25)
               : Colors.white.withValues(alpha: 0.16))
-        : (isTeam ? PacerColors.lime.withValues(alpha: 0.28) : scheme.searchBg);
+        : (isTeam
+              ? scheme.brandAccent.withValues(alpha: 0.28)
+              : scheme.searchBg);
     final fg = lightOnDark
-        ? (isTeam ? PacerColors.lime : Colors.white)
+        ? (isTeam ? scheme.brandAccent : Colors.white)
         : scheme.ink;
     return _ChallengeBadge(label, bg: bg, fg: fg);
   }
@@ -4529,7 +4549,7 @@ class _ChallengeToggleList extends StatelessWidget {
                     borderRadius: BorderRadius.circular(12),
                     border: Border.all(
                       color: (onToggle != null && isSelected)
-                          ? PacerColors.lime
+                          ? scheme.brandAccent
                           : scheme.border,
                     ),
                   ),
@@ -4573,7 +4593,7 @@ class _ChallengeToggleList extends StatelessWidget {
                           if (onToggle != null)
                             Switch(
                               value: isSelected,
-                              activeThumbColor: PacerColors.lime,
+                              activeThumbColor: scheme.brandAccent,
                               onChanged: (v) => onToggle!(c.id, v),
                             )
                           else
@@ -5018,7 +5038,7 @@ class _ChallengeDetailSheetState extends State<ChallengeDetailSheet> {
                       else if (part != null && part.isActive)
                         _ChallengeBadge(
                           S.activeSlotBadge,
-                          bg: PacerColors.lime.withValues(alpha: 0.28),
+                          bg: scheme.brandAccent.withValues(alpha: 0.28),
                           fg: scheme.ink,
                         )
                       else if (part != null)
@@ -5340,9 +5360,7 @@ class _AccountScreenState extends State<AccountScreen> {
                     Divider(height: 1, color: scheme.border),
                     _menuRow(
                       context,
-                      // Theme toggle lives next to the language setting;
-                      // hardcoded label follows that screen's precedent.
-                      label: 'Tema',
+                      label: S.theme,
                       onTap: () => Navigator.of(context).push(
                         MaterialPageRoute(
                           builder: (_) => const ThemeSettingsScreen(),
@@ -5512,9 +5530,9 @@ class _StatisticScreenState extends State<StatisticScreen> {
                         return Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            const Text(
-                              '0,00 Km',
-                              style: TextStyle(
+                            Text(
+                              fmtKm(0),
+                              style: const TextStyle(
                                 fontWeight: FontWeight.w700,
                                 fontSize: 32,
                               ),
@@ -5534,14 +5552,18 @@ class _StatisticScreenState extends State<StatisticScreen> {
                                 ),
                                 const SizedBox(width: 8),
                                 Expanded(
-                                  child: _StatCard(S.totalTime, '–', 'menit'),
+                                  child: _StatCard(
+                                    S.totalTime,
+                                    '–',
+                                    S.unitMinutes,
+                                  ),
                                 ),
                                 const SizedBox(width: 8),
                                 Expanded(
                                   child: _StatCard(
                                     S.activeCalories,
                                     '–',
-                                    'kkal',
+                                    S.unitKcal,
                                   ),
                                 ),
                               ],
@@ -5581,7 +5603,7 @@ class _StatisticScreenState extends State<StatisticScreen> {
                                 child: _StatCard(
                                   S.totalTime,
                                   fmtDurasi(d.seconds),
-                                  'menit',
+                                  S.unitMinutes,
                                 ),
                               ),
                               const SizedBox(width: 8),
@@ -5762,9 +5784,9 @@ class _StreaksScreenState extends State<StreaksScreen> {
                     return Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        const Text(
-                          'MINGGU INI • 0 dari 7 Hari',
-                          style: TextStyle(
+                        Text(
+                          '${S.thisWeek} • ${S.daysOf7(0)}',
+                          style: const TextStyle(
                             color: PacerColors.streakBlue,
                             fontWeight: FontWeight.w600,
                             fontSize: 12,
@@ -5789,7 +5811,7 @@ class _StreaksScreenState extends State<StreaksScreen> {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       Text(
-                        'MINGGU INI • $doneThisWeek dari 7 Hari',
+                        '${S.thisWeek} • ${S.daysOf7(doneThisWeek)}',
                         style: const TextStyle(
                           color: PacerColors.streakBlue,
                           fontWeight: FontWeight.w600,
@@ -5968,8 +5990,8 @@ class _ChallengeListScreenState extends State<ChallengeListScreen> {
       statusFg = Colors.greenAccent;
     } else if (part != null && part.isActive) {
       statusLabel = S.activeSlotBadge;
-      statusBg = PacerColors.lime.withValues(alpha: 0.28);
-      statusFg = PacerColors.lime;
+      statusBg = scheme.brandAccent.withValues(alpha: 0.28);
+      statusFg = scheme.brandAccent;
     } else if (part != null) {
       statusLabel = S.waitingSlotBadge;
       statusBg = Colors.white24;
@@ -6114,7 +6136,7 @@ class _ChallengeListScreenState extends State<ChallengeListScreen> {
                     TextButton(
                       onPressed: _busy ? null : () => _activate(c.id),
                       style: TextButton.styleFrom(
-                        foregroundColor: PacerColors.lime,
+                        foregroundColor: scheme.brandAccent,
                         padding: const EdgeInsets.symmetric(
                           horizontal: 10,
                           vertical: 4,
@@ -6265,11 +6287,15 @@ class PersyaratanScreen extends StatelessWidget {
                       Container(
                         width: 32,
                         height: 32,
-                        decoration: const BoxDecoration(
-                          color: PacerColors.lime,
+                        decoration: BoxDecoration(
+                          color: PacerScheme.of(context).brandAccent,
                           shape: BoxShape.circle,
                         ),
-                        child: const Icon(Icons.check, size: 16),
+                        child: Icon(
+                          Icons.check,
+                          size: 16,
+                          color: PacerScheme.of(context).onBrandAccent,
+                        ),
                       ),
                       const SizedBox(width: 12),
                       Expanded(
@@ -6306,15 +6332,17 @@ class PersyaratanScreen extends StatelessWidget {
                     MaterialPageRoute(builder: (_) => const CreateClubScreen()),
                   ),
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: PacerColors.lime,
-                    foregroundColor: PacerColors.ink,
+                    backgroundColor: PacerScheme.of(context).brandAccent,
+                    foregroundColor: PacerScheme.of(context).onBrandAccent,
                     shape: RoundedRectangleBorder(
                       borderRadius: BorderRadius.circular(999),
                     ),
                   ),
                   child: Text(
                     S.agree,
-                    style: TextStyle(color: PacerColors.ink),
+                    style: TextStyle(
+                      color: PacerScheme.of(context).onBrandAccent,
+                    ),
                   ),
                 ),
               ),
@@ -6506,11 +6534,10 @@ class _CreateClubScreenState extends State<CreateClubScreen> {
   }
 }
 
-/// Figma buat challenge teams form (coach only — server rejects others).
-/// JARAK presets or TARGET presets define the distance (TARGET wins when
 /// Create Solo Challenge (for any user) or Team Challenge (Coach/Admin/Ketua).
-/// Sport, jarak (km) / target (km) presets or custom km dialog, durasi window,
-/// optional custom title, and team selector when Team scope is active.
+/// Coaches & team leaders can only pick teams they belong to / manage.
+/// Sport, unified distance target presets (or custom km), duration window
+/// (presets or custom days), and optional title.
 class CreateChallengeScreen extends StatefulWidget {
   final String? initialTeamId;
 
@@ -6523,19 +6550,18 @@ class CreateChallengeScreen extends StatefulWidget {
 class _CreateChallengeScreenState extends State<CreateChallengeScreen> {
   final TextEditingController _judulCtrl = TextEditingController();
   int _jenisIdx = 0; // 'lari'
-  int _jarak = 1; // '5 km'
-  int _durasi = 2; // week
-  int _target = -1; // untouched
+  int _distIdx = 1; // '5 km'
+  int _durasi = 2; // 1 week
   double? _customKm;
+  int? _customDays;
   bool _busy = false;
   String? _error;
   bool _isTeamMode = false;
   String? _selectedTeamId;
   List<Team> _manageableTeams = const [];
 
-  static const _jarakKm = [3.0, 5.0, 10.0];
+  static const _distancePresetsKm = [3.0, 5.0, 10.0, 25.0, 30.0, 45.0];
   static const _durasiDays = [1, 3, 7];
-  static const _targetKm = [25.0, 30.0, 45.0];
 
   @override
   void initState() {
@@ -6557,7 +6583,7 @@ class _CreateChallengeScreenState extends State<CreateChallengeScreen> {
     try {
       final List<Team> teams = [];
       if (await isDemoAccount()) {
-        for (final t in PacerDummyData.demoTeams) {
+        for (final t in PacerDummyData.demoMyTeams) {
           final isLeader =
               t.dibuatOleh == 'demo-user-me' ||
               PacerDummyData.getTeamRoster(
@@ -6572,22 +6598,29 @@ class _CreateChallengeScreenState extends State<CreateChallengeScreen> {
         final repo = TeamRepository();
         final uid = await auth.resolveUserId();
         final profile = await auth.getProfile();
-        final isCoach = profile?.peran == 'coach' || profile?.peran == 'admin';
-        if (isCoach) {
+        final isAdmin = profile?.peran == 'admin';
+        final isCoach = profile?.peran == 'coach';
+        if (isAdmin) {
           final all = await repo.listTeams();
           teams.addAll(all.isNotEmpty ? all : await repo.myTeams());
         } else if (uid != null) {
+          // Coaches and team leaders only create challenges for teams they belong to.
           final mine = await repo.myTeams();
-          final rosters = await Future.wait([
-            for (final t in mine)
-              repo.teamRoster(t.id).catchError((_) => const <TeamRosterMember>[]),
-          ]);
+          final rosters = isCoach
+              ? const <List<TeamRosterMember>>[]
+              : await Future.wait([
+                  for (final t in mine)
+                    repo
+                        .teamRoster(t.id)
+                        .catchError((_) => const <TeamRosterMember>[]),
+                ]);
           for (var i = 0; i < mine.length; i++) {
             final t = mine[i];
-            final isKetua =
+            final isLeader =
+                isCoach ||
                 t.dibuatOleh == uid ||
                 rosters[i].any((m) => m.userId == uid && m.peran == 'ketua');
-            if (isKetua || t.id == widget.initialTeamId) {
+            if (isLeader) {
               teams.add(t);
             }
           }
@@ -6601,70 +6634,102 @@ class _CreateChallengeScreenState extends State<CreateChallengeScreen> {
           _selectedTeamId = widget.initialTeamId;
           _isTeamMode = true;
         } else if (teams.isNotEmpty) {
-          _selectedTeamId ??= teams.first.id;
+          if (_selectedTeamId == null ||
+              !teams.any((t) => t.id == _selectedTeamId)) {
+            _selectedTeamId = teams.first.id;
+          }
+          if (widget.initialTeamId != null) {
+            _isTeamMode = false;
+          }
         } else {
           _isTeamMode = false;
+          _selectedTeamId = null;
         }
       });
     } catch (_) {}
   }
 
   Future<double?> _askCustomKm() async {
-    final controller = TextEditingController();
-    final result = await showDialog<String>(
+    final initial = _customKm == null
+        ? ''
+        : (_customKm == _customKm!.truncateToDouble()
+              ? '${_customKm!.toInt()}'
+              : '$_customKm');
+    final raw = await showDialog<String>(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Jarak custom (km)'),
-        content: TextField(
-          controller: controller,
-          autofocus: true,
-          keyboardType: const TextInputType.numberWithOptions(decimal: true),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: Text(S.cancelLabel),
-          ),
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(controller.text.trim()),
-            child: Text(S.saveLabel),
-          ),
-        ],
+      builder: (_) => _ChallengeNumberPromptDialog(
+        title: S.customDistanceTitle,
+        initialText: initial,
+        suffixText: 'km',
+        keyboardType: const TextInputType.numberWithOptions(decimal: true),
+        validate: (text) {
+          final v = double.tryParse(text.replaceAll(',', '.'));
+          return (v == null || v <= 0) ? S.errFillAll : null;
+        },
       ),
     );
-    controller.dispose();
-    if (result == null || result.isEmpty) return null;
-    final v = double.tryParse(result.replaceAll(',', '.'));
+    if (raw == null) return null;
+    final v = double.tryParse(raw.replaceAll(',', '.'));
     return (v == null || v <= 0) ? null : v;
   }
 
-  Future<void> _tapCustom(ValueChanged<double> apply) async {
+  Future<int?> _askCustomDays() async {
+    final raw = await showDialog<String>(
+      context: context,
+      builder: (_) => _ChallengeNumberPromptDialog(
+        title: S.customDurationTitle,
+        initialText: _customDays == null ? '' : '$_customDays',
+        hintText: S.customDurationHint,
+        keyboardType: TextInputType.number,
+        inputFormatters: [FilteringTextInputFormatter.digitsOnly],
+        validate: (text) {
+          final v = int.tryParse(text);
+          return (v == null || v < 1 || v > 365)
+              ? S.invalidCustomDuration
+              : null;
+        },
+      ),
+    );
+    if (raw == null) return null;
+    final v = int.tryParse(raw);
+    return (v == null || v < 1 || v > 365) ? null : v;
+  }
+
+  Future<void> _tapCustomDistance() async {
     final v = await _askCustomKm();
     if (v == null || !mounted) return;
     setState(() {
       _customKm = v;
-      apply(v);
+      _distIdx = _distancePresetsKm.length;
+    });
+  }
+
+  Future<void> _tapCustomDuration() async {
+    final days = await _askCustomDays();
+    if (days == null || !mounted) return;
+    setState(() {
+      _customDays = days;
+      _durasi = _durasiDays.length;
     });
   }
 
   Future<void> _submit() async {
     setState(() => _error = null);
-    double? targetKm;
-    if (_target >= 0 && _target < _targetKm.length) {
-      targetKm = _targetKm[_target];
-    } else if (_target == 3) {
-      targetKm = _customKm;
-    } else if (_jarak >= 0 && _jarak < _jarakKm.length) {
-      targetKm = _jarakKm[_jarak];
-    } else {
-      targetKm = _customKm;
-    }
-    if (targetKm == null || (_isTeamMode && _selectedTeamId == null)) {
+    final double? targetKm = _distIdx >= 0 && _distIdx < _distancePresetsKm.length
+        ? _distancePresetsKm[_distIdx]
+        : _customKm;
+    final int? windowDays = _durasi >= 0 && _durasi < _durasiDays.length
+        ? _durasiDays[_durasi]
+        : _customDays;
+    if (targetKm == null ||
+        targetKm <= 0 ||
+        windowDays == null ||
+        windowDays <= 0 ||
+        (_isTeamMode && _selectedTeamId == null)) {
       setState(() => _error = S.errFillAll);
       return;
     }
     final now = DateTime.now();
-    final windowDays = _durasiDays[_durasi.clamp(0, _durasiDays.length - 1)];
     final judul = _judulCtrl.text.trim();
     setState(() => _busy = true);
     try {
@@ -6679,7 +6744,7 @@ class _CreateChallengeScreenState extends State<CreateChallengeScreen> {
       );
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Challenge dibuat.')),
+        SnackBar(content: Text(S.challengeCreated)),
       );
       Navigator.of(context).pop(true);
     } on PostgrestException catch (e) {
@@ -6697,10 +6762,12 @@ class _CreateChallengeScreenState extends State<CreateChallengeScreen> {
     String title,
     List<String> options,
     int selected,
-    ValueChanged<int> onTap,
-  ) {
+    ValueChanged<int> onTap, {
+    String? helperText,
+  }) {
+    final scheme = PacerScheme.of(context);
     return Padding(
-      padding: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.only(bottom: 14),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -6709,9 +6776,16 @@ class _CreateChallengeScreenState extends State<CreateChallengeScreen> {
             style: TextStyle(
               fontSize: 12,
               fontWeight: FontWeight.w600,
-              color: PacerScheme.of(context).soft,
+              color: scheme.soft,
             ),
           ),
+          if (helperText != null) ...[
+            const SizedBox(height: 2),
+            Text(
+              helperText,
+              style: TextStyle(fontSize: 12, color: scheme.muted),
+            ),
+          ],
           const SizedBox(height: 6),
           Wrap(
             spacing: 8,
@@ -6732,6 +6806,20 @@ class _CreateChallengeScreenState extends State<CreateChallengeScreen> {
   @override
   Widget build(BuildContext context) {
     final scheme = PacerScheme.of(context);
+    final distanceOptions = [
+      for (final km in _distancePresetsKm) '${km.toInt()} km',
+      _customKm != null && _distIdx == _distancePresetsKm.length
+          ? S.customKmLabel(_customKm!)
+          : S.custom,
+    ];
+    final durationOptions = [
+      S.todayLabel,
+      S.days3,
+      S.week1,
+      _customDays != null && _durasi == _durasiDays.length
+          ? S.customDaysLabel(_customDays!)
+          : S.custom,
+    ];
     return Scaffold(
       body: SafeArea(
         child: ResponsiveScroll(
@@ -6824,40 +6912,31 @@ class _CreateChallengeScreenState extends State<CreateChallengeScreen> {
                 _jenisIdx,
                 (i) => setState(() => _jenisIdx = i),
               ),
-              _group('JARAK', ['3 km', '5 km', '10 km', S.other], _jarak, (i) {
-                if (i == 3) {
-                  _tapCustom((_) {
-                    _jarak = 3;
-                    _target = -1;
-                  });
-                } else {
-                  setState(() {
-                    _jarak = i;
-                    _target = -1;
-                  });
-                }
-              }),
+              _group(
+                S.targetDistanceLabel,
+                distanceOptions,
+                _distIdx,
+                (i) {
+                  if (i == _distancePresetsKm.length) {
+                    _tapCustomDistance();
+                  } else {
+                    setState(() => _distIdx = i);
+                  }
+                },
+                helperText: S.targetDistanceHint,
+              ),
               _group(
                 S.durationLabel,
-                [S.todayLabel, S.days3, S.week1],
+                durationOptions,
                 _durasi,
-                (i) => setState(() => _durasi = i),
+                (i) {
+                  if (i == _durasiDays.length) {
+                    _tapCustomDuration();
+                  } else {
+                    setState(() => _durasi = i);
+                  }
+                },
               ),
-              _group(S.target, ['25 km', '30 km', '45 km', S.custom], _target, (
-                i,
-              ) {
-                if (i == 3) {
-                  _tapCustom((_) {
-                    _target = 3;
-                    _jarak = -1;
-                  });
-                } else {
-                  setState(() {
-                    _target = i;
-                    _jarak = -1;
-                  });
-                }
-              }),
               if (_error != null) ...[
                 Text(
                   _error!,
@@ -6878,6 +6957,87 @@ class _CreateChallengeScreenState extends State<CreateChallengeScreen> {
           ),
         ),
       ),
+    );
+  }
+}
+
+/// Dialog prompting for a positive custom numeric value while tying its
+/// [TextEditingController] lifecycle to [State.dispose] so route exit
+/// transitions never touch a disposed controller.
+class _ChallengeNumberPromptDialog extends StatefulWidget {
+  final String title;
+  final String initialText;
+  final String? hintText;
+  final String? suffixText;
+  final TextInputType keyboardType;
+  final List<TextInputFormatter>? inputFormatters;
+  final String? Function(String text) validate;
+
+  const _ChallengeNumberPromptDialog({
+    required this.title,
+    required this.initialText,
+    this.hintText,
+    this.suffixText,
+    required this.keyboardType,
+    this.inputFormatters,
+    required this.validate,
+  });
+
+  @override
+  State<_ChallengeNumberPromptDialog> createState() =>
+      _ChallengeNumberPromptDialogState();
+}
+
+class _ChallengeNumberPromptDialogState
+    extends State<_ChallengeNumberPromptDialog> {
+  late final TextEditingController _controller;
+  String? _errorText;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = TextEditingController(text: widget.initialText);
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  void _submit() {
+    final trimmed = _controller.text.trim();
+    final err = widget.validate(trimmed);
+    if (err != null) {
+      setState(() => _errorText = err);
+      return;
+    }
+    Navigator.of(context).pop(trimmed);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return AlertDialog(
+      title: Text(widget.title),
+      content: TextField(
+        controller: _controller,
+        autofocus: true,
+        keyboardType: widget.keyboardType,
+        inputFormatters: widget.inputFormatters,
+        onSubmitted: (_) => _submit(),
+        decoration: InputDecoration(
+          hintText: widget.hintText,
+          suffixText: widget.suffixText,
+          errorText: _errorText,
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(context).pop(),
+          child: Text(S.cancelLabel),
+        ),
+        TextButton(onPressed: _submit, child: Text(S.saveLabel)),
+      ],
     );
   }
 }
@@ -7108,7 +7268,7 @@ class _ChatScreenState extends State<ChatScreen> {
       );
     }
     if (_messages.isEmpty) {
-      return const Center(child: Text('Belum ada pesan. Mulai duluan!'));
+      return Center(child: Text(S.emptyChat));
     }
     return ListView.builder(
       controller: _scroll,
@@ -7900,7 +8060,7 @@ class _LanguageSettingsScreenState extends State<LanguageSettingsScreen> {
               _langOption(
                 context,
                 label: 'Bahasa Indonesia',
-                sub: 'Default',
+                sub: S.langDefaultSub,
                 selected: current == Lang.id,
                 onTap: () => _setLang(Lang.id),
               ),
@@ -7908,7 +8068,7 @@ class _LanguageSettingsScreenState extends State<LanguageSettingsScreen> {
               _langOption(
                 context,
                 label: 'English',
-                sub: 'Alternative',
+                sub: S.langAlternativeSub,
                 selected: current == Lang.en,
                 onTap: () => _setLang(Lang.en),
               ),
@@ -7985,12 +8145,13 @@ class ThemeSettingsScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final scheme = PacerScheme.of(context);
     return Scaffold(
-      backgroundColor: PacerScheme.of(context).scaffold,
+      backgroundColor: scheme.scaffold,
       body: SafeArea(
         child: ResponsiveScroll(
           maxWidth: 720,
-          padding: const EdgeInsets.only(top: 16, bottom: 24),
+          padding: const EdgeInsets.only(top: 16, bottom: 32),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
@@ -8028,8 +8189,156 @@ class ThemeSettingsScreen extends StatelessWidget {
                   ],
                 ),
               ),
+              const SizedBox(height: 28),
+              Row(
+                children: [
+                  Container(
+                    width: 4,
+                    height: 18,
+                    decoration: BoxDecoration(
+                      color: scheme.accent,
+                      borderRadius: BorderRadius.circular(99),
+                    ),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: Text(
+                      'Classic Linux Desktop Themes',
+                      style: GoogleFonts.spaceGrotesk(
+                        fontWeight: FontWeight.w700,
+                        fontSize: 18,
+                        color: scheme.ink,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 6),
+              Text(
+                'Iconic Linux desktop environment palettes for both Dark & Light modes.',
+                style: TextStyle(fontSize: 13, color: scheme.soft),
+              ),
+              const SizedBox(height: 14),
+              ValueListenableBuilder<PacerLinuxTheme>(
+                valueListenable: linuxThemeNotifier,
+                builder: (context, currentPreset, _) => Column(
+                  children: [
+                    for (var i = 0; i < PacerLinuxThemeInfo.all.length; i++) ...[
+                      if (i > 0) const SizedBox(height: 10),
+                      _linuxThemeOption(
+                        context,
+                        info: PacerLinuxThemeInfo.all[i],
+                        selected: currentPreset == PacerLinuxThemeInfo.all[i].id,
+                        onTap: () => setLinuxTheme(PacerLinuxThemeInfo.all[i].id),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
             ],
           ),
+        ),
+      ),
+    );
+  }
+
+  Widget _linuxThemeOption(
+    BuildContext context, {
+    required PacerLinuxThemeInfo info,
+    required bool selected,
+    required VoidCallback onTap,
+  }) {
+    final scheme = PacerScheme.of(context);
+    return InkWell(
+      key: ValueKey('linux_theme_${info.id.name}'),
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(14),
+      child: Container(
+        padding: const EdgeInsets.all(14),
+        decoration: BoxDecoration(
+          color: scheme.card,
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(
+            color: selected ? info.accent : scheme.border,
+            width: selected ? 2 : 1,
+          ),
+        ),
+        child: Row(
+          children: [
+            // Live color swatch preview pill
+            Container(
+              width: 48,
+              height: 44,
+              padding: const EdgeInsets.all(6),
+              decoration: BoxDecoration(
+                color: info.darkBg,
+                borderRadius: BorderRadius.circular(11),
+                border: Border.all(
+                  color: info.accent.withValues(alpha: 0.45),
+                ),
+              ),
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Container(
+                        width: 14,
+                        height: 14,
+                        decoration: BoxDecoration(
+                          color: info.accent,
+                          shape: BoxShape.circle,
+                        ),
+                      ),
+                      Container(
+                        width: 14,
+                        height: 14,
+                        decoration: BoxDecoration(
+                          color: info.secondaryAccent,
+                          shape: BoxShape.circle,
+                        ),
+                      ),
+                    ],
+                  ),
+                  Container(
+                    height: 8,
+                    width: double.infinity,
+                    decoration: BoxDecoration(
+                      color: info.darkSurface,
+                      borderRadius: BorderRadius.circular(4),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 14),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    info.name,
+                    style: GoogleFonts.spaceGrotesk(
+                      fontWeight: FontWeight.w700,
+                      fontSize: 15.5,
+                      color: scheme.ink,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    info.desktopEnv,
+                    style: TextStyle(fontSize: 12, color: scheme.soft),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 8),
+            Icon(
+              selected ? Icons.check_circle : Icons.radio_button_off,
+              color: selected ? info.accent : scheme.soft,
+            ),
+          ],
         ),
       ),
     );

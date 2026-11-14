@@ -79,7 +79,9 @@ class _CoachBoardScreenState extends State<CoachBoardScreen> {
       final profile = await AuthRepository().getProfile();
       final peran = profile?.peran ?? 'user';
       if (peran == 'coach' || peran == 'admin') {
-        final teams = await TeamRepository().listTeams();
+        final teams = peran == 'admin'
+            ? await TeamRepository().listTeams()
+            : await TeamRepository().myTeams();
         final challenges = await ChallengeRepository().listChallenges();
         if (mounted) {
           setState(() {
@@ -407,7 +409,7 @@ class _CoachBoardScreenState extends State<CoachBoardScreen> {
                       ),
                       const SizedBox(width: 4),
                       Text(
-                        'Target Tercapai',
+                        S.challengeCompletedLabel,
                         style: TextStyle(
                           fontSize: 11,
                           fontWeight: FontWeight.w700,
@@ -441,7 +443,10 @@ class _CoachBoardScreenState extends State<CoachBoardScreen> {
             ),
             const SizedBox(height: 4),
             Text(
-              'Evaluasi: ${r.progress!.toStringAsFixed(1)}%${r.berhasil == true ? ' • Lulus Evaluasi' : ' • Dalam Proses'}',
+              S.coachEvaluationLine(
+                r.progress!.toStringAsFixed(1),
+                r.berhasil == true,
+              ),
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
               style: TextStyle(fontSize: 12, color: scheme.soft),

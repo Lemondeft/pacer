@@ -151,7 +151,7 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      expect(find.text('0,00 Km'), findsOneWidget);
+      expect(find.text('0.00 Km'), findsOneWidget);
       expect(find.text('45.20 Km'), findsNothing);
 
       await tester.pumpWidget(

@@ -1,6 +1,10 @@
+import 'dart:async' show unawaited;
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
+import 'package:liquid_glass_easy/liquid_glass_easy.dart'
+    show LiquidGlassShaders;
 import 'package:pacer/src/auth/auth_repository.dart';
 import 'package:pacer/src/local/local_store.dart';
 import 'package:pacer/src/sync/sync_engine.dart';
@@ -25,6 +29,7 @@ void main() async {
     // Demo mode: run Figma-derived UI without backend.
   }
   await SyncEngine.instance.init();
+  unawaited(LiquidGlassShaders.ensureLoaded().catchError((_) {}));
   runApp(const PacerApp());
 }
 
@@ -41,13 +46,16 @@ class PacerApp extends StatelessWidget {
       valueListenable: langNotifier,
       builder: (context, _, _) => ValueListenableBuilder<ThemeMode>(
         valueListenable: themeModeNotifier,
-        builder: (context, mode, _) => MaterialApp(
-          title: 'Pacer',
-          debugShowCheckedModeBanner: false,
-          theme: PacerTheme.light(),
-          darkTheme: PacerTheme.dark(),
-          themeMode: mode,
-          home: const _Root(),
+        builder: (context, mode, _) => ValueListenableBuilder<PacerLinuxTheme>(
+          valueListenable: linuxThemeNotifier,
+          builder: (context, preset, _) => MaterialApp(
+            title: 'Pacer',
+            debugShowCheckedModeBanner: false,
+            theme: PacerTheme.light(preset),
+            darkTheme: PacerTheme.dark(preset),
+            themeMode: mode,
+            home: const _Root(),
+          ),
         ),
       ),
     );
