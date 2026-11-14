@@ -123,14 +123,16 @@ PartisipasiChallenge _effectiveOneParticipation(
   }
   if (delta <= 0) return baseline;
   final total = baseline.progressNilai + delta;
+  final completed =
+      baseline.berhasil ||
+      (challenge.targetNilai > 0 && total >= challenge.targetNilai);
   return PartisipasiChallenge(
     id: baseline.id,
     challengeId: baseline.challengeId,
     userId: baseline.userId,
     progressNilai: total,
-    berhasil:
-        baseline.berhasil ||
-        (challenge.targetNilai > 0 && total >= challenge.targetNilai),
+    berhasil: completed,
+    isActive: completed ? false : baseline.isActive,
     createdAt: baseline.createdAt,
   );
 }
@@ -163,6 +165,7 @@ PartisipasiChallenge applyActivityDeltaToBaseline({
     userId: baseline.userId,
     progressNilai: total,
     berhasil: achieved,
+    isActive: achieved ? false : baseline.isActive,
     createdAt: baseline.createdAt,
   );
 }

@@ -1,11 +1,16 @@
+import 'dart:io';
+
 import 'package:flutter_test/flutter_test.dart';
+import 'package:path/path.dart' as p;
 import 'package:pacer/src/aktivitas/activity_model.dart';
 import 'package:pacer/src/auth/user_model.dart';
 import 'package:pacer/src/challenge/challenge_model.dart';
 import 'package:pacer/src/local/local_models.dart';
 import 'package:pacer/src/local/sqlite_local_store.dart';
 import 'package:pacer/src/local/store_factory_io.dart';
+import 'package:pacer/src/notifications/notification_model.dart';
 import 'package:pacer/src/teams/team_model.dart';
+import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 void main() {
   late SqliteLocalStore store;
@@ -248,6 +253,219 @@ void main() {
       expect(await store.getTeams('user-b', mineOnly: true), isEmpty);
       expect((await store.getChatMessages('user-a', 't1')).length, 1);
       expect(await store.getChatMessages('user-b', 't1'), isEmpty);
+    });
+
+    test('persists memberCount, roster joinedAt, membership deltas, and deletes cleanly', () async {
+      final joinedAt = DateTime.utc(2026, 11, 10, 9, 0);
+      await store.saveTeams(
+        'user-a',
+        const [
+          Team(id: 't1', nama: 'Public A', isPrivate: false, memberCount: 12),
+          Team(id: 't2', nama: 'Public B', isPrivate: false, memberCount: 5),
+        ],
+        isMine: false,
+        replaceAll: true,
+      );
+      await store.setTeamMembershipLocal(
+        'user-a',
+        't2',
+        isMine: true,
+        memberCountDelta: 1,
+      );
+      await store.saveTeamRoster('user-a', 't2', [
+        TeamRosterMember(
+          userId: 'user-a',
+          nama: 'Alice',
+          peran: 'anggota',
+          appPeran: 'user',
+          joinedAt: joinedAt,
+        ),
+      ]);
+
+      final all = await store.getTeams('user-a');
+      final mine = await store.getTeams('user-a', mineOnly: true);
+      final roster = await store.getTeamRoster('user-a', 't2');
+
+      expect(all.length, 2);
+      expect(mine.map((t) => t.id), ['t2']);
+      expect(mine.first.memberCount, 6);
+      expect(roster.length, 1);
+      expect(roster.first.joinedAt, joinedAt);
+
+      await store.deleteTeamLocal('user-a', 't2');
+      expect((await store.getTeams('user-a', mineOnly: true)), isEmpty);
+      expect((await store.getTeamRoster('user-a', 't2')), isEmpty);
+    });
+
+    test('upgrades v1 database to schema v2 adding member_count and joined_at columns', () async {
+      sqfliteFfiInit();
+      final tmpDir = await Directory.systemTemp.createTemp('pacer_v1_upgrade_');
+      final dbPath = p.join(tmpDir.path, 'legacy_v1.db');
+      try {
+        final v1Db = await databaseFactoryFfi.openDatabase(
+          dbPath,
+          options: OpenDatabaseOptions(
+            version: 1,
+            onCreate: (db, _) async {
+              await db.execute('''
+                CREATE TABLE teams (
+                  user_id TEXT NOT NULL,
+                  id TEXT NOT NULL,
+                  nama TEXT NOT NULL,
+                  target_nilai REAL,
+                  dibuat_oleh TEXT,
+                  is_private INTEGER NOT NULL DEFAULT 1,
+                  invite_code TEXT,
+                  created_at TEXT,
+                  is_mine INTEGER NOT NULL DEFAULT 0,
+                  updated_at TEXT NOT NULL,
+                  PRIMARY KEY (user_id, id)
+                )
+              ''');
+              await db.execute('''
+                CREATE TABLE team_rosters (
+                  owner_user_id TEXT NOT NULL,
+                  team_id TEXT NOT NULL,
+                  member_user_id TEXT NOT NULL,
+                  pos INTEGER NOT NULL,
+                  nama TEXT NOT NULL,
+                  peran TEXT NOT NULL,
+                  app_peran TEXT NOT NULL,
+                  updated_at TEXT NOT NULL,
+                  PRIMARY KEY (owner_user_id, team_id, member_user_id)
+                )
+              ''');
+            },
+          ),
+        );
+        await v1Db.close();
+
+        final upgraded = await SqliteLocalStore.open(
+          factory: databaseFactoryFfi,
+          path: dbPath,
+        );
+        try {
+          final joinedAt = DateTime.utc(2026, 11, 14, 7, 30);
+          await upgraded.saveTeams(
+            'u1',
+            const [Team(id: 't1', nama: 'Legacy Team', memberCount: 7)],
+            isMine: true,
+          );
+          await upgraded.saveTeamRoster('u1', 't1', [
+            TeamRosterMember(
+              userId: 'u1',
+              nama: 'Alice',
+              peran: 'ketua',
+              appPeran: 'coach',
+              joinedAt: joinedAt,
+            ),
+          ]);
+          final teams = await upgraded.getTeams('u1');
+          final roster = await upgraded.getTeamRoster('u1', 't1');
+          expect(teams.single.memberCount, 7);
+          expect(roster.single.joinedAt, joinedAt);
+        } finally {
+          await upgraded.close();
+        }
+      } finally {
+        await tmpDir.delete(recursive: true);
+      }
+    });
+
+    test('upgrades v2 database to schema v3 preserving data and adding challenge_ids_json, team_id, judul, is_active, and user_notifications', () async {
+      sqfliteFfiInit();
+      final tmpDir = await Directory.systemTemp.createTemp('pacer_v2_upgrade_');
+      final dbPath = p.join(tmpDir.path, 'legacy_v2.db');
+      try {
+        final v2Db = await databaseFactoryFfi.openDatabase(
+          dbPath,
+          options: OpenDatabaseOptions(
+            version: 2,
+            onCreate: (db, _) async {
+              await db.execute('''
+                CREATE TABLE activities (
+                  id TEXT PRIMARY KEY,
+                  user_id TEXT NOT NULL,
+                  jenis TEXT NOT NULL,
+                  mulai_at TEXT NOT NULL,
+                  selesai_at TEXT,
+                  durasi_s INTEGER,
+                  jarak_m REAL,
+                  status TEXT NOT NULL,
+                  sync_state TEXT NOT NULL,
+                  statistik_applied INTEGER NOT NULL DEFAULT 0,
+                  updated_at TEXT NOT NULL
+                )
+              ''');
+              await db.execute('''
+                CREATE TABLE challenges (
+                  user_id TEXT NOT NULL,
+                  id TEXT NOT NULL,
+                  dibuat_oleh TEXT,
+                  jenis TEXT NOT NULL,
+                  target_nilai REAL NOT NULL,
+                  target_satuan TEXT NOT NULL,
+                  waktu_mulai TEXT,
+                  waktu_selesai TEXT,
+                  diumumkan INTEGER NOT NULL DEFAULT 0,
+                  created_at TEXT,
+                  updated_at TEXT NOT NULL,
+                  PRIMARY KEY (user_id, id)
+                )
+              ''');
+              await db.execute('''
+                CREATE TABLE challenge_participations (
+                  user_id TEXT NOT NULL,
+                  challenge_id TEXT NOT NULL,
+                  id TEXT NOT NULL,
+                  progress_nilai REAL NOT NULL DEFAULT 0,
+                  berhasil INTEGER NOT NULL DEFAULT 0,
+                  created_at TEXT,
+                  sync_state TEXT NOT NULL DEFAULT 'synced',
+                  PRIMARY KEY (user_id, challenge_id)
+                )
+              ''');
+            },
+          ),
+        );
+        await v2Db.insert('challenges', {
+          'user_id': 'u2',
+          'id': 'c-v2',
+          'jenis': 'lari',
+          'target_nilai': 5000.0,
+          'target_satuan': 'jarak_m',
+          'diumumkan': 1,
+          'updated_at': '2026-11-14T00:00:00Z',
+        });
+        await v2Db.close();
+
+        final upgraded = await SqliteLocalStore.open(
+          factory: databaseFactoryFfi,
+          path: dbPath,
+        );
+        try {
+          final existing = await upgraded.getChallenges('u2');
+          expect(existing.single.id, 'c-v2');
+          expect(existing.single.teamId, isNull);
+
+          await upgraded.saveNotifications('u2', [
+            AppNotification(
+              id: 'n-v3',
+              userId: 'u2',
+              type: 'team_challenge_assigned',
+              title: 'Challenge Baru',
+              body: '5K tim dimulai',
+              challengeId: 'c-v2',
+            ),
+          ]);
+          final notifs = await upgraded.getNotifications('u2');
+          expect(notifs.single.title, 'Challenge Baru');
+        } finally {
+          await upgraded.close();
+        }
+      } finally {
+        await tmpDir.delete(recursive: true);
+      }
     });
   });
 }

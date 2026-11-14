@@ -89,6 +89,7 @@ abstract class RemoteSyncGateway {
     String? id,
     DateTime? createdAt,
   });
+  Future<List<PartisipasiChallenge>?> activateChallengeRpc(String challengeId);
   Future<void> leaveChallenge(String userId, String challengeId);
   Future<List<PartisipasiChallenge>?> recomputeChallengeProgressRpc();
   Future<List<PartisipasiChallenge>> fallbackSyncChallengeProgress(String userId);
@@ -318,6 +319,30 @@ class SupabaseSyncGateway implements RemoteSyncGateway {
       });
     } on PostgrestException catch (e) {
       if (e.code != '23505') rethrow;
+    }
+  }
+
+  @override
+  Future<List<PartisipasiChallenge>?> activateChallengeRpc(
+    String challengeId,
+  ) async {
+    final c = _client!;
+    try {
+      final raw = await c.rpc(
+        'activate_challenge',
+        params: {'p_challenge_id': challengeId},
+      );
+      final rows = raw is List ? raw : (raw == null ? const [] : [raw]);
+      return [
+        for (final row in rows)
+          PartisipasiChallenge.fromJson(Map<String, dynamic>.from(row as Map)),
+      ];
+    } on PostgrestException catch (e) {
+      final code = (e.code ?? '').toUpperCase();
+      if (code == 'PGRST202' || code == '42883') {
+        return null;
+      }
+      rethrow;
     }
   }
 
@@ -703,6 +728,14 @@ class SyncEngine extends ChangeNotifier {
           id: item.payload['id'] as String?,
           createdAt: createdRaw == null ? null : DateTime.parse(createdRaw),
         );
+        await _store.markOutboxSynced(item.id);
+      case OutboxOp.activateChallenge:
+        final updated = await _gateway.activateChallengeRpc(item.entityId);
+        if (updated == null) {
+          await _gateway.joinChallenge(item.userId, item.entityId);
+        } else {
+          await _store.saveParticipations(item.userId, updated);
+        }
         await _store.markOutboxSynced(item.id);
       case OutboxOp.leaveChallenge:
         await _gateway.leaveChallenge(item.userId, item.entityId);

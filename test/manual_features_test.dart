@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:pacer/src/demo/pacer_dummy_data.dart';
 import 'package:pacer/src/ui/app_theme.dart';
 import 'package:pacer/src/ui/more_screens.dart';
 
@@ -83,24 +84,35 @@ void main() {
   });
 
   group('Notification Screen (Context Diagram)', () {
-    testWidgets('NotificationMockScreen displays reminders and challenge updates', (tester) async {
-      tester.view.physicalSize = const Size(720, 1600);
-      tester.view.devicePixelRatio = 1.0;
-      addTearDown(tester.view.reset);
+    setUp(() => PacerDummyData.resetDemoTeams());
+    tearDown(() => PacerDummyData.resetDemoTeams());
 
-      await tester.pumpWidget(
-        MaterialApp(
-          theme: PacerTheme.dark(),
-          home: const Scaffold(
-            body: NotificationMockScreen(),
+    testWidgets(
+      'NotificationsScreen displays assigned team challenges, role updates, filter, and mark all read',
+      (tester) async {
+        tester.view.physicalSize = const Size(720, 1600);
+        tester.view.devicePixelRatio = 1.0;
+        addTearDown(tester.view.reset);
+
+        await tester.pumpWidget(
+          MaterialApp(
+            theme: PacerTheme.dark(),
+            home: const Scaffold(
+              body: NotificationMockScreen(),
+            ),
           ),
-        ),
-      );
-      await tester.pumpAndSettle();
+        );
+        await tester.pumpAndSettle();
 
-      expect(find.text('Notifikasi'), findsOneWidget);
-      expect(find.text('Pengingat Aktivitas'), findsOneWidget);
-      expect(find.text('Challenge Update'), findsOneWidget);
-    });
+        expect(find.text('Notifikasi'), findsOneWidget);
+        expect(find.text('Challenge Tim · GBK Runners Elite'), findsWidgets);
+        expect(find.text('Peran Tim Diperbarui'), findsOneWidget);
+        expect(find.text('Belum dibaca (2)'), findsOneWidget);
+
+        await tester.tap(find.text('Tandai semua terbaca'));
+        await tester.pumpAndSettle();
+        expect(find.text('Tandai semua terbaca'), findsNothing);
+      },
+    );
   });
 }

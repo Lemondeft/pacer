@@ -66,9 +66,9 @@ class _CoachBoardScreenState extends State<CoachBoardScreen> {
       _isDemo = true;
       if (mounted) {
         setState(() {
-          _teams = PacerDummyData.teams;
-          _challenges = PacerDummyData.challenges;
-          _teamId ??= PacerDummyData.teams.first.id;
+          _teams = PacerDummyData.demoTeams;
+          _challenges = PacerDummyData.demoChallenges;
+          _teamId ??= PacerDummyData.demoTeams.first.id;
         });
       }
       _refresh();
@@ -302,6 +302,7 @@ class _CoachBoardScreenState extends State<CoachBoardScreen> {
     }
     return DropdownButtonFormField<String>(
       initialValue: _teamId,
+      isExpanded: true,
       decoration: InputDecoration(
         labelText: S.pickTeam,
         border: const OutlineInputBorder(),
@@ -321,18 +322,29 @@ class _CoachBoardScreenState extends State<CoachBoardScreen> {
   }
 
   Widget _challengePicker() {
+    final teamId = _teamId;
+    final visible = [
+      for (final c in _challenges)
+        if (c.teamId == null || c.teamId == teamId) c,
+    ];
+    final currentValue = visible.any((c) => c.id == _challengeId)
+        ? _challengeId
+        : null;
     return DropdownButtonFormField<String?>(
-      initialValue: _challengeId,
+      initialValue: currentValue,
+      isExpanded: true,
       decoration: InputDecoration(
         labelText: S.pickChallenge,
         border: const OutlineInputBorder(),
       ),
       items: [
         const DropdownMenuItem(value: null, child: Text('–')),
-        for (final c in _challenges)
+        for (final c in visible)
           DropdownMenuItem(
             value: c.id,
             child: Text(
+              '${c.isTeamChallenge ? '[${S.teamChallengeTag}] ' : ''}'
+              '${c.judul?.isNotEmpty == true ? '${c.judul!} · ' : ''}'
               '${S.sportName(c.jenis)} • ${S.challengeTargetSummary(c.targetNilai, c.targetSatuan)}',
               maxLines: 1,
               overflow: TextOverflow.ellipsis,

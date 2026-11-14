@@ -195,6 +195,59 @@ class S {
       _en ? 'Nearest Group Run' : 'Group Run Terdekat';
   static String get join => _en ? 'Join' : 'Gabung';
   static String get teamChat => _en ? 'Team Chat' : 'Obrolan Tim';
+  static String get joinedTeams => _en ? 'Joined Teams' : 'Tim yang Diikuti';
+  static String get openPublicTeams =>
+      _en ? 'Open for Public' : 'Terbuka untuk Umum';
+  static String get filterAll => _en ? 'All' : 'Semua';
+  static String get filterJoined => _en ? 'Joined' : 'Diikuti';
+  static String get filterPublic => _en ? 'Public' : 'Publik';
+  static String get joinedBadge => _en ? 'Joined' : 'Bergabung';
+  static String get publicBadge => _en ? 'Public' : 'Publik';
+  static String get privateBadge => _en ? 'Private' : 'Privat';
+  static String membersCount(int n) =>
+      _en ? (n == 1 ? '1 member' : '$n members') : '$n anggota';
+  static String get teamDashboard => _en ? 'Team Dashboard' : 'Dasbor Tim';
+  static String get teamOverview => _en ? 'Overview' : 'Ringkasan';
+  static String get membersSection => _en ? 'Members' : 'Anggota';
+  static String get searchMembersHint =>
+      _en ? 'Search members...' : 'Cari anggota...';
+  static String get activeThisWeek =>
+      _en ? 'Active (7d)' : 'Aktif (7h)';
+  static String get weeklyDistance => _en ? 'Weekly km' : 'Km minggu ini';
+  static String get weeklySessions => _en ? 'Sessions' : 'Sesi';
+  static String get totalDistanceAll =>
+      _en ? 'Total team km' : 'Total km tim';
+  static String get targetGoal => _en ? 'Team Target' : 'Target Tim';
+  static String get inviteCodeSection =>
+      _en ? 'Invite Code' : 'Kode Undangan';
+  static String get inviteCodeHint => _en
+      ? 'Only team members can view this private invite code. Share it carefully.'
+      : 'Hanya anggota tim yang dapat melihat kode undangan privat ini.';
+  static String get copyCode => _en ? 'Copy' : 'Salin';
+  static String get codeCopied =>
+      _en ? 'Invite code copied.' : 'Kode undangan disalin.';
+  static String get captainRole => _en ? 'Captain' : 'Ketua';
+  static String get memberRole => _en ? 'Member' : 'Anggota';
+  static String joinedOn(String date) =>
+      _en ? 'Joined $date' : 'Bergabung $date';
+  static String get leaveTeamAction => _en ? 'Leave team' : 'Keluar tim';
+  static String get leaveTeamConfirmTitle =>
+      _en ? 'Leave team?' : 'Keluar dari tim?';
+  static String leaveTeamConfirmBody(String team) => _en
+      ? 'You will leave $team and lose access to its team chat.'
+      : 'Kamu akan keluar dari $team dan tidak lagi mengakses obrolan tim.';
+  static String get noJoinedTeamsHint => _en
+      ? 'You have not joined any teams yet. Pick a public team below or enter an invite code.'
+      : 'Belum bergabung di tim mana pun. Pilih tim publik di bawah atau masukkan kode undangan.';
+  static String get noPublicTeamsHint => _en
+      ? 'No open public teams match your search.'
+      : 'Tidak ada tim publik yang sesuai pencarian.';
+  static String get noMembersMatch =>
+      _en ? 'No members match your search.' : 'Tidak ada anggota yang cocok.';
+  static String get teamPrivacyLabel =>
+      _en ? 'Private Team (Invite Only)' : 'Tim Privat (Pakai Kode)';
+  static String get showCode => _en ? 'Show code' : 'Lihat kode';
+  static String get hideCode => _en ? 'Hide code' : 'Sembunyikan kode';
 
   // Leaderboard
   static String get teamsLeaderboard =>
@@ -494,4 +547,74 @@ class S {
       ? 'Press back again to exit'
       : 'Tekan kembali lagi untuk keluar';
   static String get unitKcal => _en ? 'kcal' : 'kkal';
+
+  // Team Challenges, Ketua Role, Active Slot & Opt-In Progress
+  static String get teamChallengeTag => _en ? 'Team Challenge' : 'Challenge Tim';
+  static String get soloChallengeTag => _en ? 'Solo' : 'Mandiri';
+  static String get challengeTitleLabel =>
+      _en ? 'Challenge title (optional)' : 'Judul challenge (opsional)';
+  static String get challengeTitleHint =>
+      _en ? 'e.g. Weekly Squad 5K' : 'Mis. Lari Mingguan Skuad 5K';
+  static String get challengeScopeLabel =>
+      _en ? 'Challenge type' : 'Jenis challenge';
+  static String get challengeScopeTeam => _en ? 'Team (Coach)' : 'Tim (Coach)';
+  static String get challengeScopeSolo => _en ? 'Solo' : 'Mandiri';
+  static String get createTeamChallenge =>
+      _en ? 'Create Team Challenge' : 'Buat Challenge Tim';
+  static String get teamChallengesHeading =>
+      _en ? 'Team Challenges' : 'Challenge Tim';
+  static String get noTeamChallengesYet => _en
+      ? 'No team challenges yet. Coach or Team Leader can create one.'
+      : 'Belum ada challenge tim. Coach atau Ketua tim dapat membuatnya.';
+  static String get activeSlotBadge => _en ? 'Active' : 'Aktif';
+  static String get waitingSlotBadge => _en ? 'Waiting' : 'Menunggu';
+  static String get chooseActiveChallenge =>
+      _en ? 'Set Active' : 'Jadikan Aktif';
+  static String get challengeActivatedMsg => _en
+      ? 'Active challenge updated for upcoming activities.'
+      : 'Challenge aktif diperbarui untuk aktivitas berikutnya.';
+  static String get activeSlotHint => _en
+      ? 'You can progress up to 1 active Team Challenge and 1 active Solo Challenge at a time.'
+      : 'Kamu dapat menjalankan maks. 1 Challenge Tim dan 1 Challenge Mandiri secara bersamaan.';
+  static String get filterTeam => _en ? 'Team Coach' : 'Tim Coach';
+  static String get filterSolo => _en ? 'Solo' : 'Mandiri';
+
+  // Ketua role promotion
+  static String get roleKetua => _en ? 'Leader' : 'Ketua';
+  static String get roleAnggota => _en ? 'Member' : 'Anggota';
+  static String get promoteToKetua =>
+      _en ? 'Promote to Leader' : 'Jadikan Ketua';
+  static String get demoteToAnggota =>
+      _en ? 'Set as Member' : 'Turunkan ke Anggota';
+  static String roleUpdatedMsg(String name, String roleLabel) => _en
+      ? '$name is now $roleLabel.'
+      : '$name sekarang menjadi $roleLabel.';
+
+  // Independent activity challenge selection
+  static String get activeChallengesForSport =>
+      _en ? 'Challenge Progress' : 'Progres Challenge';
+  static String get activeChallengesAutoNote => _en
+      ? 'Auto-selected for this sport. Turn off any challenge you want to skip.'
+      : 'Dipilih otomatis untuk olahraga ini. Matikan jika tidak ingin dihitung.';
+  static String get finishOptInTitle =>
+      _en ? 'Save & Count Challenge Progress?' : 'Hitung Progres Challenge?';
+  static String get finishOptInSubtitle => _en
+      ? 'Choose which active challenges should receive progress from this session.'
+      : 'Pilih challenge aktif yang mendapat progres dari aktivitas ini.';
+  static String get finishSaveAndContinue =>
+      _en ? 'Save Activity' : 'Simpan Aktivitas';
+  static String get challengeProgressUpdated =>
+      _en ? 'Challenge progress updated' : 'Progres challenge diperbarui';
+
+  // Notifications
+  static String get notificationsTitle => _en ? 'Notifications' : 'Notifikasi';
+  static String get notificationsUnreadFilter =>
+      _en ? 'Unread' : 'Belum dibaca';
+  static String get notificationsAllFilter => _en ? 'All' : 'Semua';
+  static String get markAllRead =>
+      _en ? 'Mark all read' : 'Tandai semua terbaca';
+  static String get noNotificationsEmpty =>
+      _en ? 'No notifications yet.' : 'Belum ada notifikasi.';
+  static String get viewChallenge =>
+      _en ? 'View Challenge' : 'Lihat Challenge';
 }

@@ -147,7 +147,8 @@ class RunSessionCard extends StatelessWidget {
       padding: const EdgeInsets.fromLTRB(16, 24, 16, 16),
       decoration: BoxDecoration(
         color: scheme.runCard,
-        borderRadius: BorderRadius.circular(10),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: scheme.softBorder),
         boxShadow: [scheme.shadowBox],
       ),
       child: Row(
@@ -266,48 +267,154 @@ class TeamCard extends StatelessWidget {
   final String name;
   final String location;
   final double? width;
+  final int? memberCount;
+  final bool isJoined;
+  final bool? isPrivate;
   const TeamCard({
     super.key,
     required this.name,
     this.location = '',
     this.width,
+    this.memberCount,
+    this.isJoined = false,
+    this.isPrivate,
   });
 
   @override
   Widget build(BuildContext context) {
+    final scheme = PacerScheme.of(context);
+    final showBadges = isJoined || isPrivate != null;
+    final showLoc = location.isNotEmpty || memberCount == null;
     return Container(
       width: width,
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(10),
-        gradient: const LinearGradient(
-          colors: [PacerColors.teamShade, PacerColors.streakBg],
+        borderRadius: BorderRadius.circular(12),
+        gradient: LinearGradient(
+          colors: scheme.heroCardGradient,
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
+        boxShadow: [scheme.shadowBox],
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisAlignment: MainAxisAlignment.end,
+        mainAxisAlignment: showBadges
+            ? MainAxisAlignment.spaceBetween
+            : MainAxisAlignment.end,
         children: [
-          Text(
-            name,
-            style: PacerText.teamName,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-          ),
-          const SizedBox(height: 4),
-          Row(
+          if (showBadges)
+            Row(
+              children: [
+                if (isPrivate != null)
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 3,
+                    ),
+                    decoration: BoxDecoration(
+                      color: Colors.white.withValues(alpha: 0.16),
+                      borderRadius: BorderRadius.circular(999),
+                    ),
+                    child: Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        Icon(
+                          isPrivate! ? Icons.lock_outline : Icons.public,
+                          size: 11,
+                          color: Colors.white,
+                        ),
+                        const SizedBox(width: 4),
+                        Text(
+                          isPrivate! ? S.privateBadge : S.publicBadge,
+                          style: PacerText.teamLoc.copyWith(
+                            fontSize: 10,
+                            fontWeight: FontWeight.w700,
+                            color: Colors.white,
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                if (isPrivate != null && isJoined) const SizedBox(width: 6),
+                if (isJoined)
+                  Container(
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 3,
+                    ),
+                    decoration: BoxDecoration(
+                      color: PacerColors.lime,
+                      borderRadius: BorderRadius.circular(999),
+                    ),
+                    child: Text(
+                      S.joinedBadge,
+                      style: PacerText.teamLoc.copyWith(
+                        fontSize: 10,
+                        fontWeight: FontWeight.w800,
+                        color: PacerColors.ink,
+                      ),
+                    ),
+                  ),
+              ],
+            ),
+          if (showBadges) const SizedBox(height: 6),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
             children: [
-              const Icon(Icons.location_on, size: 19, color: Colors.white),
-              const SizedBox(width: 8),
-              Expanded(
-                child: Text(
-                  location,
-                  style: PacerText.teamLoc,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                ),
+              Text(
+                name,
+                style: PacerText.teamName,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+              const SizedBox(height: 4),
+              Row(
+                children: [
+                  if (showLoc)
+                    Expanded(
+                      child: Row(
+                        children: [
+                          const Icon(
+                            Icons.location_on,
+                            size: 18,
+                            color: Colors.white,
+                          ),
+                          const SizedBox(width: 6),
+                          Expanded(
+                            child: Text(
+                              location,
+                              style: PacerText.teamLoc,
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  if (showLoc && memberCount != null) const SizedBox(width: 8),
+                  if (memberCount != null)
+                    Row(
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        const Icon(
+                          Icons.group_outlined,
+                          size: 16,
+                          color: Colors.white70,
+                        ),
+                        const SizedBox(width: 4),
+                        Text(
+                          S.membersCount(memberCount!),
+                          style: PacerText.teamLoc.copyWith(
+                            color: Colors.white.withValues(alpha: 0.9),
+                          ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                        ),
+                      ],
+                    ),
+                ],
               ),
             ],
           ),
@@ -498,17 +605,40 @@ class StreakCard extends StatelessWidget {
             : n > 0
             ? StreakStatus.atRisk
             : StreakStatus.inactive);
-    final accent = accentFor(s);
+    final dark = scheme.isDark;
     final live = s != StreakStatus.inactive;
+    final accent = accentFor(s);
+    final textAccent = switch (s) {
+      StreakStatus.active => dark ? PacerColors.lime : const Color(0xFF0D6B4A),
+      StreakStatus.atRisk =>
+        dark ? PacerColors.streakAmber : const Color(0xFF9A4004),
+      StreakStatus.inactive => dark ? PacerColors.slate400 : scheme.muted,
+    };
+    final gradColors = dark
+        ? [
+            scheme.streakCardBg,
+            Color.lerp(scheme.streakCardBg, accent, live ? 0.16 : 0.04)!,
+          ]
+        : switch (s) {
+            StreakStatus.active => const [Color(0xFFE3F0FC), Color(0xFFCBE3F9)],
+            StreakStatus.atRisk => const [Color(0xFFEBF2FA), Color(0xFFEDE2CE)],
+            StreakStatus.inactive => const [
+              Color(0xFFE2ECF7),
+              Color(0xFFD5E1EE),
+            ],
+          };
     final circle = fluid(MediaQuery.sizeOf(context).width, 30, 36);
-    const labelWhite = Color(0xFFF8FAFC);
+    final labelInk = dark ? const Color(0xFFF8FAFC) : scheme.ink;
+    final dividerColor = dark
+        ? Colors.white.withValues(alpha: 0.12)
+        : scheme.border;
+    final msgColor = dark ? Colors.white.withValues(alpha: 0.75) : scheme.bodyGray;
     final labels = langNotifier.value == Lang.en ? _dayLabelsEn : _dayLabelsId;
     final (pillText, message) = switch (s) {
       StreakStatus.active => (S.activeStreak, S.streakActiveMsg),
       StreakStatus.atRisk => (S.streakAtRisk, S.streakAtRiskMsg(n)),
       StreakStatus.inactive => (S.noStreak, S.streakInactiveMsg),
     };
-    final base = scheme.streakCardBg;
 
     return Semantics(
       container: true,
@@ -523,18 +653,22 @@ class StreakCard extends StatelessWidget {
             gradient: LinearGradient(
               begin: Alignment.topLeft,
               end: Alignment.bottomRight,
-              colors: [base, Color.lerp(base, accent, live ? 0.16 : 0.04)!],
+              colors: gradColors,
             ),
             border: Border.all(
               color: live
-                  ? accent.withValues(alpha: 0.35)
-                  : Colors.white.withValues(alpha: 0.10),
+                  ? (dark
+                        ? accent.withValues(alpha: 0.35)
+                        : textAccent.withValues(alpha: 0.32))
+                  : (dark
+                        ? Colors.white.withValues(alpha: 0.10)
+                        : scheme.border),
             ),
             boxShadow: [
               scheme.shadowBox,
               if (s == StreakStatus.active)
                 BoxShadow(
-                  color: accent.withValues(alpha: 0.18),
+                  color: accent.withValues(alpha: dark ? 0.18 : 0.24),
                   blurRadius: 24,
                   offset: const Offset(0, 8),
                 ),
@@ -549,7 +683,7 @@ class StreakCard extends StatelessWidget {
                 child: Icon(
                   Icons.local_fire_department,
                   size: 168,
-                  color: accent.withValues(alpha: live ? 0.08 : 0.04),
+                  color: textAccent.withValues(alpha: live ? 0.09 : 0.05),
                 ),
               ),
               // Accent kick bar along the top edge.
@@ -561,7 +695,9 @@ class StreakCard extends StatelessWidget {
                   duration: _anim,
                   height: 3,
                   decoration: BoxDecoration(
-                    color: accent.withValues(alpha: live ? 1 : 0.4),
+                    color: (dark ? accent : textAccent).withValues(
+                      alpha: live ? 1 : 0.4,
+                    ),
                     borderRadius: BorderRadius.circular(2),
                   ),
                 ),
@@ -583,7 +719,7 @@ class StreakCard extends StatelessWidget {
                               vertical: 4,
                             ),
                             decoration: BoxDecoration(
-                              color: accent.withValues(alpha: 0.14),
+                              color: textAccent.withValues(alpha: 0.14),
                               borderRadius: BorderRadius.circular(999),
                             ),
                             child: Row(
@@ -593,7 +729,7 @@ class StreakCard extends StatelessWidget {
                                   width: 8,
                                   height: 8,
                                   decoration: BoxDecoration(
-                                    color: accent,
+                                    color: textAccent,
                                     shape: BoxShape.circle,
                                   ),
                                 ),
@@ -603,7 +739,7 @@ class StreakCard extends StatelessWidget {
                                     pillText,
                                     overflow: TextOverflow.ellipsis,
                                     style: PacerText.mono.copyWith(
-                                      color: accent,
+                                      color: textAccent,
                                     ),
                                   ),
                                 ),
@@ -618,15 +754,15 @@ class StreakCard extends StatelessWidget {
                           width: 44,
                           height: 44,
                           decoration: BoxDecoration(
-                            color: accent.withValues(alpha: 0.16),
+                            color: textAccent.withValues(alpha: 0.15),
                             shape: BoxShape.circle,
                             border: Border.all(
-                              color: accent.withValues(alpha: 0.45),
+                              color: textAccent.withValues(alpha: 0.42),
                             ),
                             boxShadow: s == StreakStatus.active
                                 ? [
                                     BoxShadow(
-                                      color: accent.withValues(alpha: 0.45),
+                                      color: accent.withValues(alpha: 0.40),
                                       blurRadius: 16,
                                     ),
                                   ]
@@ -637,7 +773,7 @@ class StreakCard extends StatelessWidget {
                                 ? Icons.local_fire_department
                                 : Icons.local_fire_department_outlined,
                             size: 24,
-                            color: accent,
+                            color: textAccent,
                           ),
                         ),
                       ],
@@ -650,8 +786,8 @@ class StreakCard extends StatelessWidget {
                           '$n',
                           style: PacerText.giantNum(56).copyWith(
                             color: live
-                                ? labelWhite
-                                : labelWhite.withValues(alpha: 0.55),
+                                ? labelInk
+                                : labelInk.withValues(alpha: 0.55),
                           ),
                         ),
                         const SizedBox(width: 8),
@@ -666,7 +802,7 @@ class StreakCard extends StatelessWidget {
                                 style: TextStyle(
                                   fontSize: 18,
                                   fontWeight: FontWeight.w700,
-                                  color: accent,
+                                  color: textAccent,
                                 ),
                               ),
                             ),
@@ -685,6 +821,7 @@ class StreakCard extends StatelessWidget {
                               isToday: i == today,
                               isFuture: i > today,
                               accent: accent,
+                              textAccent: textAccent,
                               label: labels[i],
                               date:
                                   '${DateTime(monday.year, monday.month, monday.day + i).day}',
@@ -693,10 +830,7 @@ class StreakCard extends StatelessWidget {
                       ],
                     ),
                     const SizedBox(height: 12),
-                    Container(
-                      height: 1,
-                      color: Colors.white.withValues(alpha: 0.12),
-                    ),
+                    Container(height: 1, color: dividerColor),
                     const SizedBox(height: 12),
                     Row(
                       children: [
@@ -707,7 +841,7 @@ class StreakCard extends StatelessWidget {
                               ? Icons.check_circle
                               : Icons.directions_run,
                           size: 14,
-                          color: accent,
+                          color: textAccent,
                         ),
                         const SizedBox(width: 6),
                         Expanded(
@@ -715,10 +849,7 @@ class StreakCard extends StatelessWidget {
                             message,
                             maxLines: 2,
                             overflow: TextOverflow.ellipsis,
-                            style: TextStyle(
-                              fontSize: 12,
-                              color: Colors.white.withValues(alpha: 0.75),
-                            ),
+                            style: TextStyle(fontSize: 12, color: msgColor),
                           ),
                         ),
                       ],
@@ -741,6 +872,7 @@ class _StreakDay extends StatelessWidget {
   final bool isToday;
   final bool isFuture;
   final Color accent;
+  final Color textAccent;
   final String label;
   final String date;
   const _StreakDay({
@@ -749,14 +881,17 @@ class _StreakDay extends StatelessWidget {
     required this.isToday,
     required this.isFuture,
     required this.accent,
+    required this.textAccent,
     required this.label,
     required this.date,
   });
 
   @override
   Widget build(BuildContext context) {
-    const labelWhite = Color(0xFFF8FAFC);
-    final dim = isFuture ? 0.35 : 0.60;
+    final scheme = PacerScheme.of(context);
+    final dark = scheme.isDark;
+    final labelInk = dark ? const Color(0xFFF8FAFC) : scheme.ink;
+    final dim = isFuture ? 0.45 : 0.72;
     return Column(
       mainAxisSize: MainAxisSize.min,
       children: [
@@ -769,11 +904,15 @@ class _StreakDay extends StatelessWidget {
             shape: BoxShape.circle,
             color: done
                 ? accent
-                : Colors.white.withValues(alpha: isFuture ? 0.04 : 0.10),
+                : (dark
+                      ? Colors.white.withValues(alpha: isFuture ? 0.04 : 0.10)
+                      : scheme.card.withValues(alpha: isFuture ? 0.48 : 0.85)),
             border: Border.all(
               color: done || isToday
-                  ? accent
-                  : Colors.white.withValues(alpha: isFuture ? 0.10 : 0.24),
+                  ? (dark ? accent : textAccent)
+                  : (dark
+                        ? Colors.white.withValues(alpha: isFuture ? 0.10 : 0.24)
+                        : scheme.border),
               width: isToday ? 2 : 1.5,
             ),
             boxShadow: isToday && done
@@ -795,7 +934,11 @@ class _StreakDay extends StatelessWidget {
           style: TextStyle(
             fontSize: 10,
             fontWeight: isToday ? FontWeight.w700 : FontWeight.w500,
-            color: isToday ? accent : Colors.white.withValues(alpha: dim),
+            color: isToday
+                ? textAccent
+                : (dark
+                      ? Colors.white.withValues(alpha: isFuture ? 0.35 : 0.60)
+                      : scheme.bodyGray.withValues(alpha: dim)),
           ),
         ),
         Text(
@@ -804,8 +947,8 @@ class _StreakDay extends StatelessWidget {
             fontSize: 12,
             fontWeight: FontWeight.w700,
             color: isToday
-                ? accent
-                : labelWhite.withValues(alpha: isFuture ? 0.45 : 1),
+                ? textAccent
+                : labelInk.withValues(alpha: isFuture ? 0.45 : 1),
           ),
         ),
       ],
@@ -852,6 +995,7 @@ class BottomNavPill extends StatelessWidget {
 
     Widget tab(int i) {
       final selected = index == i;
+      final selectedFg = dark ? PacerColors.lime : const Color(0xFF102A43);
       return PacerGlassPress(
         radius: 24,
         child: Semantics(
@@ -882,7 +1026,7 @@ class BottomNavPill extends StatelessWidget {
                       Icon(
                         selected ? tabs[i].$2 : tabs[i].$1,
                         size: 24,
-                        color: selected ? PacerColors.lime : scheme.navIcon,
+                        color: selected ? selectedFg : scheme.navIcon,
                       ),
                       const SizedBox(height: 3),
                       Text(
@@ -893,7 +1037,7 @@ class BottomNavPill extends StatelessWidget {
                           fontSize: 10,
                           fontWeight:
                               selected ? FontWeight.w700 : FontWeight.w500,
-                          color: selected ? PacerColors.lime : scheme.navIcon,
+                          color: selected ? selectedFg : scheme.navIcon,
                           letterSpacing: 0.2,
                         ),
                       ),
@@ -942,17 +1086,21 @@ class BottomNavPill extends StatelessWidget {
                           child: DecoratedBox(
                             decoration: BoxDecoration(
                               color: PacerColors.lime.withValues(
-                                alpha: dark ? 0.16 : 0.12,
+                                alpha: dark ? 0.16 : 0.58,
                               ),
                               borderRadius: BorderRadius.circular(22),
                               border: Border.all(
-                                color: PacerColors.lime.withValues(alpha: 0.35),
-                                width: 0.75,
+                                color: dark
+                                    ? PacerColors.lime.withValues(alpha: 0.35)
+                                    : const Color(0xFF82B800).withValues(
+                                        alpha: 0.65,
+                                      ),
+                                width: dark ? 0.75 : 1.0,
                               ),
                               boxShadow: [
                                 BoxShadow(
                                   color: PacerColors.lime.withValues(
-                                    alpha: 0.18,
+                                    alpha: dark ? 0.18 : 0.26,
                                   ),
                                   blurRadius: 12,
                                   spreadRadius: -2,

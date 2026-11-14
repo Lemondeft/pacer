@@ -65,6 +65,13 @@ void main() {
   });
 
   group('Demo Mode UI Integration Tests', () {
+    setUp(() {
+      PacerDummyData.resetDemoTeams();
+    });
+
+    tearDown(() {
+      PacerDummyData.resetDemoTeams();
+    });
     testWidgets('HomeScreen renders mock streak, activities and teams in demo mode', (tester) async {
       tester.view.physicalSize = const Size(720, 1600);
       tester.view.devicePixelRatio = 1.0;
@@ -102,7 +109,7 @@ void main() {
       expect(find.text('Bersepeda'), findsWidgets);
     });
 
-    testWidgets('TeamsScreen renders dummy teams and filters with search', (tester) async {
+    testWidgets('TeamsScreen renders joined & public teams with counts and filters with search', (tester) async {
       tester.view.physicalSize = const Size(720, 1600);
       tester.view.devicePixelRatio = 1.0;
       addTearDown(tester.view.reset);
@@ -115,8 +122,15 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      expect(find.text('GBK Runners Elite'), findsOneWidget);
+      // Joined Teams section (includes joined private XI IPA 1 - SMAN 1)
+      // and Open for Public section (excludes unjoined private JakBar Pacer Community).
+      expect(find.text('Tim yang Diikuti'), findsOneWidget);
+      expect(find.text('Terbuka untuk Umum'), findsOneWidget);
+      expect(find.text('GBK Runners Elite'), findsWidgets);
+      expect(find.text('XI IPA 1 - SMAN 1'), findsOneWidget);
       expect(find.text('Monas Morning Joggers'), findsOneWidget);
+      expect(find.text('JakBar Pacer Community'), findsNothing);
+      expect(find.text('18 anggota'), findsWidgets);
 
       // Search for 'Sudirman'
       await tester.enterText(find.byType(TextField), 'Sudirman');
@@ -124,6 +138,81 @@ void main() {
 
       expect(find.text('Sudirman Night Cyclists'), findsOneWidget);
       expect(find.text('GBK Runners Elite'), findsNothing);
+    });
+
+    testWidgets('Tapping a public team opens TeamDashboardScreen, shows roster, and updates count on join/leave', (tester) async {
+      tester.view.physicalSize = const Size(720, 1600);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: PacerTheme.dark(),
+          home: const Scaffold(body: TeamsScreen()),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      // Tap unjoined public team (Monas Morning Joggers: 11 -> 12 on join)
+      await tester.tap(find.text('Monas Morning Joggers'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('Monas Morning Joggers'), findsOneWidget);
+      expect(find.text('11 anggota'), findsWidgets);
+      expect(find.text('Coach Hendra'), findsOneWidget);
+      expect(find.text('Gabung'), findsOneWidget);
+
+      // Join team -> member count increments to 12 and Leave button appears
+      await tester.tap(find.text('Gabung'));
+      await tester.pumpAndSettle();
+
+      expect(find.text('12 anggota'), findsWidgets);
+      expect(find.text('Keluar tim'), findsOneWidget);
+    });
+
+    testWidgets('Private invite code is hidden from non-members and masked/revealable for joined members', (tester) async {
+      tester.view.physicalSize = const Size(720, 1600);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+
+      // Unjoined private team (33333333... JakBar Pacer Community):
+      // code is null in data layer & hidden in UI.
+      expect(
+        PacerDummyData.getDemoInviteCode('33333333-3333-3333-3333-333333333333'),
+        isNull,
+      );
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: PacerTheme.dark(),
+          home: const TeamDashboardScreen(
+            teamId: '33333333-3333-3333-3333-333333333333',
+            teamName: 'JakBar Pacer Community',
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('Kode Undangan'), findsNothing);
+      expect(find.text('JAKBAR01'), findsNothing);
+
+      // Joined private team (22222222... XI IPA 1 - SMAN 1):
+      // code is masked first, then revealed on eye tap.
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: PacerTheme.dark(),
+          home: const TeamDashboardScreen(
+            teamId: '22222222-2222-2222-2222-222222222222',
+            teamName: 'XI IPA 1 - SMAN 1',
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('Kode Undangan'), findsOneWidget);
+      expect(find.text('••••••••'), findsOneWidget);
+      expect(find.text('IPA1RUNS'), findsNothing);
+
+      await tester.tap(find.byIcon(Icons.visibility_outlined));
+      await tester.pumpAndSettle();
+      expect(find.text('IPA1RUNS'), findsOneWidget);
     });
 
     testWidgets('LeaderboardScreen renders full podium and rank rows in demo mode', (tester) async {

@@ -45,13 +45,69 @@ void main() {
         'target_nilai': '5500', // numeric may arrive as string
         'dibuat_oleh': 'u-coach',
         'invite_code': 'E5F6A7B8',
+        'member_count': '14',
         'created_at': '2026-10-09T06:30:00+00:00',
       });
       expect(team.nama, 'Tim C');
       expect(team.targetNilai, 5500.0);
       expect(team.dibuatOleh, 'u-coach');
       expect(team.inviteCode, 'E5F6A7B8');
+      expect(team.memberCount, 14);
       expect(team.createdAt, isNotNull);
+    });
+
+    test('preserves and updates memberCount via toJson and copyWith', () {
+      const team = Team(
+        id: 't4',
+        nama: 'Tim D',
+        isPrivate: false,
+        memberCount: 9,
+      );
+      final restored = Team.fromJson(team.toJson());
+      expect(restored.memberCount, 9);
+      expect(restored.isPrivate, isFalse);
+
+      final updated = restored.copyWith(memberCount: 10);
+      expect(updated.memberCount, 10);
+      expect(updated.nama, 'Tim D');
+    });
+  });
+
+  group('TeamRosterMember & TeamDashboardStats', () {
+    test('TeamRosterMember.fromJson parses role, app_peran, and joined_at', () {
+      final member = TeamRosterMember.fromJson({
+        'user_id': 'u-1',
+        'nama': ' Siti Rahma ',
+        'peran': 'ketua',
+        'app_peran': 'coach',
+        'joined_at': '2026-11-01T08:15:00+00:00',
+      });
+      expect(member.userId, 'u-1');
+      expect(member.nama, 'Siti Rahma');
+      expect(member.peran, 'ketua');
+      expect(member.appPeran, 'coach');
+      expect(member.joinedAt, isNotNull);
+    });
+
+    test('TeamDashboardStats.fromJson parses counts, totals, and flags', () {
+      final stats = TeamDashboardStats.fromJson({
+        'member_count': 18,
+        'active_members_week': '12',
+        'total_week_sessions': 36,
+        'total_week_km': '104.5',
+        'total_all_km': 441.0,
+        'is_member': true,
+        'can_view_code': true,
+        'can_manage_code': false,
+      });
+      expect(stats.memberCount, 18);
+      expect(stats.activeMembersWeek, 12);
+      expect(stats.totalWeekSessions, 36);
+      expect(stats.totalWeekKm, 104.5);
+      expect(stats.totalAllKm, 441.0);
+      expect(stats.isMember, isTrue);
+      expect(stats.canViewCode, isTrue);
+      expect(stats.canManageCode, isFalse);
     });
   });
 

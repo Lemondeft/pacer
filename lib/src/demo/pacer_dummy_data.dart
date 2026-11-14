@@ -2,6 +2,8 @@ import 'package:pacer/src/aktivitas/activity_model.dart';
 import 'package:pacer/src/challenge/challenge_model.dart';
 import 'package:pacer/src/chat/chat_model.dart';
 import 'package:pacer/src/leaderboard/leaderboard_model.dart';
+import 'package:pacer/src/local/local_helpers.dart';
+import 'package:pacer/src/notifications/notification_model.dart';
 import 'package:pacer/src/teams/team_model.dart';
 
 /// Comprehensive in-app dummy data for demo, offline, and preview modes.
@@ -111,51 +113,348 @@ class PacerDummyData {
       id: '11111111-1111-1111-1111-111111111111',
       nama: 'GBK Runners Elite',
       targetNilai: 120000,
+      dibuatOleh: 'demo-coach',
       isPrivate: false,
       inviteCode: 'GBKELITE',
       createdAt: _now.subtract(const Duration(days: 30)),
+      memberCount: 18,
     ),
     Team(
       id: '22222222-2222-2222-2222-222222222222',
       nama: 'XI IPA 1 - SMAN 1',
       targetNilai: 100000,
+      dibuatOleh: 'demo-coach',
       isPrivate: true,
       inviteCode: 'IPA1RUNS',
       createdAt: _now.subtract(const Duration(days: 25)),
+      memberCount: 24,
     ),
     Team(
       id: '33333333-3333-3333-3333-333333333333',
       nama: 'JakBar Pacer Community',
       targetNilai: 75000,
+      dibuatOleh: 'demo-user-0',
       isPrivate: true,
       inviteCode: 'JAKBAR01',
       createdAt: _now.subtract(const Duration(days: 20)),
+      memberCount: 14,
     ),
     Team(
       id: '44444444-4444-4444-4444-444444444444',
       nama: 'Monas Morning Joggers',
       targetNilai: 60000,
+      dibuatOleh: 'demo-user-1',
       isPrivate: false,
       inviteCode: 'MONASRUN',
       createdAt: _now.subtract(const Duration(days: 15)),
+      memberCount: 11,
     ),
     Team(
       id: '55555555-5555-5555-5555-555555555555',
       nama: 'Sudirman Night Cyclists',
       targetNilai: 200000,
+      dibuatOleh: 'demo-user-4',
       isPrivate: false,
       inviteCode: 'SUDIRCYC',
       createdAt: _now.subtract(const Duration(days: 10)),
+      memberCount: 16,
     ),
     Team(
       id: '66666666-6666-6666-6666-666666666666',
       nama: 'Jakarta Strollers 10K',
       targetNilai: 50000,
+      dibuatOleh: 'demo-user-6',
       isPrivate: false,
       inviteCode: 'JKTWALKS',
       createdAt: _now.subtract(const Duration(days: 5)),
+      memberCount: 9,
     ),
   ];
+
+  static const Set<String> _initialDemoJoinedIds = {
+    '11111111-1111-1111-1111-111111111111',
+    '22222222-2222-2222-2222-222222222222',
+  };
+  static final Set<String> _demoJoinedIds = {..._initialDemoJoinedIds};
+  static final List<Team> _customDemoTeams = [];
+  static final Map<String, int> _demoCountOffsets = {};
+  static final Map<String, String> _demoInviteOverrides = {};
+  static final Set<String> _demoRemovedMembers = {};
+  static final Map<String, String> _demoMemberRoleOverrides = {};
+  static final List<Challenge> _customDemoChallenges = [];
+  static Map<String, PartisipasiChallenge>? _demoParticipationsState;
+  static List<AppNotification>? _demoNotificationsState;
+
+  static void resetDemoTeams() {
+    _demoJoinedIds
+      ..clear()
+      ..addAll(_initialDemoJoinedIds);
+    _customDemoTeams.clear();
+    _demoCountOffsets.clear();
+    _demoInviteOverrides.clear();
+    _demoRemovedMembers.clear();
+    _demoMemberRoleOverrides.clear();
+    _customDemoChallenges.clear();
+    _demoParticipationsState = null;
+    _demoNotificationsState = null;
+  }
+
+  static List<Team> get demoTeams {
+    final combined = [..._customDemoTeams, ...teams];
+    return [
+      for (final t in combined)
+        t.copyWith(
+          inviteCode: _demoInviteOverrides[t.id] ?? t.inviteCode,
+          memberCount: ((t.memberCount ?? 0) + (_demoCountOffsets[t.id] ?? 0))
+              .clamp(0, 1000000),
+        ),
+    ];
+  }
+
+  static List<Team> get demoMyTeams =>
+      demoTeams.where((t) => _demoJoinedIds.contains(t.id)).toList();
+
+  static bool isDemoTeamJoined(String teamId) =>
+      _demoJoinedIds.contains(teamId);
+
+  static bool joinDemoTeam(String teamId, {String? code}) {
+    final team = demoTeams.cast<Team?>().firstWhere(
+      (t) => t?.id == teamId,
+      orElse: () => null,
+    );
+    if (team == null) return false;
+    if (team.isPrivate) {
+      final expected = (team.inviteCode ?? '').toUpperCase();
+      if ((code ?? '').trim().toUpperCase() != expected) {
+        return false;
+      }
+    }
+    if (_demoJoinedIds.add(teamId)) {
+      _demoCountOffsets[teamId] = (_demoCountOffsets[teamId] ?? 0) + 1;
+    }
+    return true;
+  }
+
+  static Team? joinDemoByCode(String code) {
+    final normalized = code.trim().toUpperCase();
+    if (normalized.isEmpty) return null;
+    for (final t in demoTeams) {
+      if ((t.inviteCode ?? '').toUpperCase() == normalized) {
+        if (_demoJoinedIds.add(t.id)) {
+          _demoCountOffsets[t.id] = (_demoCountOffsets[t.id] ?? 0) + 1;
+        }
+        return demoTeams.firstWhere((e) => e.id == t.id);
+      }
+    }
+    return null;
+  }
+
+  static void leaveDemoTeam(String teamId) {
+    if (_demoJoinedIds.remove(teamId)) {
+      _demoCountOffsets[teamId] = (_demoCountOffsets[teamId] ?? 0) - 1;
+    }
+  }
+
+  static Team createDemoTeam(
+    String nama, {
+    required bool isPrivate,
+    double? targetNilai,
+  }) {
+    final id = 'demo-team-${DateTime.now().microsecondsSinceEpoch}';
+    final cleaned = id.replaceAll(RegExp('[^A-Za-z0-9]'), '').toUpperCase();
+    final code = cleaned.padRight(8, 'X').substring(0, 8);
+    final team = Team(
+      id: id,
+      nama: nama,
+      targetNilai: targetNilai,
+      dibuatOleh: 'demo-user-me',
+      isPrivate: isPrivate,
+      inviteCode: code,
+      createdAt: DateTime.now(),
+      memberCount: 1,
+    );
+    _customDemoTeams.insert(0, team);
+    _demoJoinedIds.add(id);
+    return team;
+  }
+
+  static String? getDemoInviteCode(String teamId) {
+    final team = demoTeams.cast<Team?>().firstWhere(
+      (t) => t?.id == teamId,
+      orElse: () => null,
+    );
+    if (team == null) return null;
+    final inTeam = _demoJoinedIds.contains(teamId) ||
+        team.dibuatOleh == 'demo-user-me';
+    // Private team invite codes are strictly hidden unless creator or in the team.
+    if (team.isPrivate && !inTeam) return null;
+    if (!inTeam) return null;
+    return _demoInviteOverrides[teamId] ?? team.inviteCode;
+  }
+
+  static String? regenerateDemoInviteCode(String teamId) {
+    final team = demoTeams.cast<Team?>().firstWhere(
+      (t) => t?.id == teamId,
+      orElse: () => null,
+    );
+    if (team == null) return null;
+    final code = DateTime.now()
+        .microsecondsSinceEpoch
+        .toRadixString(36)
+        .toUpperCase()
+        .padLeft(8, 'P')
+        .substring(0, 8);
+    _demoInviteOverrides[teamId] = code;
+    return code;
+  }
+
+  static List<TeamRosterMember> getTeamRoster(String teamId) {
+    final team = demoTeams.cast<Team?>().firstWhere(
+      (t) => t?.id == teamId,
+      orElse: () => null,
+    );
+    if (team == null) return const [];
+    final joined = _demoJoinedIds.contains(teamId);
+    if (team.isPrivate && !joined) return const [];
+
+    if (_customDemoTeams.any((t) => t.id == teamId)) {
+      return [
+        TeamRosterMember(
+          userId: 'demo-user-me',
+          nama: 'Andi Wijaya',
+          peran: 'ketua',
+          appPeran: 'user',
+          joinedAt: team.createdAt,
+        ),
+      ];
+    }
+
+    final baseMembers = <TeamRosterMember>[
+      TeamRosterMember(
+        userId: 'demo-coach',
+        nama: 'Coach Hendra',
+        peran: 'ketua',
+        appPeran: 'coach',
+        joinedAt: _now.subtract(const Duration(days: 28)),
+      ),
+      TeamRosterMember(
+        userId: 'demo-user-0',
+        nama: 'Budi Santoso',
+        peran: 'anggota',
+        appPeran: 'user',
+        joinedAt: _now.subtract(const Duration(days: 24)),
+      ),
+      TeamRosterMember(
+        userId: 'demo-user-1',
+        nama: 'Siti Rahma',
+        peran: 'anggota',
+        appPeran: 'user',
+        joinedAt: _now.subtract(const Duration(days: 20)),
+      ),
+      TeamRosterMember(
+        userId: 'demo-user-3',
+        nama: 'Dewi Lestari',
+        peran: 'anggota',
+        appPeran: 'user',
+        joinedAt: _now.subtract(const Duration(days: 15)),
+      ),
+      TeamRosterMember(
+        userId: 'demo-user-4',
+        nama: 'Rizky Pratama',
+        peran: 'anggota',
+        appPeran: 'user',
+        joinedAt: _now.subtract(const Duration(days: 10)),
+      ),
+      TeamRosterMember(
+        userId: 'demo-user-5',
+        nama: 'Farhan Ramadhan',
+        peran: 'anggota',
+        appPeran: 'user',
+        joinedAt: _now.subtract(const Duration(days: 6)),
+      ),
+    ];
+
+    final list = [
+      for (final m in baseMembers)
+        if (!_demoRemovedMembers.contains('${teamId}_${m.userId}'))
+          TeamRosterMember(
+            userId: m.userId,
+            nama: m.nama,
+            peran: _demoMemberRoleOverrides['${teamId}_${m.userId}'] ?? m.peran,
+            appPeran: m.appPeran,
+            joinedAt: m.joinedAt,
+          ),
+    ];
+    if (joined && !list.any((m) => m.userId == 'demo-user-me')) {
+      list.insert(
+        1,
+        TeamRosterMember(
+          userId: 'demo-user-me',
+          nama: 'Andi Wijaya',
+          peran:
+              _demoMemberRoleOverrides['${teamId}_demo-user-me'] ??
+              (team.dibuatOleh == 'demo-user-me' ? 'ketua' : 'anggota'),
+          appPeran: 'user',
+          joinedAt: _now.subtract(const Duration(days: 12)),
+        ),
+      );
+    }
+    return list;
+  }
+
+  static void setDemoMemberRole(String teamId, String userId, String peran) {
+    _demoMemberRoleOverrides['${teamId}_$userId'] = peran;
+    final list = _ensureDemoNotifications();
+    final team = demoTeams.cast<Team?>().firstWhere(
+      (t) => t?.id == teamId,
+      orElse: () => null,
+    );
+    if (userId == 'demo-user-me') {
+      list.insert(
+        0,
+        AppNotification(
+          id: 'demo-notif-role-${DateTime.now().microsecondsSinceEpoch}',
+          userId: 'demo-user-me',
+          type: 'role_updated',
+          title: 'Peran Tim Diperbarui',
+          body: peran == 'ketua'
+              ? 'Kamu diangkat menjadi Ketua di ${team?.nama ?? 'tim'}'
+              : 'Peranmu di ${team?.nama ?? 'tim'} menjadi Anggota',
+          teamId: teamId,
+          createdAt: DateTime.now().toUtc(),
+        ),
+      );
+    }
+  }
+
+  static void removeDemoMember(String teamId, String userId) {
+    if (_demoRemovedMembers.add('${teamId}_$userId')) {
+      _demoCountOffsets[teamId] = (_demoCountOffsets[teamId] ?? 0) - 1;
+    }
+  }
+
+  static TeamDashboardStats getTeamDashboardStats(String teamId) {
+    final team = demoTeams.cast<Team?>().firstWhere(
+      (t) => t?.id == teamId,
+      orElse: () => null,
+    );
+    final joined = _demoJoinedIds.contains(teamId);
+    final count = team?.memberCount ?? getTeamRoster(teamId).length;
+    final canView = joined || team?.dibuatOleh == 'demo-user-me';
+    final canManage =
+        team?.dibuatOleh == 'demo-user-me' ||
+        (_demoMemberRoleOverrides['${teamId}_demo-user-me'] == 'ketua');
+    return TeamDashboardStats(
+      memberCount: count,
+      activeMembersWeek: count == 0 ? 0 : (count * 0.65).round().clamp(1, count),
+      totalWeekSessions: count * 2,
+      totalWeekKm: double.parse((count * 5.8).toStringAsFixed(1)),
+      totalAllKm: double.parse((count * 24.5).toStringAsFixed(1)),
+      isMember: joined,
+      canViewCode: canView,
+      canManageCode: canManage,
+    );
+  }
 
   /// 6 challenges covering all sports and units
   static final List<Challenge> challenges = [
@@ -214,6 +513,336 @@ class PacerDummyData {
       waktuSelesai: _now.add(const Duration(days: 14)),
     ),
   ];
+
+  /// Coach-assigned team challenges (kept separate so [challenges] stays 6 items).
+  static final List<Challenge> teamChallenges = [
+    Challenge(
+      id: 'chal-team-001',
+      dibuatOleh: 'demo-coach',
+      teamId: '11111111-1111-1111-1111-111111111111',
+      judul: 'Target Lari Mingguan Tim',
+      jenis: 'lari',
+      targetNilai: 5000,
+      targetSatuan: 'jarak_m',
+      diumumkan: true,
+      waktuMulai: _now.subtract(const Duration(days: 3)),
+      waktuSelesai: _now.add(const Duration(days: 4)),
+      createdAt: _now.subtract(const Duration(days: 3)),
+    ),
+    Challenge(
+      id: 'chal-team-002',
+      dibuatOleh: 'demo-coach',
+      teamId: '11111111-1111-1111-1111-111111111111',
+      judul: 'Challenge Endurance 10K',
+      jenis: 'lari',
+      targetNilai: 10000,
+      targetSatuan: 'jarak_m',
+      diumumkan: true,
+      waktuMulai: _now.subtract(const Duration(days: 1)),
+      waktuSelesai: _now.add(const Duration(days: 6)),
+      createdAt: _now.subtract(const Duration(days: 1)),
+    ),
+    Challenge(
+      id: 'chal-team-003',
+      dibuatOleh: 'demo-coach',
+      teamId: '22222222-2222-2222-2222-222222222222',
+      judul: 'Joging Skuad Kelas XI IPA 1',
+      jenis: 'joging',
+      targetNilai: 1800,
+      targetSatuan: 'waktu_s',
+      diumumkan: true,
+      waktuMulai: _now.subtract(const Duration(days: 2)),
+      waktuSelesai: _now.add(const Duration(days: 5)),
+      createdAt: _now.subtract(const Duration(days: 2)),
+    ),
+  ];
+
+  static List<Challenge> get demoChallenges => [
+    ..._customDemoChallenges,
+    ...teamChallenges,
+    ...challenges,
+  ];
+
+  static Map<String, PartisipasiChallenge> _ensureDemoParticipations() {
+    return _demoParticipationsState ??= {
+      'chal-team-001': PartisipasiChallenge(
+        id: 'demo-part-team-1',
+        challengeId: 'chal-team-001',
+        userId: 'demo-user-me',
+        progressNilai: 2500,
+        berhasil: false,
+        isActive: true,
+        createdAt: _now.subtract(const Duration(days: 3)),
+      ),
+      'chal-team-002': PartisipasiChallenge(
+        id: 'demo-part-team-2',
+        challengeId: 'chal-team-002',
+        userId: 'demo-user-me',
+        progressNilai: 0,
+        berhasil: false,
+        isActive: false,
+        createdAt: _now.subtract(const Duration(days: 1)),
+      ),
+      'chal-team-003': PartisipasiChallenge(
+        id: 'demo-part-team-3',
+        challengeId: 'chal-team-003',
+        userId: 'demo-user-me',
+        progressNilai: 600,
+        berhasil: false,
+        isActive: false,
+        createdAt: _now.subtract(const Duration(days: 2)),
+      ),
+      'chal-001': PartisipasiChallenge(
+        id: 'demo-part-solo-1',
+        challengeId: 'chal-001',
+        userId: 'demo-user-me',
+        progressNilai: 3100,
+        berhasil: false,
+        isActive: true,
+        createdAt: _now.subtract(const Duration(days: 3)),
+      ),
+      'chal-005': PartisipasiChallenge(
+        id: 'demo-part-solo-2',
+        challengeId: 'chal-005',
+        userId: 'demo-user-me',
+        progressNilai: 600,
+        berhasil: false,
+        isActive: false,
+        createdAt: _now.subtract(const Duration(days: 2)),
+      ),
+    };
+  }
+
+  static List<PartisipasiChallenge> getDemoParticipations() {
+    final map = _ensureDemoParticipations();
+    return map.values.toList()
+      ..sort(
+        (a, b) =>
+            (b.createdAt ?? DateTime(0)).compareTo(a.createdAt ?? DateTime(0)),
+      );
+  }
+
+  static void _enforceDemoActiveSlot(String challengeId) {
+    final map = _ensureDemoParticipations();
+    final target = map[challengeId];
+    if (target == null || target.berhasil) return;
+    final chalMap = {for (final c in demoChallenges) c.id: c};
+    final targetIsTeam = chalMap[challengeId]?.isTeamChallenge ?? false;
+    for (final entry in map.entries.toList()) {
+      final p = entry.value;
+      if (p.challengeId == challengeId) {
+        map[entry.key] = PartisipasiChallenge(
+          id: p.id,
+          challengeId: p.challengeId,
+          userId: p.userId,
+          progressNilai: p.progressNilai,
+          berhasil: false,
+          isActive: true,
+          createdAt: p.createdAt,
+        );
+      } else if (!p.berhasil &&
+          (chalMap[p.challengeId]?.isTeamChallenge ?? false) == targetIsTeam &&
+          p.isActive) {
+        map[entry.key] = PartisipasiChallenge(
+          id: p.id,
+          challengeId: p.challengeId,
+          userId: p.userId,
+          progressNilai: p.progressNilai,
+          berhasil: false,
+          isActive: false,
+          createdAt: p.createdAt,
+        );
+      }
+    }
+  }
+
+  static List<PartisipasiChallenge> activateDemoChallenge(String challengeId) {
+    final map = _ensureDemoParticipations();
+    if (!map.containsKey(challengeId)) {
+      joinDemoChallenge(challengeId);
+      return getDemoParticipations();
+    }
+    _enforceDemoActiveSlot(challengeId);
+    return getDemoParticipations();
+  }
+
+  static PartisipasiChallenge joinDemoChallenge(String challengeId) {
+    final map = _ensureDemoParticipations();
+    final p = PartisipasiChallenge(
+      id: 'demo-part-${DateTime.now().microsecondsSinceEpoch}',
+      challengeId: challengeId,
+      userId: 'demo-user-me',
+      isActive: true,
+      createdAt: DateTime.now().toUtc(),
+    );
+    map[challengeId] = p;
+    _enforceDemoActiveSlot(challengeId);
+    return map[challengeId]!;
+  }
+
+  static void leaveDemoChallenge(String challengeId) {
+    _ensureDemoParticipations().remove(challengeId);
+  }
+
+  static Challenge createDemoChallenge({
+    required String jenis,
+    required double targetNilai,
+    required String targetSatuan,
+    String? teamId,
+    String? judul,
+    DateTime? waktuMulai,
+    DateTime? waktuSelesai,
+  }) {
+    final cleanTeamId = teamId != null && teamId.isNotEmpty ? teamId : null;
+    final cleanJudul = judul != null && judul.trim().isNotEmpty
+        ? judul.trim()
+        : null;
+    final created = Challenge(
+      id: 'demo-chal-${DateTime.now().microsecondsSinceEpoch}',
+      dibuatOleh: 'demo-user-me',
+      teamId: cleanTeamId,
+      judul: cleanJudul,
+      jenis: jenis,
+      targetNilai: targetNilai,
+      targetSatuan: targetSatuan,
+      waktuMulai: waktuMulai ?? DateTime.now().toUtc(),
+      waktuSelesai: waktuSelesai,
+      diumumkan: true,
+      createdAt: DateTime.now().toUtc(),
+    );
+    _customDemoChallenges.insert(0, created);
+    final map = _ensureDemoParticipations();
+    final hasActiveSameSlot = map.values.any((p) {
+      if (p.berhasil || !p.isActive) return false;
+      final c = demoChallenges.cast<Challenge?>().firstWhere(
+        (x) => x?.id == p.challengeId,
+        orElse: () => null,
+      );
+      return (c?.isTeamChallenge ?? false) == (cleanTeamId != null);
+    });
+    map[created.id] = PartisipasiChallenge(
+      id: 'demo-part-${DateTime.now().microsecondsSinceEpoch}',
+      challengeId: created.id,
+      userId: 'demo-user-me',
+      progressNilai: 0,
+      berhasil: false,
+      isActive: !hasActiveSameSlot,
+      createdAt: DateTime.now().toUtc(),
+    );
+    if (cleanTeamId != null) {
+      final team = demoTeams.cast<Team?>().firstWhere(
+        (t) => t?.id == cleanTeamId,
+        orElse: () => null,
+      );
+      final targetText = targetSatuan == 'waktu_s'
+          ? '${(targetNilai / 60).round()} menit'
+          : '${(targetNilai / 1000).toStringAsFixed(targetNilai % 1000 == 0 ? 0 : 1)} km';
+      _ensureDemoNotifications().insert(
+        0,
+        AppNotification(
+          id: 'demo-notif-${DateTime.now().microsecondsSinceEpoch}',
+          userId: 'demo-user-me',
+          type: 'team_challenge_assigned',
+          title: 'Challenge Tim · ${team?.nama ?? 'Tim'}',
+          body: cleanJudul != null ? '$cleanJudul ($targetText)' : targetText,
+          challengeId: created.id,
+          teamId: cleanTeamId,
+          isRead: false,
+          createdAt: DateTime.now().toUtc(),
+        ),
+      );
+    }
+    return created;
+  }
+
+  static void recordDemoActivityProgress(Activity activity) {
+    final map = _ensureDemoParticipations();
+    final chalMap = {for (final c in demoChallenges) c.id: c};
+    for (final entry in map.entries.toList()) {
+      final before = entry.value;
+      final chal = chalMap[entry.key];
+      if (chal == null) continue;
+      final updated = applyActivityDeltaToBaseline(
+        baseline: before,
+        challenge: chal,
+        activity: activity,
+        sign: 1,
+      );
+      map[entry.key] = updated;
+      if (!before.berhasil && updated.berhasil) {
+        _ensureDemoNotifications().insert(
+          0,
+          AppNotification(
+            id: 'demo-notif-done-${DateTime.now().microsecondsSinceEpoch}',
+            userId: 'demo-user-me',
+            type: 'challenge_completed',
+            title: 'Challenge Selesai!',
+            body: chal.judul ?? '${chal.jenis} selesai 100%',
+            challengeId: chal.id,
+            teamId: chal.teamId,
+            isRead: false,
+            createdAt: DateTime.now().toUtc(),
+          ),
+        );
+      }
+    }
+  }
+
+  static List<AppNotification> _ensureDemoNotifications() {
+    return _demoNotificationsState ??= [
+      AppNotification(
+        id: 'demo-notif-1',
+        userId: 'demo-user-me',
+        type: 'team_challenge_assigned',
+        title: 'Challenge Tim · GBK Runners Elite',
+        body: 'Target Lari Mingguan Tim (Aktif untuk aktivitas berikutnya)',
+        challengeId: 'chal-team-001',
+        teamId: '11111111-1111-1111-1111-111111111111',
+        isRead: false,
+        createdAt: _now.subtract(const Duration(minutes: 25)),
+      ),
+      AppNotification(
+        id: 'demo-notif-2',
+        userId: 'demo-user-me',
+        type: 'team_challenge_assigned',
+        title: 'Challenge Tim · GBK Runners Elite',
+        body: 'Challenge Endurance 10K (Menunggu — ketuk untuk pilih aktif)',
+        challengeId: 'chal-team-002',
+        teamId: '11111111-1111-1111-1111-111111111111',
+        isRead: false,
+        createdAt: _now.subtract(const Duration(hours: 2)),
+      ),
+      AppNotification(
+        id: 'demo-notif-3',
+        userId: 'demo-user-me',
+        type: 'role_updated',
+        title: 'Peran Tim Diperbarui',
+        body: 'Coach Hendra menyambutmu di GBK Runners Elite',
+        teamId: '11111111-1111-1111-1111-111111111111',
+        isRead: true,
+        createdAt: _now.subtract(const Duration(days: 1)),
+      ),
+    ];
+  }
+
+  static List<AppNotification> getDemoNotifications() =>
+      List<AppNotification>.of(_ensureDemoNotifications());
+
+  static void markDemoNotificationRead(String notificationId) {
+    final list = _ensureDemoNotifications();
+    for (var i = 0; i < list.length; i++) {
+      if (list[i].id == notificationId) {
+        list[i] = list[i].copyWith(isRead: true);
+      }
+    }
+  }
+
+  static void markAllDemoNotificationsRead() {
+    final list = _ensureDemoNotifications();
+    for (var i = 0; i < list.length; i++) {
+      list[i] = list[i].copyWith(isRead: true);
+    }
+  }
 
   /// Realistic leaderboard rankings across metrics and periods
   static ({

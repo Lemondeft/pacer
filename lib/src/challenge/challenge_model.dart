@@ -7,10 +7,12 @@ import 'package:pacer/src/aktivitas/activity_model.dart'
 /// Allowed values for challenge.target_satuan (matches the DB check constraint).
 const List<String> targetSatuanOpsi = <String>['jarak_m', 'waktu_s'];
 
-/// One coach-created challenge row (public.challenge).
+/// One coach-created team challenge or athlete-created solo challenge (public.challenge).
 class Challenge {
   final String id;
   final String? dibuatOleh;
+  final String? teamId;
+  final String? judul;
   final String jenis;
   final double targetNilai;
   final String targetSatuan;
@@ -22,6 +24,8 @@ class Challenge {
   const Challenge({
     required this.id,
     this.dibuatOleh,
+    this.teamId,
+    this.judul,
     required this.jenis,
     required this.targetNilai,
     required this.targetSatuan,
@@ -31,9 +35,13 @@ class Challenge {
     this.createdAt,
   });
 
+  bool get isTeamChallenge => teamId != null && teamId!.isNotEmpty;
+
   factory Challenge.fromJson(Map<String, dynamic> json) => Challenge(
     id: json['id'] as String,
     dibuatOleh: json['dibuat_oleh'] as String?,
+    teamId: json['team_id'] as String?,
+    judul: json['judul'] as String?,
     jenis: json['jenis'] as String,
     targetNilai: jsonToDouble(json['target_nilai']) ?? 0,
     targetSatuan: json['target_satuan'] as String,
@@ -46,6 +54,8 @@ class Challenge {
   Map<String, dynamic> toJson() => {
     'id': id,
     'dibuat_oleh': dibuatOleh,
+    'team_id': teamId,
+    'judul': judul,
     'jenis': jenis,
     'target_nilai': targetNilai,
     'target_satuan': targetSatuan,
@@ -63,6 +73,7 @@ class PartisipasiChallenge {
   final String userId;
   final double progressNilai;
   final bool berhasil;
+  final bool isActive;
   final DateTime? createdAt;
 
   const PartisipasiChallenge({
@@ -71,6 +82,7 @@ class PartisipasiChallenge {
     required this.userId,
     this.progressNilai = 0,
     this.berhasil = false,
+    this.isActive = true,
     this.createdAt,
   });
 
@@ -81,6 +93,9 @@ class PartisipasiChallenge {
         userId: json['user_id'] as String,
         progressNilai: jsonToDouble(json['progress_nilai']) ?? 0,
         berhasil: json['berhasil'] as bool? ?? false,
+        isActive: json['is_active'] is int
+            ? (json['is_active'] as int) == 1
+            : (json['is_active'] as bool? ?? true),
         createdAt: _parseDate(json['created_at']),
       );
 
@@ -90,6 +105,7 @@ class PartisipasiChallenge {
     'user_id': userId,
     'progress_nilai': progressNilai,
     'berhasil': berhasil,
+    'is_active': isActive,
     'created_at': _iso(createdAt),
   };
 }
@@ -128,9 +144,15 @@ double challengeActivityDelta({
       !startedAt.isBefore(challenge.waktuSelesai!.toUtc())) {
     return 0;
   }
-  if (participation.createdAt != null &&
-      finishedAt.isBefore(participation.createdAt!.toUtc())) {
-    return 0;
+  if (activity.challengeIds != null) {
+    if (!activity.challengeIds!.contains(challenge.id)) {
+      return 0;
+    }
+  } else {
+    if (participation.createdAt != null &&
+        finishedAt.isBefore(participation.createdAt!.toUtc())) {
+      return 0;
+    }
   }
 
   return challenge.targetSatuan == 'waktu_s'
@@ -153,12 +175,14 @@ PartisipasiChallenge evaluateChallengeProgress({
       activity: a,
     );
   }
+  final completed = challenge.targetNilai > 0 && total >= challenge.targetNilai;
   return PartisipasiChallenge(
     id: participation.id,
     challengeId: participation.challengeId,
     userId: participation.userId,
     progressNilai: total,
-    berhasil: challenge.targetNilai > 0 && total >= challenge.targetNilai,
+    berhasil: completed,
+    isActive: completed ? false : participation.isActive,
     createdAt: participation.createdAt,
   );
 }

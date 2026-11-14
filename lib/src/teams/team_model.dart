@@ -19,6 +19,7 @@ class Team {
   /// Only used for local/demo data.
   final String? inviteCode;
   final DateTime? createdAt;
+  final int? memberCount;
 
   const Team({
     required this.id,
@@ -28,7 +29,28 @@ class Team {
     this.isPrivate = true,
     this.inviteCode,
     this.createdAt,
+    this.memberCount,
   });
+
+  Team copyWith({
+    String? id,
+    String? nama,
+    double? targetNilai,
+    String? dibuatOleh,
+    bool? isPrivate,
+    String? inviteCode,
+    DateTime? createdAt,
+    int? memberCount,
+  }) => Team(
+    id: id ?? this.id,
+    nama: nama ?? this.nama,
+    targetNilai: targetNilai ?? this.targetNilai,
+    dibuatOleh: dibuatOleh ?? this.dibuatOleh,
+    isPrivate: isPrivate ?? this.isPrivate,
+    inviteCode: inviteCode ?? this.inviteCode,
+    createdAt: createdAt ?? this.createdAt,
+    memberCount: memberCount ?? this.memberCount,
+  );
 
   factory Team.fromJson(Map<String, dynamic> json) => Team(
     id: json['id'] as String,
@@ -38,6 +60,7 @@ class Team {
     isPrivate: json['is_private'] as bool? ?? true,
     inviteCode: json['invite_code'] as String?,
     createdAt: _parseDate(json['created_at']),
+    memberCount: _jsonToInt(json['member_count']),
   );
 
   Map<String, dynamic> toJson() => {
@@ -48,7 +71,69 @@ class Team {
     'is_private': isPrivate,
     'invite_code': inviteCode,
     'created_at': createdAt?.toIso8601String(),
+    if (memberCount != null) 'member_count': memberCount,
   };
+}
+
+/// Detailed team roster entry returned by `get_team_roster` / cache.
+class TeamRosterMember {
+  final String userId;
+  final String nama;
+  final String peran;
+  final String appPeran;
+  final DateTime? joinedAt;
+
+  const TeamRosterMember({
+    required this.userId,
+    required this.nama,
+    required this.peran,
+    required this.appPeran,
+    this.joinedAt,
+  });
+
+  factory TeamRosterMember.fromJson(Map<String, dynamic> json) =>
+      TeamRosterMember(
+        userId: json['user_id'] as String,
+        nama: (json['nama'] as String? ?? '').trim(),
+        peran: json['peran'] as String? ?? 'anggota',
+        appPeran: json['app_peran'] as String? ?? 'user',
+        joinedAt: _parseDate(json['joined_at']),
+      );
+}
+
+/// Aggregate team activity summary for the Teams Dashboard.
+class TeamDashboardStats {
+  final int memberCount;
+  final int activeMembersWeek;
+  final int totalWeekSessions;
+  final double totalWeekKm;
+  final double totalAllKm;
+  final bool isMember;
+  final bool canViewCode;
+  final bool canManageCode;
+
+  const TeamDashboardStats({
+    required this.memberCount,
+    required this.activeMembersWeek,
+    required this.totalWeekSessions,
+    required this.totalWeekKm,
+    required this.totalAllKm,
+    required this.isMember,
+    this.canViewCode = false,
+    required this.canManageCode,
+  });
+
+  factory TeamDashboardStats.fromJson(Map<String, dynamic> json) =>
+      TeamDashboardStats(
+        memberCount: _jsonToInt(json['member_count']) ?? 0,
+        activeMembersWeek: _jsonToInt(json['active_members_week']) ?? 0,
+        totalWeekSessions: _jsonToInt(json['total_week_sessions']) ?? 0,
+        totalWeekKm: jsonToDouble(json['total_week_km']) ?? 0,
+        totalAllKm: jsonToDouble(json['total_all_km']) ?? 0,
+        isMember: json['is_member'] as bool? ?? false,
+        canViewCode: json['can_view_code'] as bool? ?? false,
+        canManageCode: json['can_manage_code'] as bool? ?? false,
+      );
 }
 
 /// One membership row (public.team_members), unique (team_id, user_id).
@@ -87,4 +172,12 @@ class TeamMember {
 }
 
 DateTime? _parseDate(dynamic value) =>
-    value == null ? null : DateTime.parse(value as String);
+    value is String && value.isNotEmpty ? DateTime.tryParse(value) : null;
+
+int? _jsonToInt(dynamic value) {
+  if (value == null) return null;
+  if (value is int) return value;
+  if (value is num) return value.toInt();
+  if (value is String) return int.tryParse(value);
+  return null;
+}

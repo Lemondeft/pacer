@@ -554,4 +554,229 @@ void main() {
       }
     });
   });
+
+  group('Team Challenges, Solo Challenges & Active Slots', () {
+    test('Challenge and PartisipasiChallenge round-trip teamId, judul, and isActive', () {
+      final teamChal = Challenge.fromJson({
+        'id': 'c-team-1',
+        'dibuat_oleh': 'u-coach',
+        'team_id': 't-1',
+        'judul': 'Squad 10K Sprint',
+        'jenis': 'lari',
+        'target_nilai': 10000,
+        'target_satuan': 'jarak_m',
+        'diumumkan': true,
+      });
+      expect(teamChal.isTeamChallenge, isTrue);
+      expect(teamChal.judul, 'Squad 10K Sprint');
+      final restoredChal = Challenge.fromJson(teamChal.toJson());
+      expect(restoredChal.teamId, 't-1');
+      expect(restoredChal.judul, 'Squad 10K Sprint');
+
+      final part = PartisipasiChallenge.fromJson({
+        'id': 'p-slot-1',
+        'challenge_id': 'c-team-1',
+        'user_id': 'u1',
+        'progress_nilai': 2500,
+        'berhasil': false,
+        'is_active': false,
+      });
+      expect(part.isActive, isFalse);
+      final restoredPart = PartisipasiChallenge.fromJson(part.toJson());
+      expect(restoredPart.isActive, isFalse);
+    });
+
+    test('challengeActivityDelta respects nullable activity.challengeIds opt-in/opt-out', () {
+      final joined = DateTime.utc(2026, 11, 10, 6);
+      final teamChal = Challenge(
+        id: 'c-team-run',
+        teamId: 't-1',
+        judul: 'Tim 5K',
+        jenis: 'lari',
+        targetNilai: 5000,
+        targetSatuan: 'jarak_m',
+        diumumkan: true,
+        waktuMulai: DateTime.utc(2026, 11, 1),
+        waktuSelesai: DateTime.utc(2026, 11, 30),
+      );
+      final soloChal = Challenge(
+        id: 'c-solo-run',
+        jenis: 'lari',
+        targetNilai: 3000,
+        targetSatuan: 'jarak_m',
+        diumumkan: true,
+        waktuMulai: DateTime.utc(2026, 11, 1),
+        waktuSelesai: DateTime.utc(2026, 11, 30),
+      );
+      final teamPart = PartisipasiChallenge(
+        id: 'p-team',
+        challengeId: teamChal.id,
+        userId: 'u1',
+        createdAt: joined,
+      );
+      final soloPart = PartisipasiChallenge(
+        id: 'p-solo',
+        challengeId: soloChal.id,
+        userId: 'u1',
+        createdAt: joined,
+      );
+
+      final dualActivity = Activity(
+        id: 'act-both',
+        userId: 'u1',
+        jenis: 'lari',
+        mulaiAt: joined.add(const Duration(minutes: 5)),
+        selesaiAt: joined.add(const Duration(minutes: 25)),
+        jarakM: 2200,
+        challengeIds: const ['c-team-run', 'c-solo-run'],
+      );
+      expect(
+        challengeActivityDelta(
+          challenge: teamChal,
+          participation: teamPart,
+          activity: dualActivity,
+        ),
+        2200,
+      );
+      expect(
+        challengeActivityDelta(
+          challenge: soloChal,
+          participation: soloPart,
+          activity: dualActivity,
+        ),
+        2200,
+      );
+
+      final teamOnlyActivity = Activity(
+        id: 'act-team-only',
+        userId: 'u1',
+        jenis: 'lari',
+        mulaiAt: joined.add(const Duration(hours: 1)),
+        selesaiAt: joined.add(const Duration(hours: 1, minutes: 20)),
+        jarakM: 2000,
+        challengeIds: const ['c-team-run'],
+      );
+      expect(
+        challengeActivityDelta(
+          challenge: teamChal,
+          participation: teamPart,
+          activity: teamOnlyActivity,
+        ),
+        2000,
+      );
+      expect(
+        challengeActivityDelta(
+          challenge: soloChal,
+          participation: soloPart,
+          activity: teamOnlyActivity,
+        ),
+        0,
+      );
+
+      final optOutAll = Activity(
+        id: 'act-optout',
+        userId: 'u1',
+        jenis: 'lari',
+        mulaiAt: joined.add(const Duration(hours: 2)),
+        selesaiAt: joined.add(const Duration(hours: 2, minutes: 15)),
+        jarakM: 1500,
+        challengeIds: const [],
+      );
+      expect(
+        challengeActivityDelta(
+          challenge: teamChal,
+          participation: teamPart,
+          activity: optOutAll,
+        ),
+        0,
+      );
+      expect(
+        challengeActivityDelta(
+          challenge: soloChal,
+          participation: soloPart,
+          activity: optOutAll,
+        ),
+        0,
+      );
+    });
+
+    for (final entry in <String, Future<LocalStore> Function()>{
+      'MemoryLocalStore': () async => MemoryLocalStore(),
+      'SqliteLocalStore': () async => openInMemorySqliteStore(),
+    }.entries) {
+      test('${entry.key} enforces 1 active Team + 1 active Solo slot and switches cleanly', () async {
+        final store = await entry.value();
+        try {
+          final teamA = Challenge(
+            id: 'slot-team-a',
+            teamId: 't1',
+            judul: 'Tim A',
+            jenis: 'lari',
+            targetNilai: 10000,
+            targetSatuan: 'jarak_m',
+            diumumkan: true,
+            waktuMulai: DateTime.utc(2026, 11, 1),
+            waktuSelesai: DateTime.utc(2026, 11, 30),
+          );
+          final teamB = Challenge(
+            id: 'slot-team-b',
+            teamId: 't1',
+            judul: 'Tim B',
+            jenis: 'lari',
+            targetNilai: 15000,
+            targetSatuan: 'jarak_m',
+            diumumkan: true,
+            waktuMulai: DateTime.utc(2026, 11, 1),
+            waktuSelesai: DateTime.utc(2026, 11, 30),
+          );
+          final solo1 = Challenge(
+            id: 'slot-solo-1',
+            judul: 'Solo 5K',
+            jenis: 'lari',
+            targetNilai: 5000,
+            targetSatuan: 'jarak_m',
+            diumumkan: true,
+            waktuMulai: DateTime.utc(2026, 11, 1),
+            waktuSelesai: DateTime.utc(2026, 11, 30),
+          );
+          await store.saveChallenges('u-slot', [teamA, teamB, solo1]);
+          await store.queueJoinChallenge('u-slot', teamA.id);
+          await store.queueJoinChallenge('u-slot', teamB.id);
+          await store.queueJoinChallenge('u-slot', solo1.id);
+
+          final switched = await store.queueActivateChallenge(
+            'u-slot',
+            teamB.id,
+          );
+          final byId = {for (final p in switched) p.challengeId: p};
+          expect(byId[teamA.id]!.isActive, isFalse);
+          expect(byId[teamB.id]!.isActive, isTrue);
+          expect(byId[solo1.id]!.isActive, isTrue);
+
+          final runStart = DateTime.now().toUtc().add(const Duration(seconds: 2));
+          await store.finalizeRunAtomic(
+            id: 'run-slot-1',
+            userId: 'u-slot',
+            jenis: 'lari',
+            mulaiAt: runStart,
+            selesaiAt: runStart.add(const Duration(minutes: 20)),
+            durasiS: 1200,
+            jarakM: 3000,
+            challengeIds: [teamB.id, solo1.id],
+            allPoints: const [],
+          );
+
+          final afterRun = {
+            for (final p in await store.getParticipations('u-slot'))
+              p.challengeId: p,
+          };
+          expect(afterRun[teamA.id]!.progressNilai, closeTo(0, 0.01));
+          expect(afterRun[teamB.id]!.progressNilai, closeTo(3000, 0.01));
+          expect(afterRun[solo1.id]!.progressNilai, closeTo(3000, 0.01));
+        } finally {
+          await store.close();
+        }
+      });
+    }
+  });
 }

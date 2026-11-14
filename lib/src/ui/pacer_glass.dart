@@ -448,8 +448,8 @@ class PacerGlass extends StatelessWidget {
           )
         : _blurs[filterIndex];
 
-    final clearFill = (dark ? const Color(0xff999999) : Colors.white)
-        .withValues(alpha: dark ? 0.17 : 0.46);
+    final clearFill = (dark ? const Color(0xff999999) : const Color(0xFFEAF1FA))
+        .withValues(alpha: dark ? 0.17 : 0.48);
 
     final fill = Color.lerp(
       fallbackTint,

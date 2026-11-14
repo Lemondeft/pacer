@@ -8,6 +8,7 @@ import 'package:pacer/src/local/memory_local_store.dart';
 import 'package:pacer/src/local/store_factory_stub.dart'
     if (dart.library.io) 'package:pacer/src/local/store_factory_io.dart'
     as platform_store;
+import 'package:pacer/src/notifications/notification_model.dart';
 import 'package:pacer/src/teams/team_model.dart';
 
 /// Offline-first persistence contract (SSOT across UI and repositories).
@@ -71,6 +72,7 @@ abstract class LocalStore {
     required int durasiS,
     required double jarakM,
     required List<RutePoint> allPoints,
+    List<String>? challengeIds,
   });
 
   // ---- Activities, Routes, Statistik & Streaks ----
@@ -104,16 +106,23 @@ abstract class LocalStore {
     String userId,
     List<Team> teams, {
     required bool isMine,
+    bool replaceAll = false,
   });
   Future<List<Team>> getTeams(String userId, {bool mineOnly = false});
   Future<Team?> getTeam(String userId, String teamId);
+  Future<void> deleteTeamLocal(String userId, String teamId);
+  Future<void> setTeamMembershipLocal(
+    String userId,
+    String teamId, {
+    bool? isMine,
+    int memberCountDelta = 0,
+  });
   Future<void> saveTeamRoster(
     String userId,
     String teamId,
-    List<({String userId, String nama, String peran, String appPeran})> roster,
+    List<TeamRosterMember> roster,
   );
-  Future<List<({String userId, String nama, String peran, String appPeran})>>
-  getTeamRoster(String userId, String teamId);
+  Future<List<TeamRosterMember>> getTeamRoster(String userId, String teamId);
   Future<void> saveCoachRows(
     String userId,
     String teamId,
@@ -138,11 +147,21 @@ abstract class LocalStore {
     String userId,
     String challengeId,
   );
+  Future<List<PartisipasiChallenge>> queueActivateChallenge(
+    String userId,
+    String challengeId,
+  );
   Future<void> queueLeaveChallenge(String userId, String challengeId);
   Future<void> applySyncedActivityChallengeDelta(
     String userId,
     Activity activity,
   );
+
+  // ---- Notifications ----
+  Future<void> saveNotifications(String userId, List<AppNotification> items);
+  Future<List<AppNotification>> getNotifications(String userId);
+  Future<void> markNotificationReadLocal(String userId, String notificationId);
+  Future<void> markAllNotificationsReadLocal(String userId);
 
   // ---- Leaderboards ----
   Future<void> saveLeaderboards(String userId, List<Leaderboard> boards);

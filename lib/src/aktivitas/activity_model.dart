@@ -20,6 +20,10 @@ class Activity {
   final int? durasiS;
   final double? jarakM;
 
+  /// Explicit challenge IDs opted into by this activity.
+  /// `null` preserves legacy time-window matching; empty list skips challenges.
+  final List<String>? challengeIds;
+
   const Activity({
     required this.id,
     required this.userId,
@@ -28,6 +32,7 @@ class Activity {
     this.selesaiAt,
     this.durasiS,
     this.jarakM,
+    this.challengeIds,
   });
 
   factory Activity.fromJson(Map<String, dynamic> json) => Activity(
@@ -38,6 +43,7 @@ class Activity {
     selesaiAt: _parseDate(json['selesai_at']),
     durasiS: (json['durasi_s'] as num?)?.toInt(),
     jarakM: jsonToDouble(json['jarak_m']),
+    challengeIds: _parseIdList(json['challenge_ids']),
   );
 
   Map<String, dynamic> toJson() => {
@@ -48,6 +54,7 @@ class Activity {
     'selesai_at': _iso(selesaiAt),
     'durasi_s': durasiS,
     'jarak_m': jarakM,
+    if (challengeIds != null) 'challenge_ids': challengeIds,
   };
 }
 
@@ -97,6 +104,14 @@ double? jsonToDouble(dynamic value) {
   if (value == null) return null;
   if (value is num) return value.toDouble();
   return double.tryParse(value.toString());
+}
+
+List<String>? _parseIdList(dynamic value) {
+  if (value == null) return null;
+  if (value is Iterable) {
+    return [for (final item in value) if (item != null) item.toString()];
+  }
+  return null;
 }
 
 /// Elapsed whole seconds between [mulai] and [selesai], clamped at >= 0.

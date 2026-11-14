@@ -432,7 +432,7 @@ class RunRecorder extends ChangeNotifier {
 
   /// Atomically commits workout, route points, and sync outbox item locally,
   /// then triggers background sync. Returns [RunSummary] reliably even offline.
-  Future<RunSummary?> finish() async {
+  Future<RunSummary?> finish({List<String>? challengeIds}) async {
     if (!_started || _finishing) return null;
     _finishing = true;
     try {
@@ -476,6 +476,7 @@ class RunRecorder extends ChangeNotifier {
         durasiS: totalDurationS,
         jarakM: totalDist,
         allPoints: points,
+        challengeIds: challengeIds,
       );
 
       PacerCache.instance.invalidatePrefix('activities_');
@@ -508,6 +509,7 @@ class RunRecorder extends ChangeNotifier {
         points: List<RutePoint>.unmodifiable(points),
         anchorLat: anchorLat,
         anchorLng: anchorLng,
+        challengeIds: challengeIds ?? const [],
       );
     } finally {
       _finishing = false;
@@ -555,6 +557,7 @@ class RunSummary {
   final List<RutePoint> points;
   final double? anchorLat;
   final double? anchorLng;
+  final List<String> challengeIds;
   const RunSummary({
     required this.aktivitasId,
     required this.jenis,
@@ -564,5 +567,6 @@ class RunSummary {
     this.points = const [],
     this.anchorLat,
     this.anchorLng,
+    this.challengeIds = const [],
   });
 }

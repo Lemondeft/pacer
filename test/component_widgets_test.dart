@@ -87,6 +87,28 @@ void main() {
       expect(find.text('Bandung Striders'), findsOneWidget);
       expect(find.text('Bandung'), findsOneWidget);
     });
+
+    testWidgets('displays memberCount, privacy, and joined badges without overflow at 241x140', (tester) async {
+      await tester.pumpWidget(
+        wrapDark(
+          const SizedBox(
+            width: 241,
+            height: 140,
+            child: TeamCard(
+              name: 'GBK Runners Elite Very Long Club Name',
+              memberCount: 18,
+              isJoined: true,
+              isPrivate: false,
+            ),
+          ),
+        ),
+      );
+
+      expect(find.text('GBK Runners Elite Very Long Club Name'), findsOneWidget);
+      expect(find.textContaining('18'), findsOneWidget);
+      expect(find.byIcon(Icons.group_outlined), findsOneWidget);
+      expect(tester.takeException(), isNull);
+    });
   });
 
   group('BottomNavPill widget tests', () {
@@ -180,6 +202,58 @@ void main() {
       await gesture.up();
       await tester.pumpAndSettle();
       expect(find.text('Press Me'), findsOneWidget);
+    });
+  });
+
+  group('Soft Cool Ice-Mist Light Theme tests', () {
+    test('PacerScheme.light uses non-white cool mist surfaces', () {
+      const pureWhite = Color(0xFFFFFFFF);
+      expect(PacerScheme.light.scaffold, isNot(pureWhite));
+      expect(PacerScheme.light.card, isNot(pureWhite));
+      expect(PacerScheme.light.navBar, isNot(pureWhite));
+      final theme = PacerTheme.light();
+      expect(theme.scaffoldBackgroundColor, isNot(pureWhite));
+      expect(theme.cardTheme.color, isNot(pureWhite));
+      expect(theme.dialogTheme.backgroundColor, isNot(pureWhite));
+      expect(theme.bottomSheetTheme.backgroundColor, isNot(pureWhite));
+    });
+
+    testWidgets('StreakCard, TeamCard, and BottomNavPill render crisply in light theme', (tester) async {
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: PacerTheme.light(),
+          home: Scaffold(
+            body: SingleChildScrollView(
+              child: Column(
+                children: [
+                  StreakCard(
+                    count: 3,
+                    done: const [true, true, true, false, false, false, false],
+                    todayIndex: 2,
+                    status: StreakStatus.active,
+                  ),
+                  const TeamCard(
+                    name: 'Ice Mist Runners',
+                    location: 'Jakarta',
+                    memberCount: 12,
+                    isJoined: true,
+                  ),
+                  BottomNavPill(
+                    index: 0,
+                    onTap: (_) {},
+                    onStart: () {},
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text('3'), findsOneWidget);
+      expect(find.text('Ice Mist Runners'), findsOneWidget);
+      expect(find.text('START'), findsOneWidget);
+      expect(tester.takeException(), isNull);
     });
   });
 }

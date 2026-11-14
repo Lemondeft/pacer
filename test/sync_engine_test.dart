@@ -122,6 +122,14 @@ class _FakeGateway implements RemoteSyncGateway {
   }
 
   @override
+  Future<List<PartisipasiChallenge>?> activateChallengeRpc(
+    String challengeId,
+  ) async {
+    ops.add('activate:$challengeId');
+    return null;
+  }
+
+  @override
   Future<void> leaveChallenge(String userId, String challengeId) async {
     ops.add('leave:$challengeId');
   }
@@ -440,6 +448,46 @@ void main() {
       final afterFallback = await store.getParticipations('user-sync-1');
       expect(afterFallback.single.progressNilai, closeTo(5200.0, 0.01));
       expect(afterFallback.single.berhasil, isTrue);
+    });
+
+    test('queueActivateChallenge outbox op syncs via SyncEngine', () async {
+      final t1 = Challenge(
+        id: 'chal-team-sync-1',
+        teamId: 'team-1',
+        jenis: 'lari',
+        targetNilai: 8000,
+        targetSatuan: 'jarak_m',
+        diumumkan: true,
+      );
+      final t2 = Challenge(
+        id: 'chal-team-sync-2',
+        teamId: 'team-1',
+        jenis: 'lari',
+        targetNilai: 12000,
+        targetSatuan: 'jarak_m',
+        diumumkan: true,
+      );
+      await store.saveChallenges('user-sync-1', [t1, t2]);
+      await store.saveParticipations('user-sync-1', [
+        PartisipasiChallenge(
+          id: 'p-1',
+          challengeId: t1.id,
+          userId: 'user-sync-1',
+          isActive: true,
+        ),
+        PartisipasiChallenge(
+          id: 'p-2',
+          challengeId: t2.id,
+          userId: 'user-sync-1',
+          isActive: false,
+        ),
+      ]);
+
+      await store.queueActivateChallenge('user-sync-1', t2.id);
+      await engine.syncNow(userId: 'user-sync-1');
+
+      expect(engine.status.pendingCount, 0);
+      expect(gateway.ops, contains('activate:${t2.id}'));
     });
   });
 }

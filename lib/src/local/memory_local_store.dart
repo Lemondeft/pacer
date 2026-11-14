@@ -8,6 +8,7 @@ import 'package:pacer/src/leaderboard/leaderboard_model.dart';
 import 'package:pacer/src/local/local_helpers.dart';
 import 'package:pacer/src/local/local_models.dart';
 import 'package:pacer/src/local/local_store.dart';
+import 'package:pacer/src/notifications/notification_model.dart';
 import 'package:pacer/src/teams/team_model.dart';
 
 /// In-memory [LocalStore] fallback used before disk initialization and in
@@ -23,11 +24,11 @@ class MemoryLocalStore implements LocalStore {
   final Map<String, ({double jarakM, int waktuS})> _stats = {};
   final Map<String, ({int berjalan, DateTime? terakhir})> _streaks = {};
   final Map<String, Map<String, ({Team team, bool isMine})>> _teams = {};
-  final Map<String, List<({String userId, String nama, String peran, String appPeran})>>
-  _rosters = {};
+  final Map<String, List<TeamRosterMember>> _rosters = {};
   final Map<String, List<LocalCoachRow>> _coachRows = {};
   final Map<String, List<Challenge>> _challenges = {};
   final Map<String, Map<String, PartisipasiChallenge>> _participations = {};
+  final Map<String, List<AppNotification>> _notifications = {};
   final Map<String, List<Leaderboard>> _leaderboards = {};
   final Map<String, List<({Peringkat entry, String nama})>> _lbEntries = {};
   final Map<String, Set<String>> _lbScopes = {};
@@ -230,6 +231,7 @@ class MemoryLocalStore implements LocalStore {
     required int durasiS,
     required double jarakM,
     required List<RutePoint> allPoints,
+    List<String>? challengeIds,
   }) async {
     final activity = Activity(
       id: id,
@@ -239,6 +241,7 @@ class MemoryLocalStore implements LocalStore {
       selesaiAt: selesaiAt.toUtc(),
       durasiS: durasiS,
       jarakM: jarakM,
+      challengeIds: challengeIds,
     );
     _activities[id] = LocalActivity(
       activity: activity,
@@ -385,8 +388,13 @@ class MemoryLocalStore implements LocalStore {
     String userId,
     List<Team> teams, {
     required bool isMine,
+    bool replaceAll = false,
   }) async {
     final map = _teams.putIfAbsent(userId, () => {});
+    if (replaceAll) {
+      final keepIds = teams.map((t) => t.id).toSet();
+      map.removeWhere((id, _) => !keepIds.contains(id));
+    }
     if (isMine) {
       final mineIds = teams.map((t) => t.id).toSet();
       for (final entry in map.entries.toList()) {
@@ -396,8 +404,11 @@ class MemoryLocalStore implements LocalStore {
       }
     }
     for (final t in teams) {
-      final prevMine = map[t.id]?.isMine ?? false;
-      map[t.id] = (team: t, isMine: isMine || prevMine);
+      final prev = map[t.id];
+      final merged = t.memberCount != null || prev?.team.memberCount == null
+          ? t
+          : t.copyWith(memberCount: prev!.team.memberCount);
+      map[t.id] = (team: merged, isMine: isMine || (prev?.isMine ?? false));
     }
   }
 
@@ -420,16 +431,41 @@ class MemoryLocalStore implements LocalStore {
       _teams[userId]?[teamId]?.team;
 
   @override
+  Future<void> deleteTeamLocal(String userId, String teamId) async {
+    _teams[userId]?.remove(teamId);
+    _rosters.remove('${userId}_$teamId');
+  }
+
+  @override
+  Future<void> setTeamMembershipLocal(
+    String userId,
+    String teamId, {
+    bool? isMine,
+    int memberCountDelta = 0,
+  }) async {
+    final existing = _teams[userId]?[teamId];
+    if (existing == null) return;
+    final currentCount = existing.team.memberCount;
+    final nextCount = currentCount == null
+        ? null
+        : (currentCount + memberCountDelta).clamp(0, 1000000);
+    _teams[userId]![teamId] = (
+      team: existing.team.copyWith(memberCount: nextCount),
+      isMine: isMine ?? existing.isMine,
+    );
+  }
+
+  @override
   Future<void> saveTeamRoster(
     String userId,
     String teamId,
-    List<({String userId, String nama, String peran, String appPeran})> roster,
+    List<TeamRosterMember> roster,
   ) async {
     _rosters['${userId}_$teamId'] = List.of(roster);
   }
 
   @override
-  Future<List<({String userId, String nama, String peran, String appPeran})>>
+  Future<List<TeamRosterMember>>
   getTeamRoster(String userId, String teamId) async =>
       List.of(_rosters['${userId}_$teamId'] ?? const []);
 
@@ -468,28 +504,49 @@ class MemoryLocalStore implements LocalStore {
     List<PartisipasiChallenge> list,
   ) async {
     final map = <String, PartisipasiChallenge>{
-      for (final p in list) p.challengeId: p,
+      for (final p in list)
+        p.challengeId: PartisipasiChallenge(
+          id: p.id,
+          challengeId: p.challengeId,
+          userId: p.userId,
+          progressNilai: p.progressNilai,
+          berhasil: p.berhasil,
+          isActive: p.berhasil ? false : p.isActive,
+          createdAt: p.createdAt,
+        ),
     };
-    for (final o in _outbox) {
-      if (o.userId != userId) continue;
+    final newJoinIds = <String>[];
+    final sortedOutbox = _outbox.where((o) => o.userId == userId).toList()
+      ..sort((a, b) => a.id.compareTo(b.id));
+    for (final o in sortedOutbox) {
       if (o.opType == OutboxOp.joinChallenge) {
         final rawCreated = o.payload['created_at'] as String?;
-        map.putIfAbsent(
-          o.entityId,
-          () => PartisipasiChallenge(
+        if (!map.containsKey(o.entityId)) {
+          newJoinIds.add(o.entityId);
+          map[o.entityId] = PartisipasiChallenge(
             id: o.payload['id'] as String? ?? o.entityId,
             challengeId: o.entityId,
             userId: userId,
+            isActive: true,
             createdAt: rawCreated != null
                 ? DateTime.parse(rawCreated)
                 : o.createdAt,
-          ),
-        );
+          );
+        }
       } else if (o.opType == OutboxOp.leaveChallenge) {
         map.remove(o.entityId);
       }
     }
     _participations[userId] = map;
+    for (final cid in newJoinIds) {
+      _applyActivationSlot(userId, cid);
+    }
+    for (final o in sortedOutbox) {
+      if (o.opType == OutboxOp.activateChallenge &&
+          o.status != SyncState.synced) {
+        _applyActivationSlot(userId, o.entityId);
+      }
+    }
   }
 
   @override
@@ -522,6 +579,7 @@ class MemoryLocalStore implements LocalStore {
       createdAt: DateTime.now().toUtc(),
     );
     _participations.putIfAbsent(userId, () => {})[challengeId] = p;
+    _applyActivationSlot(userId, challengeId);
     _outbox.removeWhere(
       (o) =>
           o.userId == userId &&
@@ -541,6 +599,66 @@ class MemoryLocalStore implements LocalStore {
       },
     );
     return p;
+  }
+
+  @override
+  Future<List<PartisipasiChallenge>> queueActivateChallenge(
+    String userId,
+    String challengeId,
+  ) async {
+    _applyActivationSlot(userId, challengeId);
+    _outbox.removeWhere(
+      (o) =>
+          o.userId == userId &&
+          o.opType == OutboxOp.activateChallenge &&
+          o.entityId == challengeId &&
+          o.status == SyncState.pending,
+    );
+    _enqueue(
+      userId: userId,
+      opType: OutboxOp.activateChallenge,
+      entityId: challengeId,
+      payload: {'challenge_id': challengeId},
+    );
+    return getParticipations(userId);
+  }
+
+  void _applyActivationSlot(String userId, String challengeId) {
+    final map = _participations[userId];
+    if (map == null) return;
+    final target = map[challengeId];
+    if (target == null || target.berhasil) return;
+    final isTeamById = {
+      for (final c in _challenges[userId] ?? const <Challenge>[])
+        c.id: c.isTeamChallenge,
+    };
+    final targetIsTeam = isTeamById[challengeId] ?? false;
+    for (final entry in map.entries.toList()) {
+      final p = entry.value;
+      if (p.challengeId == challengeId) {
+        map[entry.key] = PartisipasiChallenge(
+          id: p.id,
+          challengeId: p.challengeId,
+          userId: p.userId,
+          progressNilai: p.progressNilai,
+          berhasil: false,
+          isActive: true,
+          createdAt: p.createdAt,
+        );
+      } else if (!p.berhasil &&
+          (isTeamById[p.challengeId] ?? false) == targetIsTeam &&
+          p.isActive) {
+        map[entry.key] = PartisipasiChallenge(
+          id: p.id,
+          challengeId: p.challengeId,
+          userId: p.userId,
+          progressNilai: p.progressNilai,
+          berhasil: false,
+          isActive: false,
+          createdAt: p.createdAt,
+        );
+      }
+    }
   }
 
   @override
@@ -907,6 +1025,47 @@ class MemoryLocalStore implements LocalStore {
           );
         }
       }
+    }
+  }
+
+  @override
+  Future<void> saveNotifications(
+    String userId,
+    List<AppNotification> items,
+  ) async {
+    _notifications[userId] = List<AppNotification>.of(items);
+  }
+
+  @override
+  Future<List<AppNotification>> getNotifications(String userId) async {
+    final list = List<AppNotification>.of(_notifications[userId] ?? const []);
+    list.sort(
+      (a, b) =>
+          (b.createdAt ?? DateTime(0)).compareTo(a.createdAt ?? DateTime(0)),
+    );
+    return list;
+  }
+
+  @override
+  Future<void> markNotificationReadLocal(
+    String userId,
+    String notificationId,
+  ) async {
+    final list = _notifications[userId];
+    if (list == null) return;
+    for (var i = 0; i < list.length; i++) {
+      if (list[i].id == notificationId) {
+        list[i] = list[i].copyWith(isRead: true);
+      }
+    }
+  }
+
+  @override
+  Future<void> markAllNotificationsReadLocal(String userId) async {
+    final list = _notifications[userId];
+    if (list == null) return;
+    for (var i = 0; i < list.length; i++) {
+      list[i] = list[i].copyWith(isRead: true);
     }
   }
 

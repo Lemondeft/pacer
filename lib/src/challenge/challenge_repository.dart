@@ -3,8 +3,10 @@ import 'dart:async';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'package:pacer/src/challenge/challenge_model.dart';
+import 'package:pacer/src/demo/pacer_dummy_data.dart';
 import 'package:pacer/src/local/local_store.dart';
 import 'package:pacer/src/local/swr_helper.dart';
+import 'package:pacer/src/notifications/notification_repository.dart';
 import 'package:pacer/src/sync/sync_engine.dart';
 
 /// Offline-first challenge repository (DFD process 3.0 CHALLENGE).
@@ -114,6 +116,8 @@ class ChallengeRepository {
     required String jenis,
     required double targetNilai,
     required String targetSatuan,
+    String? teamId,
+    String? judul,
     DateTime? waktuMulai,
     DateTime? waktuSelesai,
   }) async {
@@ -127,14 +131,35 @@ class ChallengeRepository {
         'must be one of $targetSatuanOpsi',
       );
     }
+    if (await isDemoAccount(client: _client, store: _store)) {
+      final created = PacerDummyData.createDemoChallenge(
+        jenis: jenis,
+        targetNilai: targetNilai,
+        targetSatuan: targetSatuan,
+        teamId: teamId,
+        judul: judul,
+        waktuMulai: waktuMulai,
+        waktuSelesai: waktuSelesai,
+      );
+      if (created.isTeamChallenge) {
+        NotificationRepository.syncDemoUnread();
+      }
+      return created;
+    }
     final c = _client;
     if (c == null) throw StateError('No backend configured.');
     final uid = c.auth.currentUser?.id;
     if (uid == null) throw StateError('No signed-in user.');
+    final cleanTeamId = teamId != null && teamId.isNotEmpty ? teamId : null;
+    final cleanJudul = judul != null && judul.trim().isNotEmpty
+        ? judul.trim()
+        : null;
     final row = await c
         .from('challenge')
         .insert({
           'dibuat_oleh': uid,
+          'team_id': ?cleanTeamId,
+          'judul': ?cleanJudul,
           'jenis': jenis,
           'target_nilai': targetNilai,
           'target_satuan': targetSatuan,
@@ -148,7 +173,75 @@ class ChallengeRepository {
       'challenges_$uid',
       DateTime.fromMillisecondsSinceEpoch(0),
     );
+    await _store.setSyncTimestamp(
+      'challenge_parts_$uid',
+      DateTime.fromMillisecondsSinceEpoch(0),
+    );
+    await _store.setSyncTimestamp(
+      'notifications_$uid',
+      DateTime.fromMillisecondsSinceEpoch(0),
+    );
     return Challenge.fromJson(Map<String, dynamic>.from(row));
+  }
+
+  /// Lists challenges belonging to [teamId], newest first.
+  Future<List<Challenge>> listTeamChallenges(
+    String teamId, {
+    bool forceRefresh = false,
+  }) async {
+    if (await isDemoAccount(client: _client, store: _store)) {
+      return PacerDummyData.demoChallenges
+          .where((c) => c.teamId == teamId)
+          .toList();
+    }
+    final all = await listChallenges(forceRefresh: forceRefresh);
+    return [for (final ch in all) if (ch.teamId == teamId) ch];
+  }
+
+  /// Switches the user's active challenge slot (max 1 Coach + 1 Solo incomplete).
+  Future<List<PartisipasiChallenge>> activateChallenge(
+    String challengeId,
+  ) async {
+    if (await isDemoAccount(client: _client, store: _store)) {
+      return PacerDummyData.activateDemoChallenge(challengeId);
+    }
+    final userId = await _requireUserId();
+    final updated = await _store.queueActivateChallenge(userId, challengeId);
+    await _sync.refreshCounts(userId: userId);
+    unawaited(_sync.triggerSync(userId: userId));
+    return updated;
+  }
+
+  /// Active incomplete challenges matching [jenis] (max 1 Coach + 1 Solo).
+  Future<List<({Challenge challenge, PartisipasiChallenge participation})>>
+  eligibleActiveChallengesForSport(String jenis) async {
+    final now = DateTime.now().toUtc();
+    final List<Challenge> all;
+    final List<PartisipasiChallenge> parts;
+    if (await isDemoAccount(client: _client, store: _store)) {
+      all = PacerDummyData.demoChallenges;
+      parts = PacerDummyData.getDemoParticipations();
+    } else {
+      all = await listChallenges();
+      parts = await myParticipations();
+    }
+    final chalById = {for (final c in all) c.id: c};
+    final out =
+        <({Challenge challenge, PartisipasiChallenge participation})>[];
+    for (final p in parts) {
+      if (p.berhasil || !p.isActive) continue;
+      final c = chalById[p.challengeId];
+      if (c == null || c.jenis != jenis || !isChallengeActive(c, now)) {
+        continue;
+      }
+      out.add((challenge: c, participation: p));
+    }
+    out.sort((a, b) {
+      final aTeam = a.challenge.isTeamChallenge ? 0 : 1;
+      final bTeam = b.challenge.isTeamChallenge ? 0 : 1;
+      return aTeam.compareTo(bTeam);
+    });
+    return out;
   }
 
   /// Resolves one challenge by [challengeId] via offline-first [listChallenges].

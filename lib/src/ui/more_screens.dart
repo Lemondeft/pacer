@@ -17,6 +17,8 @@ import 'package:pacer/src/leaderboard/leaderboard_model.dart';
 import 'package:pacer/src/leaderboard/leaderboard_repository.dart';
 import 'package:pacer/src/local/local_models.dart';
 import 'package:pacer/src/local/swr_helper.dart';
+import 'package:pacer/src/notifications/notification_model.dart';
+import 'package:pacer/src/notifications/notification_repository.dart';
 import 'package:pacer/src/sync/connectivity_service.dart';
 import 'package:pacer/src/sync/sync_engine.dart';
 import 'package:pacer/src/teams/team_model.dart';
@@ -28,6 +30,7 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'app_strings.dart';
 import 'app_theme.dart';
+import 'coach_board.dart';
 import 'format.dart';
 import 'screens.dart';
 import 'widgets.dart';
@@ -143,9 +146,16 @@ class _LoginScreenState extends State<LoginScreen> {
 
 /// Figma "Pilih Olahraga" pre-run setup.
 class RunSetupScreen extends StatefulWidget {
+  final void Function(String jenis, String goal, List<String>? challengeIds)?
+  onStartWithChallenges;
   final void Function(String jenis, String goal)? onStartWithConfig;
   final VoidCallback? onStart;
-  const RunSetupScreen({super.key, this.onStartWithConfig, this.onStart});
+  const RunSetupScreen({
+    super.key,
+    this.onStartWithChallenges,
+    this.onStartWithConfig,
+    this.onStart,
+  });
 
   @override
   State<RunSetupScreen> createState() => _RunSetupScreenState();
@@ -154,6 +164,58 @@ class RunSetupScreen extends StatefulWidget {
 class _RunSetupScreenState extends State<RunSetupScreen> {
   int _selectedSport = 0;
   int _goal = 0;
+  List<Challenge> _allChallenges = const [];
+  List<PartisipasiChallenge> _participations = const [];
+  final Set<String> _optedOutIds = {};
+
+  @override
+  void initState() {
+    super.initState();
+    _loadChallenges();
+  }
+
+  Future<void> _loadChallenges() async {
+    try {
+      final List<Challenge> chals;
+      final List<PartisipasiChallenge> parts;
+      if (await isDemoAccount()) {
+        chals = PacerDummyData.demoChallenges;
+        parts = PacerDummyData.getDemoParticipations();
+      } else {
+        final repo = ChallengeRepository();
+        chals = await repo.listChallenges();
+        parts = await repo.myParticipations();
+      }
+      if (!mounted) return;
+      setState(() {
+        _allChallenges = chals;
+        _participations = parts;
+      });
+    } catch (_) {}
+  }
+
+  List<({Challenge challenge, PartisipasiChallenge participation})>
+  _eligibleForSelectedSport() {
+    final sport = _sports[_selectedSport].key;
+    final now = DateTime.now().toUtc();
+    final chalById = {for (final c in _allChallenges) c.id: c};
+    final out =
+        <({Challenge challenge, PartisipasiChallenge participation})>[];
+    for (final p in _participations) {
+      if (p.berhasil || !p.isActive) continue;
+      final c = chalById[p.challengeId];
+      if (c == null || c.jenis != sport || !isChallengeActive(c, now)) {
+        continue;
+      }
+      out.add((challenge: c, participation: p));
+    }
+    out.sort((a, b) {
+      final aTeam = a.challenge.isTeamChallenge ? 0 : 1;
+      final bTeam = b.challenge.isTeamChallenge ? 0 : 1;
+      return aTeam.compareTo(bTeam);
+    });
+    return out;
+  }
 
   static const _sports = [
     (
@@ -223,7 +285,18 @@ class _RunSetupScreenState extends State<RunSetupScreen> {
     HapticFeedback.mediumImpact();
     final chosenSport = _sports[_selectedSport].key;
     final chosenGoal = _goals[_goal];
-    if (widget.onStartWithConfig != null) {
+    final eligible = _eligibleForSelectedSport();
+    final selectedChallengeIds = [
+      for (final item in eligible)
+        if (!_optedOutIds.contains(item.challenge.id)) item.challenge.id,
+    ];
+    if (widget.onStartWithChallenges != null) {
+      widget.onStartWithChallenges!(
+        chosenSport,
+        chosenGoal,
+        selectedChallengeIds,
+      );
+    } else if (widget.onStartWithConfig != null) {
       widget.onStartWithConfig!(chosenSport, chosenGoal);
     } else if (widget.onStart != null) {
       widget.onStart!();
@@ -466,6 +539,59 @@ class _RunSetupScreenState extends State<RunSetupScreen> {
                   ],
                 ),
               ),
+              if (_eligibleForSelectedSport().isNotEmpty) ...[
+                const SizedBox(height: 16),
+                Builder(
+                  builder: (context) {
+                    final eligible = _eligibleForSelectedSport();
+                    final selectedIds = {
+                      for (final e in eligible)
+                        if (!_optedOutIds.contains(e.challenge.id))
+                          e.challenge.id,
+                    };
+                    return Container(
+                      padding: const EdgeInsets.all(14),
+                      decoration: BoxDecoration(
+                        color: scheme.card,
+                        borderRadius: BorderRadius.circular(14),
+                        border: Border.all(color: scheme.border),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            S.activeChallengesForSport,
+                            style: GoogleFonts.spaceGrotesk(
+                              fontWeight: FontWeight.w700,
+                              fontSize: 14,
+                              color: scheme.ink,
+                            ),
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            S.activeChallengesAutoNote,
+                            style: TextStyle(fontSize: 12, color: scheme.muted),
+                          ),
+                          const SizedBox(height: 10),
+                          _ChallengeToggleList(
+                            items: eligible,
+                            selectedIds: selectedIds,
+                            onToggle: (id, on) {
+                              setState(() {
+                                if (on) {
+                                  _optedOutIds.remove(id);
+                                } else {
+                                  _optedOutIds.add(id);
+                                }
+                              });
+                            },
+                          ),
+                        ],
+                      ),
+                    );
+                  },
+                ),
+              ],
               const SizedBox(height: 24),
               PacerTapScale(
                 pressedScale: 0.98,
@@ -508,12 +634,14 @@ class RunTrackerScreen extends StatefulWidget {
   final String sportType;
   final String? goal;
   final ActiveDraftRun? initialDraft;
+  final List<String>? initialChallengeIds;
   const RunTrackerScreen({
     super.key,
     this.onBack,
     this.sportType = 'lari',
     this.goal,
     this.initialDraft,
+    this.initialChallengeIds,
   });
 
   @override
@@ -673,7 +801,50 @@ class _RunTrackerScreenState extends State<RunTrackerScreen> {
     // Offline at finish is the expected failure mode: stay on the tracker
     // with the recording intact instead of red-screening.
     try {
-      final summary = await _recorder.finish();
+      List<({Challenge challenge, PartisipasiChallenge participation})>
+      eligible = const [];
+      try {
+        eligible = await ChallengeRepository().eligibleActiveChallengesForSport(
+          widget.sportType,
+        );
+      } catch (_) {}
+
+      List<String>? challengeIds;
+      if (eligible.isNotEmpty) {
+        if (!mounted) return;
+        final initialSelected = widget.initialChallengeIds != null
+            ? {
+                for (final e in eligible)
+                  if (widget.initialChallengeIds!.contains(e.challenge.id))
+                    e.challenge.id,
+              }
+            : {for (final e in eligible) e.challenge.id};
+        final picked = await _showFinishChallengeOptInSheet(
+          context,
+          eligible: eligible,
+          initialSelected: initialSelected,
+        );
+        if (picked == null) return;
+        challengeIds = picked;
+      }
+
+      final summary = await _recorder.finish(challengeIds: challengeIds);
+      if (summary != null && await isDemoAccount()) {
+        final now = DateTime.now().toUtc();
+        PacerDummyData.recordDemoActivityProgress(
+          Activity(
+            id: summary.aktivitasId,
+            userId: 'demo-user-me',
+            jenis: summary.jenis,
+            mulaiAt: now.subtract(Duration(seconds: summary.durasiS)),
+            selesaiAt: now,
+            durasiS: summary.durasiS,
+            jarakM: summary.jarakM,
+            challengeIds: challengeIds,
+          ),
+        );
+        NotificationRepository.syncDemoUnread();
+      }
       if (mounted) {
         HapticFeedback.mediumImpact();
         setState(() {
@@ -1152,12 +1323,15 @@ class RunFinishScreen extends StatefulWidget {
 class _RunFinishScreenState extends State<RunFinishScreen> {
   Future<List<RutePoint>>? _routeFuture;
   Future<UserProfile?>? _profileFuture;
+  Future<List<({Challenge challenge, PartisipasiChallenge participation})>>?
+  _appliedChallengesFuture;
 
   @override
   void initState() {
     super.initState();
     _routeFuture = _loadRoute();
     _profileFuture = _loadProfile();
+    _appliedChallengesFuture = _loadAppliedChallenges();
   }
 
   @override
@@ -1166,6 +1340,36 @@ class _RunFinishScreenState extends State<RunFinishScreen> {
     if (widget.aktivitasId != oldWidget.aktivitasId ||
         widget.summary?.points != oldWidget.summary?.points) {
       _routeFuture = _loadRoute();
+    }
+    if (widget.summary?.challengeIds != oldWidget.summary?.challengeIds) {
+      _appliedChallengesFuture = _loadAppliedChallenges();
+    }
+  }
+
+  Future<List<({Challenge challenge, PartisipasiChallenge participation})>>
+  _loadAppliedChallenges() async {
+    final ids = widget.summary?.challengeIds;
+    if (ids == null || ids.isEmpty) return const [];
+    try {
+      final List<Challenge> all;
+      final List<PartisipasiChallenge> parts;
+      if (await isDemoAccount()) {
+        all = PacerDummyData.demoChallenges;
+        parts = PacerDummyData.getDemoParticipations();
+      } else {
+        final repo = ChallengeRepository();
+        all = await repo.listChallenges();
+        parts = await repo.myParticipations();
+      }
+      final chalMap = {for (final c in all) c.id: c};
+      final partMap = {for (final p in parts) p.challengeId: p};
+      return [
+        for (final id in ids)
+          if (chalMap[id] != null && partMap[id] != null)
+            (challenge: chalMap[id]!, participation: partMap[id]!),
+      ];
+    } catch (_) {
+      return const [];
     }
   }
 
@@ -1436,6 +1640,46 @@ class _RunFinishScreenState extends State<RunFinishScreen> {
                           },
                         ),
                         const SizedBox(height: 12),
+                        FutureBuilder<
+                          List<
+                            ({
+                              Challenge challenge,
+                              PartisipasiChallenge participation,
+                            })
+                          >
+                        >(
+                          future: _appliedChallengesFuture,
+                          builder: (context, cSnap) {
+                            final applied = cSnap.data ?? const [];
+                            if (applied.isEmpty) {
+                              return const SizedBox.shrink();
+                            }
+                            return Container(
+                              margin: const EdgeInsets.only(bottom: 14),
+                              padding: const EdgeInsets.all(14),
+                              decoration: BoxDecoration(
+                                color: scheme.card,
+                                borderRadius: BorderRadius.circular(14),
+                                border: Border.all(color: scheme.border),
+                              ),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    S.challengeProgressUpdated,
+                                    style: TextStyle(
+                                      fontWeight: FontWeight.w700,
+                                      fontSize: 14,
+                                      color: scheme.ink,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 8),
+                                  _ChallengeToggleList(items: applied),
+                                ],
+                              ),
+                            );
+                          },
+                        ),
                         LimeActionBar(
                           S.done,
                           // Embedded in the tracker (not a pushed route)
@@ -1459,6 +1703,8 @@ class _RunFinishScreenState extends State<RunFinishScreen> {
 /// Figma CLUBS list: Outfit 400/32 title + 358 search + 329x133 cards + buat-teams pill.
 /// Live team list when signed in (search filters by name); Figma mock cards
 /// in demo mode.
+typedef _TeamsViewData = ({List<Team> all, Set<String> myIds, bool isDemo});
+
 class TeamsScreen extends StatefulWidget {
   /// Returns to the Home tab (tabs have no pushed route to pop).
   final VoidCallback? onBack;
@@ -1469,8 +1715,9 @@ class TeamsScreen extends StatefulWidget {
 }
 
 class _TeamsScreenState extends State<TeamsScreen> {
-  Future<List<Team>>? _future;
+  Future<_TeamsViewData>? _future;
   String _query = '';
+  String _filter = 'all'; // 'all' | 'joined' | 'public'
 
   @override
   void initState() {
@@ -1478,18 +1725,56 @@ class _TeamsScreenState extends State<TeamsScreen> {
     _future = _load();
   }
 
-  Future<List<Team>> _load({bool forceRefresh = false}) async {
+  Future<_TeamsViewData> _load({bool forceRefresh = false}) async {
     if (await isDemoAccount()) {
-      return PacerDummyData.teams;
+      return (
+        all: PacerDummyData.demoTeams,
+        myIds: PacerDummyData.demoMyTeams.map((t) => t.id).toSet(),
+        isDemo: true,
+      );
     }
     try {
-      return await TeamRepository().listTeams(forceRefresh: forceRefresh);
+      final repo = TeamRepository();
+      final results = await Future.wait([
+        repo.listTeams(forceRefresh: forceRefresh),
+        repo.myTeams(forceRefresh: forceRefresh),
+      ]);
+      final listed = results[0];
+      final mine = results[1];
+      final byId = <String, Team>{for (final t in listed) t.id: t};
+      for (final m in mine) {
+        byId[m.id] = m;
+      }
+      return (
+        all: byId.values.toList(),
+        myIds: mine.map((t) => t.id).toSet(),
+        isDemo: false,
+      );
     } catch (_) {
-      return const [];
+      return (all: const <Team>[], myIds: const <String>{}, isDemo: false);
     }
   }
 
-  /// Private teams are not listed: members join with the coach's code.
+  void _reload({bool forceRefresh = true}) {
+    setState(() => _future = _load(forceRefresh: forceRefresh));
+  }
+
+  Future<void> _openTeam(Team team) async {
+    final changed = await Navigator.of(context).push<bool>(
+      MaterialPageRoute(
+        builder: (_) => TeamDashboardScreen(
+          teamId: team.id,
+          initialTeam: team,
+          teamName: team.nama,
+        ),
+      ),
+    );
+    if (changed == true && mounted) {
+      _reload(forceRefresh: true);
+    }
+  }
+
+  /// Private teams are not listed publicly: members join with an invite code.
   Future<void> _joinByCode() async {
     final controller = TextEditingController();
     final code = await showDialog<String>(
@@ -1519,12 +1804,21 @@ class _TeamsScreenState extends State<TeamsScreen> {
     final messenger = ScaffoldMessenger.of(context);
     try {
       if (await isDemoAccount()) {
-        messenger.showSnackBar(SnackBar(content: Text(S.demoJoinSent)));
+        final joined = PacerDummyData.joinDemoByCode(code);
+        if (!mounted) return;
+        if (joined == null) {
+          messenger.showSnackBar(
+            const SnackBar(content: Text('Kode salah. Coba lagi.')),
+          );
+          return;
+        }
+        _reload(forceRefresh: true);
+        messenger.showSnackBar(SnackBar(content: Text(S.join)));
         return;
       }
       await TeamRepository().joinByCode(code);
       if (!mounted) return;
-      setState(() => _future = _load());
+      _reload(forceRefresh: true);
       messenger.showSnackBar(SnackBar(content: Text(S.join)));
     } on PostgrestException {
       messenger.showSnackBar(
@@ -1534,6 +1828,35 @@ class _TeamsScreenState extends State<TeamsScreen> {
       messenger.showSnackBar(
         SnackBar(content: Text(offlineActionErrorMessage(e))),
       );
+    }
+  }
+
+  Future<void> _openTeamChat() async {
+    try {
+      final mine = await isDemoAccount()
+          ? PacerDummyData.demoMyTeams
+          : await TeamRepository().myTeams();
+      if (!mounted) return;
+      if (mine.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(S.emptyTeams)),
+        );
+        return;
+      }
+      Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (_) => ChatScreen(
+            teamId: mine.first.id,
+            teamName: mine.first.nama,
+          ),
+        ),
+      );
+    } catch (_) {
+      if (mounted) {
+        Navigator.of(context).push(
+          MaterialPageRoute(builder: (_) => const ChatScreen()),
+        );
+      }
     }
   }
 
@@ -1552,6 +1875,91 @@ class _TeamsScreenState extends State<TeamsScreen> {
     );
   }
 
+  Widget _teamCardTile(
+    Team team, {
+    required bool isJoined,
+    double? width,
+  }) {
+    return GestureDetector(
+      onTap: () => _openTeam(team),
+      child: TeamCard(
+        name: team.nama,
+        width: width,
+        memberCount: team.memberCount,
+        isJoined: isJoined,
+        isPrivate: team.isPrivate,
+      ),
+    );
+  }
+
+  Widget _sectionHeader(BuildContext context, String title, int count) {
+    final scheme = PacerScheme.of(context);
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 10),
+      child: Row(
+        children: [
+          Expanded(
+            child: Text(
+              title,
+              style: PacerText.statValueOf(context).copyWith(fontSize: 18),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+          ),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
+            decoration: BoxDecoration(
+              color: scheme.card,
+              borderRadius: BorderRadius.circular(999),
+              border: Border.all(color: scheme.border),
+            ),
+            child: Text(
+              '$count',
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w700,
+                color: scheme.ink,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _filterPill(
+    BuildContext context, {
+    required String value,
+    required String label,
+  }) {
+    final scheme = PacerScheme.of(context);
+    final selected = _filter == value;
+    return InkWell(
+      onTap: () => setState(() => _filter = value),
+      borderRadius: BorderRadius.circular(20),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 150),
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
+        decoration: BoxDecoration(
+          color: selected ? PacerColors.lime : scheme.card,
+          borderRadius: BorderRadius.circular(20),
+          border: Border.all(
+            color: selected ? PacerColors.lime : scheme.border,
+            width: selected ? 1.5 : 1,
+          ),
+        ),
+        child: Text(
+          label,
+          style: TextStyle(
+            fontSize: 12,
+            fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
+            color: selected ? PacerColors.ink : scheme.ink,
+          ),
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final scheme = PacerScheme.of(context);
@@ -1560,7 +1968,7 @@ class _TeamsScreenState extends State<TeamsScreen> {
       body: SafeArea(
         child: ResponsiveScroll(
           onRefresh: () async {
-            setState(() => _future = _load(forceRefresh: true));
+            _reload(forceRefresh: true);
             await _future;
           },
           padding: const EdgeInsets.only(top: 16, bottom: 120),
@@ -1574,49 +1982,129 @@ class _TeamsScreenState extends State<TeamsScreen> {
               Text(S.findTeamsNearby, style: PacerText.pageTitleOf(context)),
               const SizedBox(height: 12),
               SearchField(onChanged: (v) => setState(() => _query = v)),
-              const SizedBox(height: 16),
-              // Team cards flow into a grid: 1 column on phones, 2 on
-              // tablets, 3+ on desktop — driven by max extent, never a
-              // hardcoded count.
-              FutureBuilder<List<Team>>(
+              const SizedBox(height: 12),
+              // Team sections flow cleanly: Joined strip + Public grid on All,
+              // or single grid when filtered. Preserves 1 GridView on screen.
+              FutureBuilder<_TeamsViewData>(
                 future: _future,
                 builder: (context, snap) {
-                  final teams = snap.data;
-                  final live = teams != null && teams.isNotEmpty;
-                  final filtered = (teams ?? const <Team>[])
-                      .where(
-                        (t) =>
-                            !t.isPrivate &&
-                            (_query.isEmpty ||
-                                t.nama.toLowerCase().contains(
-                                  _query.toLowerCase(),
-                                )),
-                      )
-                      .toList();
-                  // Grid shell always renders (stable layout); honest empty
-                  // text underneath when there is nothing to show.
-                  final emptyMsg = !live || _query.isEmpty
-                      ? 'Belum ada tim.'
-                      : 'Tidak ada tim yang cocok.';
-                  final emptyIcon = !live || _query.isEmpty
-                      ? Icons.groups_outlined
-                      : Icons.search_off_outlined;
+                  final all = snap.data?.all ?? const <Team>[];
+                  final myIds = snap.data?.myIds ?? const <String>{};
+                  final q = _query.trim().toLowerCase();
+                  bool matches(Team t) =>
+                      q.isEmpty || t.nama.toLowerCase().contains(q);
+
+                  final joinedTeams =
+                      all.where((t) => myIds.contains(t.id) && matches(t)).toList();
+                  final publicTeams =
+                      all.where((t) => !t.isPrivate && matches(t)).toList();
+
                   return Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      _teamGrid([
-                        for (final t in filtered)
-                          GestureDetector(
-                            onTap: () => TeamDetailSheet.show(
-                              context,
-                              teamId: t.id,
-                              teamName: t.nama,
-                            ),
-                            child: TeamCard(name: t.nama),
+                      Wrap(
+                        spacing: 8,
+                        runSpacing: 8,
+                        children: [
+                          _filterPill(
+                            context,
+                            value: 'all',
+                            label: S.filterAll,
                           ),
-                      ]),
-                      if (filtered.isEmpty)
-                        PacerEmptyState(emptyMsg, icon: emptyIcon),
+                          _filterPill(
+                            context,
+                            value: 'joined',
+                            label: '${S.filterJoined} (${joinedTeams.length})',
+                          ),
+                          _filterPill(
+                            context,
+                            value: 'public',
+                            label: '${S.filterPublic} (${publicTeams.length})',
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 16),
+                      if (_filter == 'all') ...[
+                        _sectionHeader(
+                          context,
+                          S.joinedTeams,
+                          joinedTeams.length,
+                        ),
+                        if (joinedTeams.isEmpty)
+                          PacerEmptyState(
+                            q.isEmpty ? S.noJoinedTeamsHint : S.noPublicTeamsHint,
+                            icon: Icons.groups_outlined,
+                            compact: true,
+                          )
+                        else
+                          SizedBox(
+                            height: 140,
+                            child: ListView.separated(
+                              scrollDirection: Axis.horizontal,
+                              itemCount: joinedTeams.length,
+                              separatorBuilder: (_, _) =>
+                                  const SizedBox(width: 12),
+                              itemBuilder: (_, i) => _teamCardTile(
+                                joinedTeams[i],
+                                isJoined: true,
+                                width: 260,
+                              ),
+                            ),
+                          ),
+                        const SizedBox(height: 20),
+                        _sectionHeader(
+                          context,
+                          S.openPublicTeams,
+                          publicTeams.length,
+                        ),
+                        _teamGrid([
+                          for (final t in publicTeams)
+                            _teamCardTile(t, isJoined: myIds.contains(t.id)),
+                        ]),
+                        if (publicTeams.isEmpty)
+                          PacerEmptyState(
+                            all.isEmpty || q.isEmpty
+                                ? 'Belum ada tim.'
+                                : S.noPublicTeamsHint,
+                            icon: all.isEmpty || q.isEmpty
+                                ? Icons.groups_outlined
+                                : Icons.search_off_outlined,
+                          ),
+                      ] else if (_filter == 'joined') ...[
+                        _sectionHeader(
+                          context,
+                          S.joinedTeams,
+                          joinedTeams.length,
+                        ),
+                        _teamGrid([
+                          for (final t in joinedTeams)
+                            _teamCardTile(t, isJoined: true),
+                        ]),
+                        if (joinedTeams.isEmpty)
+                          PacerEmptyState(
+                            q.isEmpty ? S.noJoinedTeamsHint : S.noPublicTeamsHint,
+                            icon: q.isEmpty
+                                ? Icons.groups_outlined
+                                : Icons.search_off_outlined,
+                          ),
+                      ] else ...[
+                        _sectionHeader(
+                          context,
+                          S.openPublicTeams,
+                          publicTeams.length,
+                        ),
+                        _teamGrid([
+                          for (final t in publicTeams)
+                            _teamCardTile(t, isJoined: myIds.contains(t.id)),
+                        ]),
+                        if (publicTeams.isEmpty)
+                          PacerEmptyState(
+                            q.isEmpty ? 'Belum ada tim.' : S.noPublicTeamsHint,
+                            icon: q.isEmpty
+                                ? Icons.groups_outlined
+                                : Icons.search_off_outlined,
+                          ),
+                      ],
                     ],
                   );
                 },
@@ -1632,9 +2120,16 @@ class _TeamsScreenState extends State<TeamsScreen> {
               ),
               const SizedBox(height: 12),
               GestureDetector(
-                onTap: () => Navigator.of(context).push(
-                  MaterialPageRoute(builder: (_) => const PersyaratanScreen()),
-                ),
+                onTap: () async {
+                  final created = await Navigator.of(context).push<bool>(
+                    MaterialPageRoute(
+                      builder: (_) => const PersyaratanScreen(),
+                    ),
+                  );
+                  if (created == true && mounted) {
+                    _reload(forceRefresh: true);
+                  }
+                },
                 child: Container(
                   width: double.infinity,
                   height: 58,
@@ -1647,7 +2142,7 @@ class _TeamsScreenState extends State<TeamsScreen> {
                   ),
                   child: Text(
                     S.createTeam,
-                    style: TextStyle(fontWeight: FontWeight.w600),
+                    style: const TextStyle(fontWeight: FontWeight.w600),
                   ),
                 ),
               ),
@@ -1670,38 +2165,7 @@ class _TeamsScreenState extends State<TeamsScreen> {
                   const SizedBox(width: 8),
                   Expanded(
                     child: OutlinedButton(
-                      onPressed: () async {
-                        // Opens the first joined team's channel; falls back
-                        // to the unscoped screen when signed out/offline.
-                        try {
-                          final mine = await TeamRepository().myTeams();
-                          if (!context.mounted) return;
-                          if (mine.isEmpty) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(
-                                content: Text('Belum gabung tim mana pun.'),
-                              ),
-                            );
-                            return;
-                          }
-                          Navigator.of(context).push(
-                            MaterialPageRoute(
-                              builder: (_) => ChatScreen(
-                                teamId: mine.first.id,
-                                teamName: mine.first.nama,
-                              ),
-                            ),
-                          );
-                        } catch (_) {
-                          if (context.mounted) {
-                            Navigator.of(context).push(
-                              MaterialPageRoute(
-                                builder: (_) => const ChatScreen(),
-                              ),
-                            );
-                          }
-                        }
-                      },
+                      onPressed: _openTeamChat,
                       style: OutlinedButton.styleFrom(
                         minimumSize: const Size(0, 48),
                       ),
@@ -1718,49 +2182,72 @@ class _TeamsScreenState extends State<TeamsScreen> {
   }
 }
 
-/// Team detail bottom sheet: member count + join/leave + chat entry.
-/// Chat stays reachable only after joining (RLS hides the channel otherwise).
-class TeamDetailSheet extends StatefulWidget {
+/// Full Teams Dashboard: team overview stats, target progress, invite code
+/// (strictly hidden for non-members/non-creators on private teams), actions
+/// (join/leave, chat, leaderboard, coach controls), and searchable members roster.
+class TeamDashboardScreen extends StatefulWidget {
   final String teamId;
-  final String teamName;
-  const TeamDetailSheet({
+  final Team? initialTeam;
+  final String? teamName;
+
+  const TeamDashboardScreen({
     super.key,
     required this.teamId,
-    required this.teamName,
+    this.initialTeam,
+    this.teamName,
   });
 
-  static void show(
-    BuildContext context, {
-    required String teamId,
-    required String teamName,
-  }) {
-    showModalBottomSheet(
-      context: context,
-      builder: (_) => TeamDetailSheet(teamId: teamId, teamName: teamName),
-    );
-  }
-
   @override
-  State<TeamDetailSheet> createState() => _TeamDetailSheetState();
+  State<TeamDashboardScreen> createState() => _TeamDashboardScreenState();
 }
 
-class _TeamDetailSheetState extends State<TeamDetailSheet> {
+class _TeamDashboardScreenState extends State<TeamDashboardScreen> {
+  bool _loading = true;
+  bool _busy = false;
+  bool _changed = false;
+  bool _isDemo = false;
+  bool _isCoach = false;
+  bool _isKetua = false;
   bool? _joined;
   int? _memberCount;
-  List<({String userId, String nama, String peran, String appPeran})>? _roster;
-  bool _busy = false;
   Team? _team;
-  bool _isCoach = false;
+  TeamDashboardStats? _stats;
+  List<TeamRosterMember>? _roster;
+  List<Challenge> _teamChallenges = const [];
+  Map<String, PartisipasiChallenge> _myParticipations = const {};
   String? _uid;
-  // Server-decided: admin / creator / ketua / coach-member of THIS team.
-  bool _canManage = false;
+  bool _canViewCode = false;
+  bool _canManageCode = false;
   String? _inviteCode;
+  bool _revealCode = false;
+  String _memberQuery = '';
   final _code = TextEditingController();
 
   @override
   void initState() {
     super.initState();
+    _team = widget.initialTeam;
     _refresh();
+  }
+
+  @override
+  void didUpdateWidget(covariant TeamDashboardScreen oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.teamId != widget.teamId) {
+      _loading = true;
+      _changed = false;
+      _revealCode = false;
+      _memberQuery = '';
+      _code.clear();
+      _team = widget.initialTeam;
+      _stats = null;
+      _roster = null;
+      _joined = null;
+      _inviteCode = null;
+      _canViewCode = false;
+      _canManageCode = false;
+      _refresh();
+    }
   }
 
   @override
@@ -1769,50 +2256,258 @@ class _TeamDetailSheetState extends State<TeamDetailSheet> {
     super.dispose();
   }
 
-  Future<void> _refresh() async {
+  Future<void> _refresh({bool forceRefresh = false}) async {
     try {
-      final uid = await AuthRepository().resolveUserId();
-      final repo = TeamRepository();
-      final team = await repo.getTeam(widget.teamId);
-      String? peran;
-      try {
-        peran = (await AuthRepository().getProfile())?.peran;
-      } catch (_) {
-        /* stays null */
-      }
-      if (!mounted) return;
-      setState(() {
-        _uid = uid;
-        _team = team;
-        _isCoach = peran == 'coach' || peran == 'admin';
-      });
-      if (uid == null) {
-        if (mounted) setState(() => _joined = false);
+      final demo = await isDemoAccount();
+      if (demo) {
+        final team = PacerDummyData.demoTeams.cast<Team?>().firstWhere(
+          (t) => t?.id == widget.teamId,
+          orElse: () => widget.initialTeam,
+        );
+        final stats = PacerDummyData.getTeamDashboardStats(widget.teamId);
+        final roster = PacerDummyData.getTeamRoster(widget.teamId);
+        final code = PacerDummyData.getDemoInviteCode(widget.teamId);
+        final isKetua =
+            team?.dibuatOleh == 'demo-user-me' ||
+            roster.any(
+              (m) => m.userId == 'demo-user-me' && m.peran == 'ketua',
+            );
+        final teamChals = PacerDummyData.demoChallenges
+            .where((c) => c.teamId == widget.teamId)
+            .toList();
+        final parts = {
+          for (final p in PacerDummyData.getDemoParticipations())
+            p.challengeId: p,
+        };
+        if (!mounted) return;
+        setState(() {
+          _loading = false;
+          _isDemo = true;
+          _uid = 'demo-user-me';
+          _isCoach = false;
+          _isKetua = isKetua;
+          _team = team;
+          _stats = stats;
+          _roster = roster;
+          _teamChallenges = teamChals;
+          _myParticipations = parts;
+          _joined = stats.isMember;
+          _memberCount = team?.memberCount ?? stats.memberCount;
+          _canViewCode = stats.canViewCode && code != null;
+          _canManageCode = stats.canManageCode && code != null;
+          _inviteCode = _canViewCode ? code : null;
+        });
         return;
       }
-      final roster = await repo.teamRoster(widget.teamId);
-      // Secret code: the rpc answers only for managers of this team.
-      String? code;
+
+      final auth = AuthRepository();
+      final repo = TeamRepository();
+      final uid = await auth.resolveUserId();
+      final team =
+          await repo.getTeam(widget.teamId, forceRefresh: forceRefresh) ??
+          _team;
+      String? peran;
       try {
-        code = await repo.getInviteCode(widget.teamId);
+        peran = (await auth.getProfile(forceRefresh: forceRefresh))?.peran;
       } catch (_) {
-        code = null;
+        /* keeps prior null */
       }
+      final isCoach = peran == 'coach' || peran == 'admin';
+
+      if (uid == null) {
+        if (!mounted) return;
+        setState(() {
+          _loading = false;
+          _isDemo = false;
+          _uid = null;
+          _isCoach = false;
+          _team = team;
+          _joined = false;
+          _stats = null;
+          _roster = null;
+          _memberCount = team?.memberCount;
+          _canViewCode = false;
+          _canManageCode = false;
+          _inviteCode = null;
+        });
+        return;
+      }
+
+      List<TeamRosterMember> roster = const [];
+      TeamDashboardStats? stats;
+      String? code;
+      List<Challenge> teamChals = const [];
+      Map<String, PartisipasiChallenge> myParts = const {};
+
+      await Future.wait([
+        () async {
+          try {
+            roster = await repo.teamRoster(
+              widget.teamId,
+              forceRefresh: forceRefresh,
+            );
+          } catch (_) {}
+        }(),
+        () async {
+          try {
+            stats = await repo.getTeamDashboardStats(widget.teamId);
+          } catch (_) {}
+        }(),
+        () async {
+          try {
+            code = await repo.getInviteCode(widget.teamId);
+          } catch (_) {
+            code = null;
+          }
+        }(),
+        () async {
+          try {
+            final chRepo = ChallengeRepository();
+            final results = await Future.wait([
+              chRepo.listTeamChallenges(
+                widget.teamId,
+                forceRefresh: forceRefresh,
+              ),
+              chRepo.myParticipations(forceRefresh: forceRefresh),
+            ]);
+            teamChals = results[0] as List<Challenge>;
+            myParts = {
+              for (final p in results[1] as List<PartisipasiChallenge>)
+                p.challengeId: p,
+            };
+          } catch (_) {}
+        }(),
+      ]);
+
+      final joined = stats?.isMember ?? roster.any((m) => m.userId == uid);
+      final isPrivate = team?.isPrivate ?? true;
+      final inTeam = joined || team?.dibuatOleh == uid;
+      final isKetua =
+          team?.dibuatOleh == uid ||
+          roster.any((m) => m.userId == uid && m.peran == 'ketua');
+      // Strict client-side defense-in-depth matching SQL: private team codes
+      // are shown ONLY when the signed-in user is creator or in the team.
+      final canViewCode = code != null &&
+          (isPrivate
+              ? inTeam && (stats?.canViewCode ?? true)
+              : (stats?.canViewCode ?? (inTeam || isCoach)));
+      final canManageCode = code != null &&
+          canViewCode &&
+          (stats?.canManageCode ??
+              (isPrivate ? isKetua : isCoach));
+
       if (!mounted) return;
       setState(() {
-        _canManage = code != null;
-        _inviteCode = code;
-        _joined = roster.any((m) => m.userId == uid);
-        // Exact for members/coaches; outsiders see only themselves.
-        _memberCount = roster.length;
+        _loading = false;
+        _isDemo = false;
+        _uid = uid;
+        _isCoach = isCoach;
+        _isKetua = isKetua;
+        _team = team;
+        _stats = stats;
         _roster = roster;
+        _teamChallenges = teamChals;
+        _myParticipations = myParts;
+        _joined = joined;
+        _memberCount = stats?.memberCount ?? team?.memberCount ?? roster.length;
+        _canViewCode = canViewCode;
+        _canManageCode = canManageCode;
+        _inviteCode = canViewCode ? code : null;
       });
     } catch (_) {
-      // Stays null: join attempt reports errors via snackbar.
+      if (mounted) setState(() => _loading = false);
     }
   }
 
-  /// Coach kick: removes any member (server enforces coach-only).
+  Future<void> _toggleJoin() async {
+    final displayName = _team?.nama ?? widget.teamName ?? '';
+    if (_joined == true) {
+      final confirm = await showDialog<bool>(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: Text(S.leaveTeamConfirmTitle),
+          content: Text(S.leaveTeamConfirmBody(displayName)),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(false),
+              child: Text(S.cancelLabel),
+            ),
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(true),
+              child: Text(S.leaveTeamAction),
+            ),
+          ],
+        ),
+      );
+      if (confirm != true || !mounted) return;
+      setState(() => _busy = true);
+      try {
+        if (_isDemo) {
+          PacerDummyData.leaveDemoTeam(widget.teamId);
+        } else {
+          await TeamRepository().leaveTeam(widget.teamId);
+        }
+        _changed = true;
+        await _refresh(forceRefresh: true);
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text(offlineActionErrorMessage(e))),
+          );
+        }
+      } finally {
+        if (mounted) setState(() => _busy = false);
+      }
+      return;
+    }
+
+    final code = _code.text.trim();
+    final isPublic = _team != null && !_team!.isPrivate;
+    if (code.isEmpty && !isPublic) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Masukkan kode tim dulu.')),
+      );
+      return;
+    }
+
+    setState(() => _busy = true);
+    try {
+      if (_isDemo) {
+        final ok = PacerDummyData.joinDemoTeam(widget.teamId, code: code);
+        if (!mounted) return;
+        if (!ok) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text('Kode salah. Coba lagi.')),
+          );
+          return;
+        }
+        _code.clear();
+        _changed = true;
+        await _refresh(forceRefresh: true);
+        return;
+      }
+      await TeamRepository().joinTeam(widget.teamId, code);
+      if (!mounted) return;
+      _code.clear();
+      _changed = true;
+      await _refresh(forceRefresh: true);
+    } on PostgrestException {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Kode salah. Coba lagi.')),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(offlineActionErrorMessage(e))),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
   Future<void> _kick(String userId, String nama) async {
     final yes = await showDialog<bool>(
       context: context,
@@ -1833,8 +2528,13 @@ class _TeamDetailSheetState extends State<TeamDetailSheet> {
     );
     if (yes != true || !mounted) return;
     try {
-      await TeamRepository().removeMember(widget.teamId, userId);
-      await _refresh();
+      if (_isDemo) {
+        PacerDummyData.removeDemoMember(widget.teamId, userId);
+      } else {
+        await TeamRepository().removeMember(widget.teamId, userId);
+      }
+      _changed = true;
+      await _refresh(forceRefresh: true);
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -1844,45 +2544,26 @@ class _TeamDetailSheetState extends State<TeamDetailSheet> {
     }
   }
 
-  Future<void> _toggle() async {
-    // Leave path needs no code.
-    if (_joined == true) {
-      setState(() => _busy = true);
-      try {
-        await TeamRepository().leaveTeam(widget.teamId);
-        if (mounted) setState(() => _joined = false);
-        await _refresh();
-      } catch (e) {
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(content: Text(offlineActionErrorMessage(e))),
-          );
-        }
-      } finally {
-        if (mounted) setState(() => _busy = false);
-      }
-      return;
-    }
-    final code = _code.text.trim();
-    final isPublic = _team != null && !_team!.isPrivate;
-    if (code.isEmpty && !isPublic) {
-      ScaffoldMessenger.of(
-        context,
-      ).showSnackBar(const SnackBar(content: Text('Masukkan kode tim dulu.')));
-      return;
-    }
+  Future<void> _setMemberRole(TeamRosterMember m, String peran) async {
     setState(() => _busy = true);
     try {
-      await TeamRepository().joinTeam(widget.teamId, code);
-      if (!mounted) return;
-      setState(() => _joined = true);
-      await _refresh();
-    } on PostgrestException {
-      // Wrong code (server-checked): distinct message, no raw error text.
+      if (_isDemo) {
+        PacerDummyData.setDemoMemberRole(widget.teamId, m.userId, peran);
+        NotificationRepository.syncDemoUnread();
+      } else {
+        await TeamRepository().setMemberRole(
+          teamId: widget.teamId,
+          userId: m.userId,
+          peran: peran,
+        );
+      }
+      _changed = true;
+      await _refresh(forceRefresh: true);
       if (mounted) {
-        ScaffoldMessenger.of(
-          context,
-        ).showSnackBar(const SnackBar(content: Text('Kode salah. Coba lagi.')));
+        final roleLabel = peran == 'ketua' ? S.roleKetua : S.roleAnggota;
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(S.roleUpdatedMsg(m.nama, roleLabel))),
+        );
       }
     } catch (e) {
       if (mounted) {
@@ -1895,12 +2576,40 @@ class _TeamDetailSheetState extends State<TeamDetailSheet> {
     }
   }
 
-  /// Replaces the secret code (managers only; server enforces).
+  Future<void> _activateTeamChallenge(String challengeId) async {
+    setState(() => _busy = true);
+    try {
+      await ChallengeRepository().activateChallenge(challengeId);
+      _changed = true;
+      await _refresh(forceRefresh: true);
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(S.challengeActivatedMsg)),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(offlineActionErrorMessage(e))),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
   Future<void> _regenerateCode() async {
     setState(() => _busy = true);
     try {
-      final code = await TeamRepository().regenerateInviteCode(widget.teamId);
-      if (mounted) setState(() => _inviteCode = code);
+      final code = _isDemo
+          ? PacerDummyData.regenerateDemoInviteCode(widget.teamId)
+          : await TeamRepository().regenerateInviteCode(widget.teamId);
+      if (!mounted) return;
+      _changed = true;
+      setState(() {
+        _inviteCode = code;
+        _revealCode = true;
+      });
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -1912,7 +2621,16 @@ class _TeamDetailSheetState extends State<TeamDetailSheet> {
     }
   }
 
-  /// Coach CRUD: rename / retarget the team.
+  Future<void> _copyInviteCode() async {
+    final code = _inviteCode;
+    if (code == null || code.isEmpty) return;
+    await Clipboard.setData(ClipboardData(text: code));
+    if (!mounted) return;
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(S.codeCopied)),
+    );
+  }
+
   Future<void> _editTeam() async {
     final team = _team;
     if (team == null) return;
@@ -1920,34 +2638,44 @@ class _TeamDetailSheetState extends State<TeamDetailSheet> {
     final target = TextEditingController(
       text: team.targetNilai == null ? '' : '${team.targetNilai!.toInt()}',
     );
+    var isPrivate = team.isPrivate;
     final saved = await showDialog<bool>(
       context: context,
-      builder: (context) => AlertDialog(
-        title: Text(S.editTeamTitle),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(
-              controller: name,
-              decoration: InputDecoration(labelText: S.teamName),
+      builder: (context) => StatefulBuilder(
+        builder: (context, setDialogState) => AlertDialog(
+          title: Text(S.editTeamTitle),
+          content: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              TextField(
+                controller: name,
+                decoration: InputDecoration(labelText: S.teamName),
+              ),
+              TextField(
+                controller: target,
+                decoration: const InputDecoration(labelText: 'Target (m)'),
+                keyboardType: TextInputType.number,
+              ),
+              const SizedBox(height: 8),
+              SwitchListTile(
+                contentPadding: EdgeInsets.zero,
+                title: Text(S.teamPrivacyLabel),
+                value: isPrivate,
+                onChanged: (v) => setDialogState(() => isPrivate = v),
+              ),
+            ],
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(false),
+              child: Text(S.cancelLabel),
             ),
-            TextField(
-              controller: target,
-              decoration: const InputDecoration(labelText: 'Target (m)'),
-              keyboardType: TextInputType.number,
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(true),
+              child: Text(S.saveLabel),
             ),
           ],
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(false),
-            child: Text(S.cancelLabel),
-          ),
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(true),
-            child: Text(S.saveLabel),
-          ),
-        ],
       ),
     );
     final nama = name.text.trim();
@@ -1960,8 +2688,10 @@ class _TeamDetailSheetState extends State<TeamDetailSheet> {
         team.id,
         nama: nama,
         targetNilai: targetNilai,
+        isPrivate: isPrivate,
       );
-      await _refresh();
+      _changed = true;
+      await _refresh(forceRefresh: true);
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -1971,7 +2701,6 @@ class _TeamDetailSheetState extends State<TeamDetailSheet> {
     }
   }
 
-  /// Coach CRUD: delete the team (members cascade server-side).
   Future<void> _deleteTeam() async {
     final team = _team;
     if (team == null) return;
@@ -1995,7 +2724,7 @@ class _TeamDetailSheetState extends State<TeamDetailSheet> {
     if (yes != true || !mounted) return;
     try {
       await TeamRepository().deleteTeam(team.id);
-      if (mounted) Navigator.of(context).pop();
+      if (mounted) Navigator.of(context).pop(true);
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
@@ -2005,201 +2734,832 @@ class _TeamDetailSheetState extends State<TeamDetailSheet> {
     }
   }
 
-  @override
-  Widget build(BuildContext context) {
-    return Center(
-      child: ConstrainedBox(
-        constraints: const BoxConstraints(maxWidth: 560),
-        child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: SingleChildScrollView(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Row(
+  Widget _buildHeroCard(BuildContext context) {
+    final scheme = PacerScheme.of(context);
+    final team = _team;
+    final title = team?.nama ?? widget.teamName ?? S.teamDashboard;
+    final isPrivate = team?.isPrivate ?? false;
+    final targetKm = team?.targetNilai == null ? null : team!.targetNilai! / 1000.0;
+    final totalKm = _stats?.totalAllKm ?? 0.0;
+    final progress = (targetKm != null && targetKm > 0)
+        ? (totalKm / targetKm).clamp(0.0, 1.0)
+        : null;
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        borderRadius: BorderRadius.circular(16),
+        gradient: LinearGradient(
+          colors: scheme.heroCardGradient,
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        boxShadow: [scheme.shadowBox],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Wrap(
+            spacing: 8,
+            runSpacing: 6,
+            children: [
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 10,
+                  vertical: 4,
+                ),
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.16),
+                  borderRadius: BorderRadius.circular(999),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
                   children: [
-                    Expanded(
-                      child: Text(
-                        widget.teamName,
-                        style: PacerText.pageTitleOf(context),
-                      ),
+                    Icon(
+                      isPrivate ? Icons.lock_outline : Icons.public,
+                      size: 13,
+                      color: Colors.white,
                     ),
-                    IconButton(
-                      onPressed: () => Navigator.of(context).pop(),
-                      icon: const Icon(Icons.close, color: PacerColors.ink),
+                    const SizedBox(width: 5),
+                    Text(
+                      isPrivate ? S.privateBadge : S.publicBadge,
+                      style: const TextStyle(
+                        fontSize: 11,
+                        fontWeight: FontWeight.w700,
+                        color: Colors.white,
+                      ),
                     ),
                   ],
                 ),
-                if (_joined == true && _memberCount != null) ...[
-                  const SizedBox(height: 4),
-                  Text(
-                    '$_memberCount anggota',
-                    style: const TextStyle(fontSize: 14),
+              ),
+              if (_joined == true)
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 4,
                   ),
-                ],
-                // Member list: visible once joined (or to coaches, who see
-                // the full roster). Coaches/admins get a tag; a coach can
-                // kick anyone but themselves.
-                if ((_joined == true || _isCoach) && _roster != null) ...[
-                  const SizedBox(height: 12),
-                  for (final m in _roster!)
-                    Padding(
-                      padding: const EdgeInsets.symmetric(vertical: 4),
-                      child: Row(
-                        children: [
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Row(
-                                  children: [
-                                    Flexible(
-                                      child: Text(
-                                        m.nama,
-                                        style: const TextStyle(
-                                          fontWeight: FontWeight.w600,
-                                          fontSize: 15,
-                                        ),
-                                        maxLines: 1,
-                                        overflow: TextOverflow.ellipsis,
-                                      ),
-                                    ),
-                                    if (m.appPeran == 'coach' ||
-                                        m.appPeran == 'admin') ...[
-                                      const SizedBox(width: 6),
-                                      Container(
-                                        padding: const EdgeInsets.symmetric(
-                                          horizontal: 8,
-                                          vertical: 2,
-                                        ),
-                                        decoration: BoxDecoration(
-                                          color: PacerColors.lime,
-                                          borderRadius: BorderRadius.circular(
-                                            999,
-                                          ),
-                                        ),
-                                        child: Text(
-                                          m.appPeran.toUpperCase(),
-                                          style: const TextStyle(
-                                            fontSize: 11,
-                                            fontWeight: FontWeight.w800,
-                                            color: PacerColors.ink,
-                                          ),
-                                        ),
-                                      ),
-                                    ],
-                                  ],
-                                ),
-                                Text(
-                                  m.peran,
-                                  style: const TextStyle(
-                                    fontSize: 12,
-                                    color: Colors.black54,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                          if (_isCoach && m.userId != _uid)
-                            TextButton(
-                              onPressed: () => _kick(m.userId, m.nama),
-                              child: const Text('Keluarkan'),
-                            ),
-                        ],
-                      ),
-                    ),
-                ],
-                // Invite code: shown once joined (or to coaches) — never to
-                // outsiders, or the code gate would be decorative.
-                if (_canManage && _inviteCode != null) ...[
-                  const SizedBox(height: 8),
-                  Row(
-                    children: [
-                      Text(
-                        '${S.teamCodeLabel}: ',
-                        style: const TextStyle(
-                          fontWeight: FontWeight.w600,
-                          fontSize: 15,
-                        ),
-                      ),
-                      Flexible(
-                        child: SelectableText(
-                          _inviteCode!,
-                          style: const TextStyle(
-                            fontWeight: FontWeight.w800,
-                            fontSize: 16,
-                            letterSpacing: 2,
-                          ),
-                        ),
-                      ),
-                      TextButton(
-                        onPressed: _busy ? null : _regenerateCode,
-                        child: Text(S.regenerateCode),
-                      ),
-                    ],
+                  decoration: BoxDecoration(
+                    color: PacerColors.lime,
+                    borderRadius: BorderRadius.circular(999),
                   ),
-                ],
-                // Private teams: joiners type the shared code; the server
-                // verifies it. Public teams join directly.
-                if (_joined != true && (_team?.isPrivate ?? true)) ...[
-                  const SizedBox(height: 12),
-                  TextField(
-                    controller: _code,
-                    textCapitalization: TextCapitalization.characters,
-                    decoration: const InputDecoration(
-                      hintText: 'Kode tim',
-                      border: OutlineInputBorder(),
+                  child: Text(
+                    S.joinedBadge,
+                    style: const TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w800,
+                      color: PacerColors.ink,
                     ),
                   ),
-                ],
-                // Coach CRUD.
-                if (_isCoach) ...[
-                  const SizedBox(height: 12),
-                  Row(
-                    children: [
-                      Expanded(
-                        child: OutlinedButton(
-                          onPressed: _editTeam,
-                          child: const Text('Ubah'),
-                        ),
-                      ),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: OutlinedButton(
-                          onPressed: _deleteTeam,
-                          child: const Text('Hapus'),
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
-                const SizedBox(height: 16),
-                LimeActionBar(
-                  _joined == true ? S.leaveChallenge : S.join,
-                  onPressed: _busy ? null : _toggle,
                 ),
-                if (_joined == true) ...[
-                  const SizedBox(height: 12),
-                  SizedBox(
-                    width: double.infinity,
-                    child: OutlinedButton(
-                      onPressed: () {
-                        Navigator.of(context).pop();
-                        Navigator.of(context).push(
+              if (_memberCount != null)
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 4,
+                  ),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withValues(alpha: 0.16),
+                    borderRadius: BorderRadius.circular(999),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(
+                        Icons.group_outlined,
+                        size: 13,
+                        color: Colors.white,
+                      ),
+                      const SizedBox(width: 5),
+                      Text(
+                        S.membersCount(_memberCount!),
+                        style: const TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.w700,
+                          color: Colors.white,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+            ],
+          ),
+          const SizedBox(height: 14),
+          Text(
+            title,
+            style: PacerText.pageTitle.copyWith(color: Colors.white, fontSize: 28),
+          ),
+          if (targetKm != null) ...[
+            const SizedBox(height: 12),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  S.targetGoal,
+                  style: const TextStyle(
+                    fontSize: 12,
+                    color: Colors.white70,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+                Text(
+                  '${totalKm.toStringAsFixed(1)} / ${targetKm.toStringAsFixed(targetKm == targetKm.truncateToDouble() ? 0 : 1)} km',
+                  style: const TextStyle(
+                    fontSize: 12,
+                    color: Colors.white,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ],
+            ),
+            if (progress != null) ...[
+              const SizedBox(height: 6),
+              ClipRRect(
+                borderRadius: BorderRadius.circular(999),
+                child: LinearProgressIndicator(
+                  value: progress,
+                  minHeight: 6,
+                  backgroundColor: Colors.white.withValues(alpha: 0.2),
+                  valueColor: const AlwaysStoppedAnimation<Color>(
+                    PacerColors.lime,
+                  ),
+                ),
+              ),
+            ],
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _statTile(
+    BuildContext context, {
+    required String value,
+    required String label,
+  }) {
+    final scheme = PacerScheme.of(context);
+    return Expanded(
+      child: Column(
+        children: [
+          Text(
+            value,
+            style: PacerText.statValueOf(context).copyWith(fontSize: 20),
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+          const SizedBox(height: 4),
+          Text(
+            label,
+            style: TextStyle(fontSize: 11, color: scheme.muted),
+            textAlign: TextAlign.center,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildOverviewCard(BuildContext context) {
+    final scheme = PacerScheme.of(context);
+    final count = _stats?.memberCount ?? _memberCount ?? _roster?.length ?? 0;
+    final active = _stats == null ? '–' : '${_stats!.activeMembersWeek}';
+    final weekKm =
+        _stats == null ? '–' : '${_stats!.totalWeekKm.toStringAsFixed(1)} km';
+
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: scheme.card,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: scheme.border),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            S.teamOverview,
+            style: PacerText.cardTitleOf(context).copyWith(fontSize: 14),
+          ),
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              _statTile(context, value: '$count', label: S.membersSection),
+              _statTile(context, value: active, label: S.activeThisWeek),
+              _statTile(context, value: weekKm, label: S.weeklyDistance),
+            ],
+          ),
+          if (_stats != null) ...[
+            const SizedBox(height: 10),
+            Divider(color: scheme.hairline, height: 1),
+            const SizedBox(height: 10),
+            Text(
+              '${S.weeklySessions}: ${_stats!.totalWeekSessions}  ·  ${S.totalDistanceAll}: ${_stats!.totalAllKm.toStringAsFixed(1)} km',
+              style: TextStyle(fontSize: 12, color: scheme.muted),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+
+  Widget _buildInviteCodeCard(BuildContext context) {
+    final scheme = PacerScheme.of(context);
+    final isPrivate = _team?.isPrivate ?? false;
+    final code = _inviteCode!;
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: scheme.card,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: scheme.border),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.vpn_key_outlined, size: 18, color: scheme.ink),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  S.inviteCodeSection,
+                  style: PacerText.cardTitleOf(context).copyWith(fontSize: 14),
+                ),
+              ),
+              IconButton(
+                tooltip: _revealCode ? S.hideCode : S.showCode,
+                onPressed: () => setState(() => _revealCode = !_revealCode),
+                icon: Icon(
+                  _revealCode
+                      ? Icons.visibility_off_outlined
+                      : Icons.visibility_outlined,
+                  size: 20,
+                  color: scheme.muted,
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 6),
+          Row(
+            children: [
+              Expanded(
+                child: SelectableText(
+                  _revealCode ? code : '••••••••',
+                  style: PacerText.mono.copyWith(
+                    fontSize: 18,
+                    fontWeight: FontWeight.w800,
+                    letterSpacing: 3,
+                    color: scheme.ink,
+                  ),
+                ),
+              ),
+              TextButton.icon(
+                onPressed: _copyInviteCode,
+                icon: const Icon(Icons.copy_outlined, size: 16),
+                label: Text(S.copyCode),
+              ),
+              if (_canManageCode)
+                TextButton(
+                  onPressed: _busy ? null : _regenerateCode,
+                  child: Text(S.regenerateCode),
+                ),
+            ],
+          ),
+          if (isPrivate)
+            Text(
+              S.inviteCodeHint,
+              style: TextStyle(fontSize: 11, color: scheme.muted),
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildActionsSection(BuildContext context) {
+    final scheme = PacerScheme.of(context);
+    final teamName = _team?.nama ?? widget.teamName ?? '';
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        if (_joined != true) ...[
+          if (_joined == false && (_team?.isPrivate ?? true)) ...[
+            TextField(
+              controller: _code,
+              textCapitalization: TextCapitalization.characters,
+              decoration: InputDecoration(
+                hintText: S.teamCodeLabel,
+                border: const OutlineInputBorder(),
+              ),
+            ),
+            const SizedBox(height: 12),
+          ],
+          LimeActionBar(
+            S.join,
+            onPressed: (_busy || _joined == null) ? null : _toggleJoin,
+          ),
+        ] else ...[
+          LimeActionBar(
+            S.teamChat,
+            onPressed: () => Navigator.of(context).push(
+              MaterialPageRoute(
+                builder: (_) => ChatScreen(
+                  teamId: widget.teamId,
+                  teamName: teamName,
+                ),
+              ),
+            ),
+          ),
+          const SizedBox(height: 10),
+          Row(
+            children: [
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: () => Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (_) => LeaderboardScreen(
+                        onBack: () => Navigator.of(context).pop(),
+                      ),
+                    ),
+                  ),
+                  icon: const Icon(Icons.emoji_events_outlined, size: 18),
+                  label: Text(S.teamsLeaderboard),
+                  style: OutlinedButton.styleFrom(
+                    minimumSize: const Size(0, 48),
+                  ),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: OutlinedButton.icon(
+                  onPressed: _busy ? null : _toggleJoin,
+                  icon: Icon(Icons.logout, size: 18, color: scheme.error),
+                  label: Text(
+                    S.leaveTeamAction,
+                    style: TextStyle(color: scheme.error),
+                  ),
+                  style: OutlinedButton.styleFrom(
+                    minimumSize: const Size(0, 48),
+                    side: BorderSide(color: scheme.error.withValues(alpha: 0.6)),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ],
+        if (_isCoach) ...[
+          const SizedBox(height: 12),
+          Row(
+            children: [
+              Expanded(
+                child: OutlinedButton(
+                  onPressed: () => Navigator.of(context).push(
+                    MaterialPageRoute(builder: (_) => const CoachBoardScreen()),
+                  ),
+                  child: const Text('Coach Board'),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: OutlinedButton(
+                  onPressed: _editTeam,
+                  child: const Text('Ubah'),
+                ),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: OutlinedButton(
+                  onPressed: _deleteTeam,
+                  style: OutlinedButton.styleFrom(
+                    foregroundColor: scheme.error,
+                  ),
+                  child: const Text('Hapus'),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ],
+    );
+  }
+
+  Widget _buildRosterSection(BuildContext context) {
+    final scheme = PacerScheme.of(context);
+    final isPublic = _team != null && !_team!.isPrivate;
+    final canViewRoster = (_joined == true || isPublic || _isCoach) && _roster != null;
+    if (!canViewRoster) {
+      return const SizedBox.shrink();
+    }
+
+    final roster = _roster!;
+    final q = _memberQuery.trim().toLowerCase();
+    final filtered = q.isEmpty
+        ? roster
+        : roster
+            .where(
+              (m) =>
+                  m.nama.toLowerCase().contains(q) ||
+                  m.peran.toLowerCase().contains(q),
+            )
+            .toList();
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Expanded(
+              child: Text(
+                S.membersSection,
+                style: PacerText.statValueOf(context).copyWith(fontSize: 18),
+              ),
+            ),
+            Text(
+              S.membersCount(roster.length),
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+                color: scheme.muted,
+              ),
+            ),
+          ],
+        ),
+        if (roster.length > 3 || q.isNotEmpty) ...[
+          const SizedBox(height: 10),
+          SearchField(
+            hint: S.searchMembersHint,
+            onChanged: (v) => setState(() => _memberQuery = v),
+          ),
+        ],
+        const SizedBox(height: 10),
+        if (filtered.isEmpty)
+          PacerEmptyState(
+            roster.isEmpty ? S.noMembers : S.noMembersMatch,
+            icon: Icons.person_search_outlined,
+            compact: true,
+          )
+        else
+          Container(
+            decoration: BoxDecoration(
+              color: scheme.card,
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: scheme.border),
+            ),
+            child: Column(
+              children: [
+                for (var i = 0; i < filtered.length; i++) ...[
+                  if (i > 0) Divider(height: 1, color: scheme.hairline),
+                  _memberTile(context, filtered[i]),
+                ],
+              ],
+            ),
+          ),
+      ],
+    );
+  }
+
+  Widget _memberTile(BuildContext context, TeamRosterMember m) {
+    final scheme = PacerScheme.of(context);
+    final isMe = m.userId == _uid;
+    final isCaptain = m.peran == 'ketua';
+    final joinedStr = m.joinedAt == null ? '' : fmtDate(m.joinedAt);
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      child: Row(
+        children: [
+          InitialAvatar(initialsOf(m.nama), size: 38),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Wrap(
+                  spacing: 6,
+                  runSpacing: 4,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  children: [
+                    Text(
+                      isMe ? '${m.nama} (${S.you})' : m.nama,
+                      style: TextStyle(
+                        fontWeight: FontWeight.w600,
+                        fontSize: 15,
+                        color: scheme.ink,
+                      ),
+                    ),
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 7,
+                        vertical: 2,
+                      ),
+                      decoration: BoxDecoration(
+                        color: isCaptain
+                            ? PacerColors.lime.withValues(alpha: 0.25)
+                            : scheme.searchBg,
+                        borderRadius: BorderRadius.circular(999),
+                      ),
+                      child: Text(
+                        isCaptain ? S.captainRole : S.memberRole,
+                        style: TextStyle(
+                          fontSize: 10,
+                          fontWeight: FontWeight.w700,
+                          color: scheme.ink,
+                        ),
+                      ),
+                    ),
+                    if (m.appPeran == 'coach' || m.appPeran == 'admin')
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 7,
+                          vertical: 2,
+                        ),
+                        decoration: BoxDecoration(
+                          color: PacerColors.lime,
+                          borderRadius: BorderRadius.circular(999),
+                        ),
+                        child: Text(
+                          m.appPeran.toUpperCase(),
+                          style: const TextStyle(
+                            fontSize: 10,
+                            fontWeight: FontWeight.w800,
+                            color: PacerColors.ink,
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+                if (joinedStr.isNotEmpty) ...[
+                  const SizedBox(height: 2),
+                  Text(
+                    S.joinedOn(joinedStr),
+                    style: TextStyle(fontSize: 12, color: scheme.muted),
+                  ),
+                ],
+              ],
+            ),
+          ),
+          if (_isCoach && !isMe)
+            PopupMenuButton<String>(
+              enabled: !_busy,
+              icon: Icon(Icons.more_vert, color: scheme.muted),
+              onSelected: (value) {
+                if (value == 'promote') {
+                  _setMemberRole(m, 'ketua');
+                } else if (value == 'demote') {
+                  _setMemberRole(m, 'anggota');
+                } else if (value == 'kick') {
+                  _kick(m.userId, m.nama);
+                }
+              },
+              itemBuilder: (_) => [
+                PopupMenuItem<String>(
+                  value: isCaptain ? 'demote' : 'promote',
+                  child: Text(
+                    isCaptain ? S.demoteToAnggota : S.promoteToKetua,
+                  ),
+                ),
+                PopupMenuItem<String>(
+                  value: 'kick',
+                  child: Text(
+                    S.kickMemberConfirm,
+                    style: TextStyle(color: scheme.error),
+                  ),
+                ),
+              ],
+            ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildTeamChallengesSection(BuildContext context) {
+    final scheme = PacerScheme.of(context);
+    final canCreate = _isCoach || _isKetua;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Expanded(
+              child: Text(
+                S.teamChallengesHeading,
+                style: PacerText.cardTitleOf(context).copyWith(fontSize: 16),
+              ),
+            ),
+            if (canCreate)
+              TextButton.icon(
+                onPressed: _busy
+                    ? null
+                    : () async {
+                        final created = await Navigator.of(context).push<bool>(
                           MaterialPageRoute(
-                            builder: (_) => ChatScreen(
-                              teamId: widget.teamId,
-                              teamName: widget.teamName,
+                            builder: (_) => CreateChallengeScreen(
+                              initialTeamId: widget.teamId,
                             ),
                           ),
                         );
+                        if (created == true && mounted) {
+                          _changed = true;
+                          await _refresh(forceRefresh: true);
+                        }
                       },
-                      child: Text(S.teamChat),
+                icon: const Icon(Icons.add_circle_outline, size: 18),
+                label: Text(S.createTeamChallenge),
+              ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        if (_teamChallenges.isEmpty)
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: scheme.card,
+              borderRadius: BorderRadius.circular(16),
+              border: Border.all(color: scheme.border),
+            ),
+            child: Text(
+              S.noTeamChallengesYet,
+              style: TextStyle(fontSize: 13, color: scheme.muted),
+            ),
+          )
+        else ...[
+          for (final c in _teamChallenges)
+            Builder(
+              builder: (context) {
+                final part = _myParticipations[c.id];
+                final active = isChallengeActive(c, DateTime.now());
+                final pct = part == null
+                    ? 0.0
+                    : progressPercent(part.progressNilai, c.targetNilai);
+                final String badgeText;
+                final Color badgeBg;
+                final Color badgeFg;
+                if (part?.berhasil == true) {
+                  badgeText = S.challengeCompletedLabel;
+                  badgeBg = scheme.success.withValues(alpha: 0.16);
+                  badgeFg = scheme.success;
+                } else if (part != null && part.isActive) {
+                  badgeText = S.activeSlotBadge;
+                  badgeBg = PacerColors.lime.withValues(alpha: 0.28);
+                  badgeFg = scheme.ink;
+                } else if (part != null) {
+                  badgeText = S.waitingSlotBadge;
+                  badgeBg = scheme.searchBg;
+                  badgeFg = scheme.soft;
+                } else if (!active) {
+                  badgeText = S.challengeEnded;
+                  badgeBg = scheme.error.withValues(alpha: 0.14);
+                  badgeFg = scheme.error;
+                } else {
+                  badgeText = S.challengeActive;
+                  badgeBg = PacerColors.primary.withValues(alpha: 0.18);
+                  badgeFg = scheme.ink;
+                }
+                return InkWell(
+                  borderRadius: BorderRadius.circular(16),
+                  onTap: () async {
+                    final changed = await ChallengeDetailSheet.show(
+                      context,
+                      challengeId: c.id,
+                      challenge: c,
+                      participation: part,
+                    );
+                    if (changed == true && mounted) {
+                      _changed = true;
+                      await _refresh(forceRefresh: true);
+                    }
+                  },
+                  child: Container(
+                    width: double.infinity,
+                    margin: const EdgeInsets.only(bottom: 10),
+                    padding: const EdgeInsets.all(14),
+                    decoration: BoxDecoration(
+                      color: scheme.card,
+                      borderRadius: BorderRadius.circular(16),
+                      border: Border.all(
+                        color: part?.isActive == true
+                            ? PacerColors.lime
+                            : scheme.border,
+                      ),
+                    ),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Row(
+                          children: [
+                            Expanded(
+                              child: Text(
+                                _challengeDisplayTitle(c),
+                                style: TextStyle(
+                                  fontWeight: FontWeight.w700,
+                                  fontSize: 15,
+                                  color: scheme.ink,
+                                ),
+                              ),
+                            ),
+                            const SizedBox(width: 8),
+                            _ChallengeBadge(badgeText, bg: badgeBg, fg: badgeFg),
+                          ],
+                        ),
+                        const SizedBox(height: 4),
+                        Text(
+                          '${S.sportName(c.jenis)} • '
+                          '${S.challengeTargetSummary(c.targetNilai, c.targetSatuan)} • '
+                          '${_challengeWindowText(c)}',
+                          style: TextStyle(fontSize: 12, color: scheme.soft),
+                        ),
+                        if (part != null) ...[
+                          const SizedBox(height: 10),
+                          ClipRRect(
+                            borderRadius: BorderRadius.circular(4),
+                            child: LinearProgressIndicator(
+                              value: (pct / 100).clamp(0.0, 1.0),
+                              minHeight: 6,
+                              backgroundColor: scheme.softBorder,
+                              valueColor: AlwaysStoppedAnimation<Color>(
+                                part.berhasil
+                                    ? scheme.success
+                                    : PacerColors.primary,
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: 6),
+                          Row(
+                            children: [
+                              Expanded(
+                                child: Text(
+                                  '${S.challengeTargetSummary(part.progressNilai, c.targetSatuan)} / '
+                                  '${S.challengeTargetSummary(c.targetNilai, c.targetSatuan)} • '
+                                  '${pct.toInt()}%',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    fontWeight: FontWeight.w600,
+                                    color: scheme.soft,
+                                  ),
+                                ),
+                              ),
+                              if (!part.berhasil && !part.isActive)
+                                TextButton(
+                                  onPressed: _busy
+                                      ? null
+                                      : () => _activateTeamChallenge(c.id),
+                                  child: Text(S.chooseActiveChallenge),
+                                ),
+                            ],
+                          ),
+                        ],
+                      ],
                     ),
                   ),
-                ],
+                );
+              },
+            ),
+        ],
+      ],
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = PacerScheme.of(context);
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, _) {
+        if (!didPop) Navigator.of(context).pop(_changed);
+      },
+      child: Scaffold(
+        backgroundColor: scheme.scaffold,
+        body: SafeArea(
+          child: ResponsiveScroll(
+            onRefresh: () => _refresh(forceRefresh: true),
+            padding: const EdgeInsets.only(top: 16, bottom: 48),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                PageHeader(
+                  onBack: () => Navigator.of(context).pop(_changed),
+                ),
                 const SizedBox(height: 16),
+                if (_loading && _team == null)
+                  const PacerLoading()
+                else ...[
+                  _buildHeroCard(context),
+                  const SizedBox(height: 16),
+                  _buildOverviewCard(context),
+                  const SizedBox(height: 16),
+                  _buildActionsSection(context),
+                  if (_canViewCode && _inviteCode != null) ...[
+                    const SizedBox(height: 16),
+                    _buildInviteCodeCard(context),
+                  ],
+                  const SizedBox(height: 20),
+                  _buildTeamChallengesSection(context),
+                  const SizedBox(height: 20),
+                  _buildRosterSection(context),
+                ],
               ],
             ),
           ),
@@ -2207,6 +3567,33 @@ class _TeamDetailSheetState extends State<TeamDetailSheet> {
       ),
     );
   }
+}
+
+/// Backward-compatible helper delegating to [TeamDashboardScreen].
+class TeamDetailSheet extends StatelessWidget {
+  final String teamId;
+  final String teamName;
+  const TeamDetailSheet({
+    super.key,
+    required this.teamId,
+    required this.teamName,
+  });
+
+  static Future<bool?> show(
+    BuildContext context, {
+    required String teamId,
+    required String teamName,
+  }) {
+    return Navigator.of(context).push<bool>(
+      MaterialPageRoute(
+        builder: (_) => TeamDashboardScreen(teamId: teamId, teamName: teamName),
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) =>
+      TeamDashboardScreen(teamId: teamId, teamName: teamName);
 }
 
 /// Figma leaderboard podium page + rows 4-8 with lime-highlighted you-row.
@@ -3059,6 +4446,257 @@ String _challengeWindowText(Challenge c) {
   return S.challengeOpenEnded;
 }
 
+String _challengeDisplayTitle(Challenge c) {
+  final t = c.judul?.trim();
+  if (t != null && t.isNotEmpty) return t;
+  return '${S.sportName(c.jenis)} • ${S.challengeTargetSummary(c.targetNilai, c.targetSatuan)}';
+}
+
+class _ChallengeScopeBadge extends StatelessWidget {
+  final Challenge challenge;
+  final String? teamName;
+  final bool lightOnDark;
+
+  const _ChallengeScopeBadge(
+    this.challenge, {
+    this.teamName,
+    this.lightOnDark = false,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = PacerScheme.of(context);
+    final isTeam = challenge.isTeamChallenge;
+    final label = isTeam
+        ? (teamName != null && teamName!.isNotEmpty
+              ? '${S.teamChallengeTag} • $teamName'
+              : S.teamChallengeTag)
+        : S.soloChallengeTag;
+    final bg = lightOnDark
+        ? (isTeam
+              ? PacerColors.lime.withValues(alpha: 0.25)
+              : Colors.white.withValues(alpha: 0.16))
+        : (isTeam ? PacerColors.lime.withValues(alpha: 0.28) : scheme.searchBg);
+    final fg = lightOnDark
+        ? (isTeam ? PacerColors.lime : Colors.white)
+        : scheme.ink;
+    return _ChallengeBadge(label, bg: bg, fg: fg);
+  }
+}
+
+/// Shared compact challenge progress list used on RunSetupScreen,
+/// Finish opt-in sheet (interactive with toggles), and RunFinishScreen (read-only).
+class _ChallengeToggleList extends StatelessWidget {
+  final List<({Challenge challenge, PartisipasiChallenge participation})> items;
+  final Set<String>? selectedIds;
+  final void Function(String challengeId, bool selected)? onToggle;
+
+  const _ChallengeToggleList({
+    required this.items,
+    this.selectedIds,
+    this.onToggle,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = PacerScheme.of(context);
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        for (var i = 0; i < items.length; i++) ...[
+          if (i > 0) const SizedBox(height: 8),
+          Builder(
+            builder: (context) {
+              final item = items[i];
+              final c = item.challenge;
+              final p = item.participation;
+              final isSelected = selectedIds?.contains(c.id) ?? true;
+              final pct = progressPercent(p.progressNilai, c.targetNilai);
+              return InkWell(
+                borderRadius: BorderRadius.circular(12),
+                onTap: onToggle == null
+                    ? null
+                    : () => onToggle!(c.id, !isSelected),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 12,
+                    vertical: 10,
+                  ),
+                  decoration: BoxDecoration(
+                    color: isSelected
+                        ? scheme.scaffold
+                        : scheme.searchBg.withValues(alpha: 0.6),
+                    borderRadius: BorderRadius.circular(12),
+                    border: Border.all(
+                      color: (onToggle != null && isSelected)
+                          ? PacerColors.lime
+                          : scheme.border,
+                    ),
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        children: [
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Wrap(
+                                  spacing: 6,
+                                  runSpacing: 4,
+                                  crossAxisAlignment: WrapCrossAlignment.center,
+                                  children: [
+                                    _ChallengeScopeBadge(c),
+                                    if (p.berhasil)
+                                      _ChallengeBadge(
+                                        S.challengeCompletedLabel,
+                                        bg: scheme.success.withValues(
+                                          alpha: 0.16,
+                                        ),
+                                        fg: scheme.success,
+                                      ),
+                                  ],
+                                ),
+                                const SizedBox(height: 6),
+                                Text(
+                                  _challengeDisplayTitle(c),
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.w700,
+                                    fontSize: 13.5,
+                                    color: scheme.ink,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                          if (onToggle != null)
+                            Switch(
+                              value: isSelected,
+                              activeThumbColor: PacerColors.lime,
+                              onChanged: (v) => onToggle!(c.id, v),
+                            )
+                          else
+                            Text(
+                              '${pct.toInt()}%',
+                              style: TextStyle(
+                                fontWeight: FontWeight.w800,
+                                fontSize: 13,
+                                color: p.berhasil
+                                    ? scheme.success
+                                    : PacerColors.primary,
+                              ),
+                            ),
+                        ],
+                      ),
+                      const SizedBox(height: 6),
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(4),
+                        child: LinearProgressIndicator(
+                          value: (pct / 100).clamp(0.0, 1.0),
+                          minHeight: 5,
+                          backgroundColor: scheme.softBorder,
+                          valueColor: AlwaysStoppedAnimation<Color>(
+                            p.berhasil ? scheme.success : PacerColors.primary,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        '${S.challengeTargetSummary(p.progressNilai, c.targetSatuan)} / '
+                        '${S.challengeTargetSummary(c.targetNilai, c.targetSatuan)}',
+                        style: TextStyle(
+                          fontSize: 11.5,
+                          fontWeight: FontWeight.w600,
+                          color: scheme.muted,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              );
+            },
+          ),
+        ],
+      ],
+    );
+  }
+}
+
+Future<List<String>?> _showFinishChallengeOptInSheet(
+  BuildContext context, {
+  required List<({Challenge challenge, PartisipasiChallenge participation})>
+  eligible,
+  required Set<String> initialSelected,
+}) {
+  final selected = Set<String>.from(initialSelected);
+  return showModalBottomSheet<List<String>>(
+    context: context,
+    isScrollControlled: true,
+    builder: (sheetCtx) {
+      final scheme = PacerScheme.of(sheetCtx);
+      return StatefulBuilder(
+        builder: (sheetCtx, setModalState) => SafeArea(
+          child: Center(
+            heightFactor: 1,
+            child: ConstrainedBox(
+              constraints: const BoxConstraints(maxWidth: 560),
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(20, 20, 20, 24),
+                child: SingleChildScrollView(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        S.finishOptInTitle,
+                        style: PacerText.pageTitleOf(
+                          sheetCtx,
+                        ).copyWith(fontSize: 20),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        S.finishOptInSubtitle,
+                        style: TextStyle(fontSize: 13, color: scheme.soft),
+                      ),
+                      const SizedBox(height: 14),
+                      _ChallengeToggleList(
+                        items: eligible,
+                        selectedIds: selected,
+                        onToggle: (id, on) => setModalState(() {
+                          if (on) {
+                            selected.add(id);
+                          } else {
+                            selected.remove(id);
+                          }
+                        }),
+                      ),
+                      const SizedBox(height: 18),
+                      LimeActionBar(
+                        S.finishSaveAndContinue,
+                        onPressed: () =>
+                            Navigator.of(sheetCtx).pop(selected.toList()),
+                      ),
+                      const SizedBox(height: 6),
+                      SizedBox(
+                        width: double.infinity,
+                        child: TextButton(
+                          onPressed: () => Navigator.of(sheetCtx).pop(null),
+                          child: Text(S.cancelLabel),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+    },
+  );
+}
+
 class ChallengeDetailSheet extends StatefulWidget {
   final String? challengeId;
   final Challenge? challenge;
@@ -3095,6 +4733,7 @@ class ChallengeDetailSheet extends StatefulWidget {
 class _ChallengeDetailSheetState extends State<ChallengeDetailSheet> {
   Challenge? _challenge;
   PartisipasiChallenge? _participation;
+  String? _teamName;
   bool? _joined;
   bool _busy = false;
   bool _changed = false;
@@ -3116,6 +4755,7 @@ class _ChallengeDetailSheetState extends State<ChallengeDetailSheet> {
         oldWidget.participation != widget.participation) {
       _challenge = widget.challenge;
       _participation = widget.participation;
+      _teamName = null;
       _joined = widget.participation != null ? true : null;
       _load();
     }
@@ -3127,14 +4767,13 @@ class _ChallengeDetailSheetState extends State<ChallengeDetailSheet> {
       !(await isDemoAccount()) && _resolvedId != null;
 
   Challenge? _findDemoChallenge(String? id) {
+    final pool = PacerDummyData.demoChallenges;
     if (id != null) {
-      for (final c in PacerDummyData.challenges) {
+      for (final c in pool) {
         if (c.id == id) return c;
       }
     }
-    return PacerDummyData.challenges.isEmpty
-        ? null
-        : PacerDummyData.challenges.first;
+    return pool.isEmpty ? null : pool.first;
   }
 
   PartisipasiChallenge? _matchParticipation(
@@ -3147,14 +4786,33 @@ class _ChallengeDetailSheetState extends State<ChallengeDetailSheet> {
     return null;
   }
 
+  String? _lookupDemoTeamName(String? teamId) {
+    if (teamId == null) return null;
+    for (final t in PacerDummyData.demoTeams) {
+      if (t.id == teamId) return t.nama;
+    }
+    return null;
+  }
+
   Future<void> _load() async {
     final id = _resolvedId;
     if (await isDemoAccount()) {
       final demo = _challenge ?? _findDemoChallenge(id);
+      final matched = demo == null
+          ? null
+          : _matchParticipation(PacerDummyData.getDemoParticipations(), demo.id);
+      final fallback =
+          widget.participation != null &&
+              widget.participation!.challengeId == demo?.id
+          ? widget.participation
+          : null;
+      final resolvedPart = matched ?? fallback;
       if (mounted) {
         setState(() {
           _challenge = demo;
-          _joined ??= false;
+          _teamName = _lookupDemoTeamName(demo?.teamId);
+          _participation = resolvedPart;
+          _joined = resolvedPart != null;
         });
       }
       return;
@@ -3165,9 +4823,16 @@ class _ChallengeDetailSheetState extends State<ChallengeDetailSheet> {
       final chal = _challenge ?? await repo.getChallengeById(id);
       final parts = await repo.myParticipations();
       final matched = _matchParticipation(parts, id);
+      String? tName;
+      if (chal?.teamId != null) {
+        try {
+          tName = (await TeamRepository().getTeam(chal!.teamId!))?.nama;
+        } catch (_) {}
+      }
       if (mounted) {
         setState(() {
           _challenge = chal ?? _challenge;
+          _teamName = tName ?? _teamName;
           _participation = matched;
           _joined = matched != null;
         });
@@ -3177,20 +4842,49 @@ class _ChallengeDetailSheetState extends State<ChallengeDetailSheet> {
     }
   }
 
+  Future<void> _activate() async {
+    final id = _resolvedId;
+    if (id == null || _busy) return;
+    setState(() => _busy = true);
+    try {
+      final updated = await ChallengeRepository().activateChallenge(id);
+      final matched = _matchParticipation(updated, id);
+      if (mounted) {
+        setState(() {
+          _participation = matched ?? _participation;
+          _changed = true;
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(S.challengeActivatedMsg)),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(offlineActionErrorMessage(e))),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
   Future<void> _toggle() async {
     final id = _resolvedId;
     if (!await _isLive() || id == null) {
+      final demoId = id ?? _challenge?.id;
+      if (demoId == null) return;
+      final next = !(_joined == true);
+      PartisipasiChallenge? nextPart;
+      if (next) {
+        nextPart = PacerDummyData.joinDemoChallenge(demoId);
+      } else {
+        PacerDummyData.leaveDemoChallenge(demoId);
+      }
       if (mounted) {
-        final next = !(_joined == true);
         setState(() {
           _joined = next;
-          _participation = next && _challenge != null
-              ? PartisipasiChallenge(
-                  id: 'demo-part-${_challenge!.id}',
-                  challengeId: _challenge!.id,
-                  userId: 'demo',
-                )
-              : null;
+          _participation = nextPart;
           _changed = true;
         });
         if (next) {
@@ -3202,7 +4896,9 @@ class _ChallengeDetailSheetState extends State<ChallengeDetailSheet> {
       return;
     }
     final chal = _challenge;
-    if (_joined != true && chal != null && !isChallengeActive(chal, DateTime.now())) {
+    if (_joined != true &&
+        chal != null &&
+        !isChallengeActive(chal, DateTime.now())) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text(S.challengeEndedJoinBlocked)),
@@ -3285,7 +4981,9 @@ class _ChallengeDetailSheetState extends State<ChallengeDetailSheet> {
                   children: [
                     Expanded(
                       child: Text(
-                        S.challengeDetail,
+                        chal?.judul?.trim().isNotEmpty == true
+                            ? chal!.judul!.trim()
+                            : S.challengeDetail,
                         style: PacerText.pageTitleOf(context),
                       ),
                     ),
@@ -3305,6 +5003,7 @@ class _ChallengeDetailSheetState extends State<ChallengeDetailSheet> {
                     spacing: 8,
                     runSpacing: 8,
                     children: [
+                      _ChallengeScopeBadge(chal, teamName: _teamName),
                       _ChallengeBadge(
                         S.sportName(chal.jenis),
                         bg: scheme.card,
@@ -3315,6 +5014,18 @@ class _ChallengeDetailSheetState extends State<ChallengeDetailSheet> {
                           S.challengeCompletedLabel,
                           bg: scheme.success.withValues(alpha: 0.16),
                           fg: scheme.success,
+                        )
+                      else if (part != null && part.isActive)
+                        _ChallengeBadge(
+                          S.activeSlotBadge,
+                          bg: PacerColors.lime.withValues(alpha: 0.28),
+                          fg: scheme.ink,
+                        )
+                      else if (part != null)
+                        _ChallengeBadge(
+                          S.waitingSlotBadge,
+                          bg: scheme.searchBg,
+                          fg: scheme.soft,
                         )
                       else if (!active)
                         _ChallengeBadge(
@@ -3437,6 +5148,16 @@ class _ChallengeDetailSheetState extends State<ChallengeDetailSheet> {
                               color: scheme.soft,
                             ),
                           ),
+                          if (!part.berhasil && !part.isActive) ...[
+                            const SizedBox(height: 10),
+                            SizedBox(
+                              width: double.infinity,
+                              child: OutlinedButton(
+                                onPressed: _busy ? null : _activate,
+                                child: Text(S.chooseActiveChallenge),
+                              ),
+                            ),
+                          ],
                         ],
                       ),
                     ),
@@ -4131,6 +5852,7 @@ class _StreaksScreenState extends State<StreaksScreen> {
 typedef _ChallengeListData = ({
   List<Challenge> challenges,
   Map<String, PartisipasiChallenge> participations,
+  Map<String, String> teamNames,
 });
 
 class ChallengeListScreen extends StatefulWidget {
@@ -4142,6 +5864,8 @@ class ChallengeListScreen extends StatefulWidget {
 
 class _ChallengeListScreenState extends State<ChallengeListScreen> {
   Future<_ChallengeListData>? _future;
+  String _filter = 'all';
+  bool _busy = false;
 
   @override
   void initState() {
@@ -4156,28 +5880,64 @@ class _ChallengeListScreenState extends State<ChallengeListScreen> {
 
   Future<_ChallengeListData> _load() async {
     if (await isDemoAccount()) {
+      final parts = PacerDummyData.getDemoParticipations();
       return (
-        challenges: PacerDummyData.challenges
+        challenges: PacerDummyData.demoChallenges
             .where((c) => c.diumumkan)
             .toList(),
-        participations: const <String, PartisipasiChallenge>{},
+        participations: {for (final p in parts) p.challengeId: p},
+        teamNames: {for (final t in PacerDummyData.demoTeams) t.id: t.nama},
       );
     }
     try {
       final repo = ChallengeRepository();
+      final teamRepo = TeamRepository();
       final challenges = (await repo.listChallenges())
           .where((c) => c.diumumkan)
           .toList();
       final parts = await repo.myParticipations();
+      final teamNames = <String, String>{};
+      try {
+        for (final t in await teamRepo.myTeams()) {
+          teamNames[t.id] = t.nama;
+        }
+        for (final t in await teamRepo.listTeams()) {
+          teamNames.putIfAbsent(t.id, () => t.nama);
+        }
+      } catch (_) {}
       return (
         challenges: challenges,
         participations: {for (final p in parts) p.challengeId: p},
+        teamNames: teamNames,
       );
     } catch (_) {
       return (
         challenges: const <Challenge>[],
         participations: const <String, PartisipasiChallenge>{},
+        teamNames: const <String, String>{},
       );
+    }
+  }
+
+  Future<void> _activate(String challengeId) async {
+    if (_busy) return;
+    setState(() => _busy = true);
+    try {
+      await ChallengeRepository().activateChallenge(challengeId);
+      _reload();
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(S.challengeActivatedMsg)),
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(offlineActionErrorMessage(e))),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _busy = false);
     }
   }
 
@@ -4192,32 +5952,37 @@ class _ChallengeListScreenState extends State<ChallengeListScreen> {
     double w,
     Challenge c,
     PartisipasiChallenge? part,
+    String? teamName,
   ) {
+    final scheme = PacerScheme.of(context);
     final active = isChallengeActive(c, DateTime.now());
     final pct = part == null
         ? 0.0
         : progressPercent(part.progressNilai, c.targetNilai);
-    final statusLabel = part?.berhasil == true
-        ? S.challengeCompletedLabel
-        : !active
-        ? S.challengeEnded
-        : part != null
-        ? S.joinedChallenge
-        : S.challengeActive;
-    final statusBg = part?.berhasil == true
-        ? Colors.green.withValues(alpha: 0.25)
-        : !active
-        ? Colors.white12
-        : part != null
-        ? PacerColors.primary.withValues(alpha: 0.25)
-        : Colors.white12;
-    final statusFg = part?.berhasil == true
-        ? Colors.greenAccent
-        : !active
-        ? Colors.white70
-        : part != null
-        ? PacerColors.primary
-        : Colors.white;
+    final String statusLabel;
+    final Color statusBg;
+    final Color statusFg;
+    if (part?.berhasil == true) {
+      statusLabel = S.challengeCompletedLabel;
+      statusBg = Colors.green.withValues(alpha: 0.25);
+      statusFg = Colors.greenAccent;
+    } else if (part != null && part.isActive) {
+      statusLabel = S.activeSlotBadge;
+      statusBg = PacerColors.lime.withValues(alpha: 0.28);
+      statusFg = PacerColors.lime;
+    } else if (part != null) {
+      statusLabel = S.waitingSlotBadge;
+      statusBg = Colors.white24;
+      statusFg = Colors.white;
+    } else if (!active) {
+      statusLabel = S.challengeEnded;
+      statusBg = Colors.white12;
+      statusFg = Colors.white70;
+    } else {
+      statusLabel = S.challengeActive;
+      statusBg = Colors.white12;
+      statusFg = Colors.white;
+    }
 
     return GestureDetector(
       onTap: () async {
@@ -4236,25 +6001,32 @@ class _ChallengeListScreenState extends State<ChallengeListScreen> {
         padding: const EdgeInsets.all(20),
         decoration: BoxDecoration(
           borderRadius: BorderRadius.circular(20),
-          gradient: const LinearGradient(
-            colors: [
-              PacerColors.teamShade,
-              PacerColors.streakBg,
-            ],
+          gradient: LinearGradient(
+            colors: scheme.heroCardGradient,
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
           ),
+          boxShadow: [scheme.shadowBox],
         ),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            Row(
+            Wrap(
+              spacing: 6,
+              runSpacing: 6,
+              crossAxisAlignment: WrapCrossAlignment.center,
               children: [
+                _ChallengeScopeBadge(
+                  c,
+                  teamName: teamName,
+                  lightOnDark: true,
+                ),
                 _ChallengeBadge(
                   S.sportName(c.jenis),
                   bg: Colors.white12,
                   fg: Colors.white,
                 ),
-                const Spacer(),
                 _ChallengeBadge(
                   statusLabel,
                   bg: statusBg,
@@ -4262,6 +6034,17 @@ class _ChallengeListScreenState extends State<ChallengeListScreen> {
                 ),
               ],
             ),
+            if (c.judul != null && c.judul!.trim().isNotEmpty) ...[
+              const SizedBox(height: 10),
+              Text(
+                c.judul!.trim(),
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontWeight: FontWeight.w700,
+                  fontSize: 16,
+                ),
+              ),
+            ],
             const SizedBox(height: 8),
             Row(
               crossAxisAlignment: CrossAxisAlignment.end,
@@ -4312,16 +6095,34 @@ class _ChallengeListScreenState extends State<ChallengeListScreen> {
                   ),
                 ),
               ),
-              const SizedBox(height: 4),
-              Text(
-                '${S.challengeTargetSummary(part.progressNilai, c.targetSatuan)} / '
-                '${S.challengeTargetSummary(c.targetNilai, c.targetSatuan)} • '
-                '${pct.toInt()}%',
-                style: const TextStyle(
-                  color: Colors.white70,
-                  fontSize: 12,
-                  fontWeight: FontWeight.w600,
-                ),
+              const SizedBox(height: 6),
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      '${S.challengeTargetSummary(part.progressNilai, c.targetSatuan)} / '
+                      '${S.challengeTargetSummary(c.targetNilai, c.targetSatuan)} • '
+                      '${pct.toInt()}%',
+                      style: const TextStyle(
+                        color: Colors.white70,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                  if (!part.berhasil && !part.isActive)
+                    TextButton(
+                      onPressed: _busy ? null : () => _activate(c.id),
+                      style: TextButton.styleFrom(
+                        foregroundColor: PacerColors.lime,
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 10,
+                          vertical: 4,
+                        ),
+                      ),
+                      child: Text(S.chooseActiveChallenge),
+                    ),
+                ],
               ),
             ],
           ],
@@ -4332,6 +6133,7 @@ class _ChallengeListScreenState extends State<ChallengeListScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final scheme = PacerScheme.of(context);
     final w = MediaQuery.sizeOf(context).width;
     return Scaffold(
       body: SafeArea(
@@ -4344,24 +6146,62 @@ class _ChallengeListScreenState extends State<ChallengeListScreen> {
               const PageHeader(),
               const SizedBox(height: 16),
               Text(S.challenge, style: PacerText.pageTitleOf(context)),
+              const SizedBox(height: 10),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  for (final opt in [
+                    ('all', S.filterAll),
+                    ('team', S.filterTeam),
+                    ('solo', S.filterSolo),
+                  ])
+                    GestureDetector(
+                      onTap: () => setState(() => _filter = opt.$1),
+                      child: GoalChip(
+                        label: opt.$2,
+                        selected: _filter == opt.$1,
+                      ),
+                    ),
+                ],
+              ),
+              const SizedBox(height: 8),
+              Text(
+                S.activeSlotHint,
+                style: TextStyle(fontSize: 12, color: scheme.muted),
+              ),
               const SizedBox(height: 12),
               FutureBuilder<_ChallengeListData>(
                 future: _future,
                 builder: (context, snap) {
                   final data = snap.data;
-                  final live = data?.challenges;
-                  // No mocks: offline and empty both show the empty state.
-                  if (live == null || live.isEmpty) {
+                  final all = data?.challenges;
+                  if (all == null) {
+                    return const PacerLoading();
+                  }
+                  final filtered = all.where((c) {
+                    if (_filter == 'team') return c.isTeamChallenge;
+                    if (_filter == 'solo') return !c.isTeamChallenge;
+                    return true;
+                  }).toList();
+                  if (filtered.isEmpty) {
                     return PacerEmptyState(
                       S.noChallengesCachedEmpty,
                       icon: Icons.emoji_events_outlined,
                     );
                   }
                   final parts = data!.participations;
+                  final teamNames = data.teamNames;
                   return Column(
                     children: [
-                      for (final c in live)
-                        _challengeCard(context, w, c, parts[c.id]),
+                      for (final c in filtered)
+                        _challengeCard(
+                          context,
+                          w,
+                          c,
+                          parts[c.id],
+                          c.teamId == null ? null : teamNames[c.teamId!],
+                        ),
                     ],
                   );
                 },
@@ -4462,7 +6302,7 @@ class PersyaratanScreen extends StatelessWidget {
                 width: double.infinity,
                 height: 48,
                 child: ElevatedButton(
-                  onPressed: () => Navigator.of(context).push(
+                  onPressed: () => Navigator.of(context).pushReplacement<bool, Object?>(
                     MaterialPageRoute(builder: (_) => const CreateClubScreen()),
                   ),
                   style: ElevatedButton.styleFrom(
@@ -4524,10 +6364,11 @@ class _CreateClubScreenState extends State<CreateClubScreen> {
       return;
     }
     if (await isDemoAccount()) {
+      PacerDummyData.createDemoTeam(nama, isPrivate: _private);
       if (mounted) {
         ScaffoldMessenger.of(context)
-            .showSnackBar(SnackBar(content: Text(S.demoJoinSent)));
-        Navigator.of(context).pop();
+            .showSnackBar(SnackBar(content: Text(S.teamCreated)));
+        Navigator.of(context).pop(true);
       }
       return;
     }
@@ -4537,7 +6378,7 @@ class _CreateClubScreenState extends State<CreateClubScreen> {
       if (mounted) {
         ScaffoldMessenger.of(context)
             .showSnackBar(SnackBar(content: Text(S.teamCreated)));
-        Navigator.of(context).pop();
+        Navigator.of(context).pop(true);
       }
     } on PostgrestException catch (e) {
       setState(
@@ -4667,15 +6508,20 @@ class _CreateClubScreenState extends State<CreateClubScreen> {
 
 /// Figma buat challenge teams form (coach only — server rejects others).
 /// JARAK presets or TARGET presets define the distance (TARGET wins when
-/// touched; Lainnya/Custom open a km dialog). DURASI sets the window.
+/// Create Solo Challenge (for any user) or Team Challenge (Coach/Admin/Ketua).
+/// Sport, jarak (km) / target (km) presets or custom km dialog, durasi window,
+/// optional custom title, and team selector when Team scope is active.
 class CreateChallengeScreen extends StatefulWidget {
-  const CreateChallengeScreen({super.key});
+  final String? initialTeamId;
+
+  const CreateChallengeScreen({super.key, this.initialTeamId});
 
   @override
   State<CreateChallengeScreen> createState() => _CreateChallengeScreenState();
 }
 
 class _CreateChallengeScreenState extends State<CreateChallengeScreen> {
+  final TextEditingController _judulCtrl = TextEditingController();
   int _jenisIdx = 0; // 'lari'
   int _jarak = 1; // '5 km'
   int _durasi = 2; // week
@@ -4683,10 +6529,85 @@ class _CreateChallengeScreenState extends State<CreateChallengeScreen> {
   double? _customKm;
   bool _busy = false;
   String? _error;
+  bool _isTeamMode = false;
+  String? _selectedTeamId;
+  List<Team> _manageableTeams = const [];
 
   static const _jarakKm = [3.0, 5.0, 10.0];
   static const _durasiDays = [1, 3, 7];
   static const _targetKm = [25.0, 30.0, 45.0];
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.initialTeamId != null) {
+      _isTeamMode = true;
+      _selectedTeamId = widget.initialTeamId;
+    }
+    _loadCapabilities();
+  }
+
+  @override
+  void dispose() {
+    _judulCtrl.dispose();
+    super.dispose();
+  }
+
+  Future<void> _loadCapabilities() async {
+    try {
+      final List<Team> teams = [];
+      if (await isDemoAccount()) {
+        for (final t in PacerDummyData.demoTeams) {
+          final isLeader =
+              t.dibuatOleh == 'demo-user-me' ||
+              PacerDummyData.getTeamRoster(
+                t.id,
+              ).any((m) => m.userId == 'demo-user-me' && m.peran == 'ketua');
+          if (isLeader || t.id == widget.initialTeamId) {
+            teams.add(t);
+          }
+        }
+      } else {
+        final auth = AuthRepository();
+        final repo = TeamRepository();
+        final uid = await auth.resolveUserId();
+        final profile = await auth.getProfile();
+        final isCoach = profile?.peran == 'coach' || profile?.peran == 'admin';
+        if (isCoach) {
+          final all = await repo.listTeams();
+          teams.addAll(all.isNotEmpty ? all : await repo.myTeams());
+        } else if (uid != null) {
+          final mine = await repo.myTeams();
+          final rosters = await Future.wait([
+            for (final t in mine)
+              repo.teamRoster(t.id).catchError((_) => const <TeamRosterMember>[]),
+          ]);
+          for (var i = 0; i < mine.length; i++) {
+            final t = mine[i];
+            final isKetua =
+                t.dibuatOleh == uid ||
+                rosters[i].any((m) => m.userId == uid && m.peran == 'ketua');
+            if (isKetua || t.id == widget.initialTeamId) {
+              teams.add(t);
+            }
+          }
+        }
+      }
+      if (!mounted) return;
+      setState(() {
+        _manageableTeams = teams;
+        if (widget.initialTeamId != null &&
+            teams.any((t) => t.id == widget.initialTeamId)) {
+          _selectedTeamId = widget.initialTeamId;
+          _isTeamMode = true;
+        } else if (teams.isNotEmpty) {
+          _selectedTeamId ??= teams.first.id;
+        } else {
+          _isTeamMode = false;
+        }
+      });
+    } catch (_) {}
+  }
 
   Future<double?> _askCustomKm() async {
     final controller = TextEditingController();
@@ -4738,25 +6659,29 @@ class _CreateChallengeScreenState extends State<CreateChallengeScreen> {
     } else {
       targetKm = _customKm;
     }
-    if (targetKm == null) {
+    if (targetKm == null || (_isTeamMode && _selectedTeamId == null)) {
       setState(() => _error = S.errFillAll);
       return;
     }
     final now = DateTime.now();
     final windowDays = _durasiDays[_durasi.clamp(0, _durasiDays.length - 1)];
+    final judul = _judulCtrl.text.trim();
     setState(() => _busy = true);
     try {
       await ChallengeRepository().createChallenge(
         jenis: aktivitasJenis[_jenisIdx],
         targetNilai: targetKm * 1000,
         targetSatuan: 'jarak_m',
+        teamId: _isTeamMode ? _selectedTeamId : null,
+        judul: judul.isEmpty ? null : judul,
         waktuMulai: now,
         waktuSelesai: now.add(Duration(days: windowDays)),
       );
       if (!mounted) return;
-      ScaffoldMessenger.of(context)
-          .showSnackBar(const SnackBar(content: Text('Challenge dibuat.')));
-      Navigator.of(context).pop();
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Challenge dibuat.')),
+      );
+      Navigator.of(context).pop(true);
     } on PostgrestException catch (e) {
       setState(
         () => _error = e.code == '42501' ? S.coachOnly : S.errSaveFailed,
@@ -4806,6 +6731,7 @@ class _CreateChallengeScreenState extends State<CreateChallengeScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final scheme = PacerScheme.of(context);
     return Scaffold(
       body: SafeArea(
         child: ResponsiveScroll(
@@ -4817,10 +6743,81 @@ class _CreateChallengeScreenState extends State<CreateChallengeScreen> {
               const PageHeader(),
               const SizedBox(height: 16),
               Text(
-                'buat challenge teams',
+                _isTeamMode ? S.createTeamChallenge : S.createChallenge,
                 style: PacerText.pageTitleOf(context).copyWith(fontSize: 26),
               ),
-              const SizedBox(height: 12),
+              const SizedBox(height: 14),
+              if (_manageableTeams.isNotEmpty) ...[
+                _group(
+                  S.challengeScopeLabel,
+                  [S.challengeScopeSolo, S.challengeScopeTeam],
+                  _isTeamMode ? 1 : 0,
+                  (i) => setState(() {
+                    _isTeamMode = i == 1;
+                    if (_isTeamMode && _manageableTeams.isNotEmpty) {
+                      _selectedTeamId ??= _manageableTeams.first.id;
+                    }
+                  }),
+                ),
+                if (_isTeamMode) ...[
+                  Text(
+                    S.pickTeam,
+                    style: TextStyle(
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                      color: scheme.soft,
+                    ),
+                  ),
+                  const SizedBox(height: 6),
+                  DropdownButtonFormField<String>(
+                    initialValue: _manageableTeams.any(
+                          (t) => t.id == _selectedTeamId,
+                        )
+                        ? _selectedTeamId
+                        : _manageableTeams.first.id,
+                    isExpanded: true,
+                    decoration: InputDecoration(
+                      filled: true,
+                      fillColor: scheme.formField,
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide: BorderSide(color: scheme.border),
+                      ),
+                    ),
+                    items: [
+                      for (final t in _manageableTeams)
+                        DropdownMenuItem<String>(
+                          value: t.id,
+                          child: Text(t.nama),
+                        ),
+                    ],
+                    onChanged: (v) => setState(() => _selectedTeamId = v),
+                  ),
+                  const SizedBox(height: 14),
+                ],
+              ],
+              Text(
+                S.challengeTitleLabel,
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  color: scheme.soft,
+                ),
+              ),
+              const SizedBox(height: 6),
+              TextField(
+                controller: _judulCtrl,
+                decoration: InputDecoration(
+                  hintText: S.challengeTitleHint,
+                  filled: true,
+                  fillColor: scheme.formField,
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.circular(12),
+                    borderSide: BorderSide(color: scheme.border),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 14),
               _group(
                 S.challengeSportLabel,
                 [for (final j in aktivitasJenis) S.sportName(j)],
@@ -4873,7 +6870,7 @@ class _CreateChallengeScreenState extends State<CreateChallengeScreen> {
               ] else
                 const SizedBox(height: 12),
               LimeActionBar(
-                S.createChallenge,
+                _isTeamMode ? S.createTeamChallenge : S.createChallenge,
                 onPressed: _busy ? null : _submit,
               ),
               const SizedBox(height: 24),
@@ -5414,6 +7411,10 @@ class _AboutMeScreenState extends State<AboutMeScreen> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               const PageHeader(),
+              if (!_demo) ...[
+                const SizedBox(height: 8),
+                const SyncStatusBanner(),
+              ],
               const SizedBox(height: 16),
               Text(S.aboutMe, style: PacerText.pageTitleOf(context)),
               const SizedBox(height: 12),
@@ -5718,7 +7719,7 @@ class FiturScreen extends StatelessWidget {
       (
         S.notifications,
         Icons.notifications_active_outlined,
-        (_) => const NotificationMockScreen(),
+        (_) => const NotificationsScreen(),
       ),
     ];
     return Scaffold(
@@ -5763,7 +7764,44 @@ class FiturScreen extends StatelessWidget {
                           mainAxisSize: MainAxisSize.min,
                           mainAxisAlignment: MainAxisAlignment.center,
                           children: [
-                            Icon(t.$2, size: 28),
+                            if (t.$2 == Icons.notifications_active_outlined)
+                              ValueListenableBuilder<int>(
+                                valueListenable:
+                                    NotificationRepository.unreadCountNotifier,
+                                builder: (_, count, _) => Stack(
+                                  clipBehavior: Clip.none,
+                                  children: [
+                                    Icon(t.$2, size: 28),
+                                    if (count > 0)
+                                      Positioned(
+                                        right: -8,
+                                        top: -6,
+                                        child: Container(
+                                          padding: const EdgeInsets.symmetric(
+                                            horizontal: 5,
+                                            vertical: 1.5,
+                                          ),
+                                          decoration: BoxDecoration(
+                                            color: PacerColors.lime,
+                                            borderRadius: BorderRadius.circular(
+                                              999,
+                                            ),
+                                          ),
+                                          child: Text(
+                                            count > 99 ? '99+' : '$count',
+                                            style: const TextStyle(
+                                              fontSize: 10,
+                                              fontWeight: FontWeight.w800,
+                                              color: PacerColors.navy,
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                  ],
+                                ),
+                              )
+                            else
+                              Icon(t.$2, size: 28),
                             const SizedBox(height: 8),
                             // Long labels ("leaderboard") scale instead of clipping.
                             FittedBox(
@@ -6045,121 +8083,269 @@ class ThemeSettingsScreen extends StatelessWidget {
   }
 }
 
-/// Push notification center & activity reminders
-/// Directly addresses Context Diagram ("Push Notification Eksternal: Challenge, Streak, Remind Aktivitas")
-class NotificationMockScreen extends StatefulWidget {
-  const NotificationMockScreen({super.key});
+/// Backward-compatible alias for any callers/tests referencing the old name.
+typedef NotificationMockScreen = NotificationsScreen;
+
+/// Push notification center & member inbox backed by [NotificationRepository].
+class NotificationsScreen extends StatefulWidget {
+  const NotificationsScreen({super.key});
 
   @override
-  State<NotificationMockScreen> createState() => _NotificationMockScreenState();
+  State<NotificationsScreen> createState() => _NotificationsScreenState();
 }
 
-class _NotificationMockScreenState extends State<NotificationMockScreen> {
-  final List<
-    ({String title, String body, String time, IconData icon, Color color})
-  >
-  _notifs = [
-    (
-      title: S.reminderTitle,
-      body: S.reminderBody,
-      time: '17:00',
-      icon: Icons.local_fire_department,
-      color: PacerColors.lime,
-    ),
-    (
-      title: 'Challenge Update',
-      body: 'Tim Pacer mendekati target mingguan 25 km! Tetap semangat 🏃',
-      time: '14:30',
-      icon: Icons.emoji_events,
-      color: Colors.amber,
-    ),
-    (
-      title: 'Streak Saved',
-      body: 'Streak kamu tetap menyala berkat lari kemarin.',
-      time: 'Kemarin',
-      icon: Icons.check_circle_outline,
-      color: Colors.lightGreen,
-    ),
-  ];
+class _NotificationsScreenState extends State<NotificationsScreen> {
+  final NotificationRepository _repo = NotificationRepository();
+  List<AppNotification> _items = const [];
+  bool _loading = true;
+  bool _unreadOnly = false;
+  bool _busy = false;
+
+  @override
+  void initState() {
+    super.initState();
+    NotificationRepository.revisionNotifier.addListener(_onRevision);
+    _load(forceRefresh: true);
+  }
+
+  @override
+  void dispose() {
+    NotificationRepository.revisionNotifier.removeListener(_onRevision);
+    super.dispose();
+  }
+
+  void _onRevision() {
+    if (mounted) _load(forceRefresh: false);
+  }
+
+  Future<void> _load({bool forceRefresh = false}) async {
+    try {
+      final list = await _repo.listNotifications(forceRefresh: forceRefresh);
+      if (!mounted) return;
+      setState(() {
+        _items = list;
+        _loading = false;
+      });
+    } catch (_) {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
+
+  Future<void> _markAllRead() async {
+    if (_busy) return;
+    setState(() => _busy = true);
+    try {
+      await _repo.markAllRead();
+      await _load(forceRefresh: false);
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(offlineActionErrorMessage(e))),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _openNotification(AppNotification n) async {
+    if (!n.isRead) {
+      try {
+        await _repo.markAsRead(n.id);
+        await _load(forceRefresh: false);
+      } catch (_) {}
+    }
+    if (!mounted) return;
+    if (n.challengeId != null && n.challengeId!.isNotEmpty) {
+      await ChallengeDetailSheet.show(context, challengeId: n.challengeId);
+      if (mounted) await _load(forceRefresh: false);
+      return;
+    }
+    if (n.teamId != null && n.teamId!.isNotEmpty) {
+      await Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (_) => TeamDashboardScreen(teamId: n.teamId!),
+        ),
+      );
+      if (mounted) await _load(forceRefresh: false);
+    }
+  }
+
+  (IconData, Color) _styleForType(String type, PacerScheme scheme) {
+    switch (type) {
+      case 'challenge_completed':
+        return (Icons.check_circle_outline, scheme.success);
+      case 'team_challenge_assigned':
+      case 'team_challenge':
+        return (Icons.emoji_events, PacerColors.primary);
+      case 'team_role_changed':
+      case 'role_updated':
+      case 'team_role':
+        return (Icons.groups_outlined, PacerColors.lime);
+      default:
+        return (Icons.notifications_active, PacerColors.lime);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
     final scheme = PacerScheme.of(context);
+    final unreadCount = _items.where((n) => !n.isRead).length;
+    final visible = _unreadOnly
+        ? _items.where((n) => !n.isRead).toList()
+        : _items;
+
     return Scaffold(
       backgroundColor: scheme.scaffold,
       body: SafeArea(
         child: ResponsiveScroll(
           maxWidth: 720,
+          onRefresh: () => _load(forceRefresh: true),
           padding: const EdgeInsets.fromLTRB(24, 16, 24, 24),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               const PageHeader(),
               const SizedBox(height: 16),
-              Text(S.notifications, style: PacerText.pageTitleOf(context)),
+              Row(
+                children: [
+                  Expanded(
+                    child: Text(
+                      S.notificationsTitle,
+                      style: PacerText.pageTitleOf(context),
+                    ),
+                  ),
+                  if (unreadCount > 0)
+                    TextButton(
+                      onPressed: _busy ? null : _markAllRead,
+                      child: Text(S.markAllRead),
+                    ),
+                ],
+              ),
+              const SizedBox(height: 10),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: [
+                  GestureDetector(
+                    onTap: () => setState(() => _unreadOnly = false),
+                    child: GoalChip(
+                      label: S.notificationsAllFilter,
+                      selected: !_unreadOnly,
+                    ),
+                  ),
+                  GestureDetector(
+                    onTap: () => setState(() => _unreadOnly = true),
+                    child: GoalChip(
+                      label: unreadCount > 0
+                          ? '${S.notificationsUnreadFilter} ($unreadCount)'
+                          : S.notificationsUnreadFilter,
+                      selected: _unreadOnly,
+                    ),
+                  ),
+                ],
+              ),
               const SizedBox(height: 16),
-              for (final n in _notifs)
-                Container(
-                  margin: const EdgeInsets.only(bottom: 12),
-                  padding: const EdgeInsets.all(16),
-                  decoration: BoxDecoration(
-                    color: scheme.card,
-                    borderRadius: BorderRadius.circular(16),
-                    border: Border.all(color: scheme.border),
-                    boxShadow: [scheme.shadowBox],
-                  ),
-                  child: Row(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Container(
-                        padding: const EdgeInsets.all(10),
-                        decoration: BoxDecoration(
-                          color: n.color.withValues(alpha: 0.15),
-                          shape: BoxShape.circle,
-                        ),
-                        child: Icon(n.icon, size: 22, color: n.color),
-                      ),
-                      const SizedBox(width: 14),
-                      Expanded(
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Row(
-                              children: [
-                                Expanded(
-                                  child: Text(
-                                    n.title,
-                                    style: GoogleFonts.spaceGrotesk(
-                                      fontWeight: FontWeight.w700,
-                                      fontSize: 15,
-                                      color: scheme.chipFg,
-                                    ),
-                                  ),
-                                ),
-                                Text(
-                                  n.time,
-                                  style: TextStyle(
-                                    fontSize: 11,
-                                    color: scheme.muted,
-                                  ),
-                                ),
-                              ],
+              if (_loading && _items.isEmpty)
+                const PacerLoading()
+              else if (visible.isEmpty)
+                PacerEmptyState(
+                  S.noNotificationsEmpty,
+                  icon: Icons.notifications_none_outlined,
+                )
+              else
+                for (final n in visible)
+                  Builder(
+                    builder: (context) {
+                      final (icon, color) = _styleForType(n.type, scheme);
+                      final timeLabel = n.createdAt == null
+                          ? ''
+                          : fmtDate(n.createdAt!);
+                      return InkWell(
+                        borderRadius: BorderRadius.circular(16),
+                        onTap: () => _openNotification(n),
+                        child: Container(
+                          margin: const EdgeInsets.only(bottom: 12),
+                          padding: const EdgeInsets.all(16),
+                          decoration: BoxDecoration(
+                            color: scheme.card,
+                            borderRadius: BorderRadius.circular(16),
+                            border: Border.all(
+                              color: n.isRead ? scheme.border : PacerColors.lime,
+                              width: n.isRead ? 1 : 1.4,
                             ),
-                            const SizedBox(height: 4),
-                            Text(
-                              n.body,
-                              style: TextStyle(
-                                fontSize: 13,
-                                color: scheme.bodyGray,
-                                height: 1.4,
+                            boxShadow: [scheme.shadowBox],
+                          ),
+                          child: Row(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Container(
+                                padding: const EdgeInsets.all(10),
+                                decoration: BoxDecoration(
+                                  color: color.withValues(alpha: 0.16),
+                                  shape: BoxShape.circle,
+                                ),
+                                child: Icon(icon, size: 22, color: color),
                               ),
-                            ),
-                          ],
+                              const SizedBox(width: 14),
+                              Expanded(
+                                child: Column(
+                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                  children: [
+                                    Row(
+                                      children: [
+                                        if (!n.isRead)
+                                          Container(
+                                            width: 8,
+                                            height: 8,
+                                            margin: const EdgeInsets.only(
+                                              right: 6,
+                                            ),
+                                            decoration: const BoxDecoration(
+                                              color: PacerColors.lime,
+                                              shape: BoxShape.circle,
+                                            ),
+                                          ),
+                                        Expanded(
+                                          child: Text(
+                                            n.title,
+                                            style: GoogleFonts.spaceGrotesk(
+                                              fontWeight: FontWeight.w700,
+                                              fontSize: 15,
+                                              color: scheme.chipFg,
+                                            ),
+                                          ),
+                                        ),
+                                        if (timeLabel.isNotEmpty) ...[
+                                          const SizedBox(width: 8),
+                                          Text(
+                                            timeLabel,
+                                            style: TextStyle(
+                                              fontSize: 11,
+                                              color: scheme.muted,
+                                            ),
+                                          ),
+                                        ],
+                                      ],
+                                    ),
+                                    const SizedBox(height: 4),
+                                    Text(
+                                      n.body,
+                                      style: TextStyle(
+                                        fontSize: 13,
+                                        color: scheme.bodyGray,
+                                        height: 1.4,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
                         ),
-                      ),
-                    ],
+                      );
+                    },
                   ),
-                ),
             ],
           ),
         ),

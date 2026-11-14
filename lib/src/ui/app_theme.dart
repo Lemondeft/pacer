@@ -315,45 +315,45 @@ class PacerScheme {
 
   static const light = PacerScheme(
     brightness: Brightness.light,
-    scaffold: Colors.white,
-    card: Colors.white,
-    authField: Colors.white,
-    formField: PacerColors.formBg,
-    searchBg: PacerColors.slate50,
-    ink: PacerColors.ink,
-    deepInk: Color(0xFF0B1C30),
-    headline: PacerColors.navy,
-    chipFg: Color(0xFF181C22),
-    muted: PacerColors.slate700,
-    soft: PacerColors.slate500,
-    bodyGray: Color(0xFF444749),
-    formMuted: PacerColors.formText,
-    subtle: Colors.black54,
-    overlay: Color(0x99000000),
-    hint: PacerColors.hintInk,
-    border: PacerColors.border,
-    softBorder: PacerColors.slate200,
-    hairline: Color(0xFFE5E8F1),
-    chipBorder: Color(0xFFC4C7C8),
-    formEdge: PacerColors.formBorder,
+    scaffold: Color(0xFFE8EEF5),
+    card: Color(0xFFF3F7FC),
+    authField: Color(0xFFF1F5FA),
+    formField: Color(0xFFF1F5FA),
+    searchBg: Color(0xFFDCE5F0),
+    ink: Color(0xFF16202E),
+    deepInk: Color(0xFF0E1824),
+    headline: Color(0xFF132238),
+    chipFg: Color(0xFF182433),
+    muted: Color(0xFF4E6075),
+    soft: Color(0xFF60738A),
+    bodyGray: Color(0xFF3E4F65),
+    formMuted: Color(0xFF53657B),
+    subtle: Color(0x9916202E),
+    overlay: Color(0x990B1420),
+    hint: Color(0x99253447),
+    border: Color(0xFFC9D6E6),
+    softBorder: Color(0xFFD3DFEC),
+    hairline: Color(0xFFD8E2EE),
+    chipBorder: Color(0xFFB9C8DA),
+    formEdge: Color(0xFFBFD0E2),
     error: PacerColors.errorRed,
     timeRed: PacerColors.timeRed,
     paceOrange: PacerColors.paceOrange,
-    success: PacerColors.chipGreen,
-    accent: PacerColors.primary,
-    runCard: PacerColors.runCardBg,
-    chatBubble: Color(0xFFF2F3FF),
-    navBar: PacerColors.bottomBar,
-    navIcon: Colors.white,
-    emptyIcon: PacerColors.slate200,
-    mapBtnB: PacerColors.slate50,
-    finishTop: PacerColors.slate100,
-    finishBottom: PacerColors.slate200,
-    gridLine: Color(0xFFCBD5E1),
-    chipSelBg: Colors.black,
-    chipSelFg: Colors.white,
-    editBg: PacerColors.navy,
-    streakCardBg: PacerColors.navy,
+    success: Color(0xFF0E7A56),
+    accent: Color(0xFF1C64D1),
+    runCard: Color(0xFFEDF4FB),
+    chatBubble: Color(0xFFE4ECF7),
+    navBar: Color(0xFFDCE6F2),
+    navIcon: Color(0xFF2B3A4D),
+    emptyIcon: Color(0xFFCAD7E6),
+    mapBtnB: Color(0xFFEDF3FA),
+    finishTop: Color(0xFFE5EDF7),
+    finishBottom: Color(0xFFD3E0EE),
+    gridLine: Color(0xFFC5D3E3),
+    chipSelBg: Color(0xFF16202E),
+    chipSelFg: Color(0xFFF3F7FC),
+    editBg: Color(0xFF16202E),
+    streakCardBg: Color(0xFFDDEAF8),
   );
 
   static const dark = PacerScheme(
@@ -411,10 +411,14 @@ class PacerScheme {
 
   bool get isDark => brightness == Brightness.dark;
 
+  List<Color> get heroCardGradient => isDark
+      ? const [PacerColors.teamShade, PacerColors.streakBg]
+      : const [Color(0xFF2855C7), Color(0xFF4748B8)];
+
   BoxShadow get shadowBox => BoxShadow(
-    color: isDark ? PacerDark.shadow : const Color(0x0D000000),
-    blurRadius: 2,
-    offset: const Offset(0, 1),
+    color: isDark ? PacerDark.shadow : const Color(0x1416243D),
+    blurRadius: isDark ? 2 : 10,
+    offset: Offset(0, isDark ? 1 : 3),
   );
 }
 
@@ -431,38 +435,57 @@ class PacerTheme {
   );
 
   static ThemeData light() {
+    final scheme = PacerScheme.light;
     return ThemeData(
       useMaterial3: true,
       pageTransitionsTheme: _pageTransitions,
-      scaffoldBackgroundColor: Colors.white,
+      scaffoldBackgroundColor: scheme.scaffold,
       textTheme: TextTheme(
-        displaySmall: PacerText.authTitle,
-        headlineLarge: PacerText.pageTitle,
+        displaySmall: PacerText.authTitle.copyWith(color: scheme.ink),
+        headlineLarge: PacerText.pageTitle.copyWith(color: scheme.ink),
         headlineSmall: GoogleFonts.outfit(
           fontWeight: FontWeight.w700,
           fontSize: 24,
-          color: PacerColors.ink,
+          color: scheme.ink,
         ),
         titleMedium: GoogleFonts.outfit(
           fontWeight: FontWeight.w500,
           fontSize: 20,
-          color: PacerColors.ink,
+          color: scheme.ink,
         ),
-        bodyMedium: GoogleFonts.outfit(fontSize: 15, color: PacerColors.ink),
-        labelSmall: GoogleFonts.outfit(fontSize: 12, color: PacerColors.ink),
+        bodyMedium: GoogleFonts.outfit(fontSize: 15, color: scheme.ink),
+        labelSmall: GoogleFonts.outfit(fontSize: 12, color: scheme.ink),
       ),
       colorScheme: ColorScheme.fromSeed(
         seedColor: PacerColors.primary,
-        primary: PacerColors.primary,
+        primary: scheme.accent,
+        surface: scheme.card,
+      ),
+      cardTheme: CardThemeData(
+        color: scheme.card,
+        surfaceTintColor: Colors.transparent,
+      ),
+      dialogTheme: DialogThemeData(
+        backgroundColor: scheme.card,
+        surfaceTintColor: Colors.transparent,
+      ),
+      bottomSheetTheme: BottomSheetThemeData(
+        backgroundColor: scheme.card,
+        surfaceTintColor: Colors.transparent,
+      ),
+      appBarTheme: AppBarTheme(
+        backgroundColor: scheme.scaffold,
+        foregroundColor: scheme.ink,
+        surfaceTintColor: Colors.transparent,
       ),
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
-        fillColor: Colors.white,
-        hintStyle: PacerText.hint,
+        fillColor: scheme.authField,
+        hintStyle: PacerText.hint.copyWith(color: scheme.hint),
         border: OutlineInputBorder(borderRadius: BorderRadius.circular(5)),
         enabledBorder: OutlineInputBorder(
           borderRadius: BorderRadius.circular(5),
-          borderSide: const BorderSide(color: PacerColors.border),
+          borderSide: BorderSide(color: scheme.border),
         ),
         contentPadding: const EdgeInsets.symmetric(
           horizontal: 44,
@@ -472,7 +495,7 @@ class PacerTheme {
       elevatedButtonTheme: ElevatedButtonThemeData(
         style: ElevatedButton.styleFrom(
           backgroundColor: PacerColors.primary,
-          foregroundColor: PacerColors.ink,
+          foregroundColor: scheme.ink,
           minimumSize: const Size(315, 50),
           shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(5)),
           textStyle: PacerText.button,

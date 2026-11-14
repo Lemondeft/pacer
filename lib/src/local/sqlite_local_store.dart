@@ -11,6 +11,7 @@ import 'package:pacer/src/leaderboard/leaderboard_model.dart';
 import 'package:pacer/src/local/local_helpers.dart';
 import 'package:pacer/src/local/local_models.dart';
 import 'package:pacer/src/local/local_store.dart';
+import 'package:pacer/src/notifications/notification_model.dart';
 import 'package:pacer/src/teams/team_model.dart';
 
 /// Relational SQLite implementation of [LocalStore] for Android, Linux,
@@ -20,7 +21,7 @@ class SqliteLocalStore implements LocalStore {
 
   SqliteLocalStore._(this._db);
 
-  static const int schemaVersion = 1;
+  static const int schemaVersion = 3;
 
   /// Opens or creates the offline SQLite database at [path] (or
   /// `inMemoryDatabasePath` in tests) using the supplied [factory].
@@ -39,9 +40,46 @@ class SqliteLocalStore implements LocalStore {
           await db.execute('PRAGMA foreign_keys = ON');
         },
         onCreate: (db, version) async => _createSchema(db),
+        onUpgrade: (db, oldVersion, newVersion) async {
+          if (oldVersion < 2) {
+            await _addColumnIfMissing(db, 'teams', 'member_count', 'INTEGER');
+            await _addColumnIfMissing(db, 'team_rosters', 'joined_at', 'TEXT');
+          }
+          if (oldVersion < 3) {
+            await _addColumnIfMissing(
+              db,
+              'activities',
+              'challenge_ids_json',
+              'TEXT',
+            );
+            await _addColumnIfMissing(db, 'challenges', 'team_id', 'TEXT');
+            await _addColumnIfMissing(db, 'challenges', 'judul', 'TEXT');
+            await _addColumnIfMissing(
+              db,
+              'challenge_participations',
+              'is_active',
+              'INTEGER NOT NULL DEFAULT 1',
+            );
+            await _createNotificationsTable(db);
+          }
+        },
       ),
     );
     return SqliteLocalStore._(db);
+  }
+
+  static Future<void> _addColumnIfMissing(
+    Database db,
+    String table,
+    String column,
+    String typeDef,
+  ) async {
+    final info = await db.rawQuery('PRAGMA table_info($table)');
+    if (info.isEmpty) return;
+    final exists = info.any((r) => r['name'] == column);
+    if (!exists) {
+      await db.execute('ALTER TABLE $table ADD COLUMN $column $typeDef');
+    }
   }
 
   static Future<void> _createSchema(Database db) async {
@@ -69,6 +107,7 @@ class SqliteLocalStore implements LocalStore {
         selesai_at TEXT,
         durasi_s INTEGER,
         jarak_m REAL,
+        challenge_ids_json TEXT,
         status TEXT NOT NULL,
         sync_state TEXT NOT NULL,
         statistik_applied INTEGER NOT NULL DEFAULT 0,
@@ -118,6 +157,7 @@ class SqliteLocalStore implements LocalStore {
         dibuat_oleh TEXT,
         is_private INTEGER NOT NULL DEFAULT 1,
         invite_code TEXT,
+        member_count INTEGER,
         created_at TEXT,
         is_mine INTEGER NOT NULL DEFAULT 0,
         updated_at TEXT NOT NULL,
@@ -133,6 +173,7 @@ class SqliteLocalStore implements LocalStore {
         nama TEXT NOT NULL,
         peran TEXT NOT NULL,
         app_peran TEXT NOT NULL,
+        joined_at TEXT,
         updated_at TEXT NOT NULL,
         PRIMARY KEY (owner_user_id, team_id, member_user_id)
       )
@@ -142,6 +183,8 @@ class SqliteLocalStore implements LocalStore {
         user_id TEXT NOT NULL,
         id TEXT NOT NULL,
         dibuat_oleh TEXT,
+        team_id TEXT,
+        judul TEXT,
         jenis TEXT NOT NULL,
         target_nilai REAL NOT NULL,
         target_satuan TEXT NOT NULL,
@@ -160,11 +203,13 @@ class SqliteLocalStore implements LocalStore {
         id TEXT NOT NULL,
         progress_nilai REAL NOT NULL DEFAULT 0,
         berhasil INTEGER NOT NULL DEFAULT 0,
+        is_active INTEGER NOT NULL DEFAULT 1,
         created_at TEXT,
         sync_state TEXT NOT NULL DEFAULT 'synced',
         PRIMARY KEY (user_id, challenge_id)
       )
     ''');
+    await _createNotificationsTable(db);
     await db.execute('''
       CREATE TABLE leaderboards (
         user_id TEXT NOT NULL,
@@ -247,6 +292,26 @@ class SqliteLocalStore implements LocalStore {
     ''');
     await db.execute(
       'CREATE INDEX idx_outbox_pending ON sync_outbox (user_id, status, next_retry_at, id)',
+    );
+  }
+
+  static Future<void> _createNotificationsTable(Database db) async {
+    await db.execute('''
+      CREATE TABLE IF NOT EXISTS user_notifications (
+        user_id TEXT NOT NULL,
+        id TEXT NOT NULL,
+        type TEXT NOT NULL,
+        title TEXT NOT NULL,
+        body TEXT NOT NULL,
+        challenge_id TEXT,
+        team_id TEXT,
+        is_read INTEGER NOT NULL DEFAULT 0,
+        created_at TEXT,
+        PRIMARY KEY (user_id, id)
+      )
+    ''');
+    await db.execute(
+      'CREATE INDEX IF NOT EXISTS idx_user_notifications_user ON user_notifications (user_id, is_read, created_at DESC)',
     );
   }
 
@@ -576,6 +641,7 @@ class SqliteLocalStore implements LocalStore {
     required int durasiS,
     required double jarakM,
     required List<RutePoint> allPoints,
+    List<String>? challengeIds,
   }) async {
     final activity = Activity(
       id: id,
@@ -585,10 +651,11 @@ class SqliteLocalStore implements LocalStore {
       selesaiAt: selesaiAt.toUtc(),
       durasiS: durasiS,
       jarakM: jarakM,
+      challengeIds: challengeIds,
     );
     await _db.transaction((txn) async {
       await txn.insert('activities', {
-        ...activity.toJson(),
+        ..._activityToSqliteRow(activity),
         'status': 'finished',
         'sync_state': 'pending',
         'statistik_applied': 0,
@@ -663,7 +730,7 @@ class SqliteLocalStore implements LocalStore {
       for (final a in remote) {
         if (protectedIds.contains(a.id)) continue;
         batch.insert('activities', {
-          ...a.toJson(),
+          ..._activityToSqliteRow(a),
           'status': 'finished',
           'sync_state': 'synced',
           'statistik_applied': 1,
@@ -839,6 +906,7 @@ class SqliteLocalStore implements LocalStore {
     String userId,
     List<Team> teams, {
     required bool isMine,
+    bool replaceAll = false,
   }) async {
     await _db.transaction((txn) async {
       final now = _nowIso();
@@ -852,7 +920,7 @@ class SqliteLocalStore implements LocalStore {
       }
       final existing = await txn.query(
         'teams',
-        columns: ['id', 'is_mine'],
+        columns: ['id', 'is_mine', 'member_count'],
         where: 'user_id = ?',
         whereArgs: [userId],
       );
@@ -860,6 +928,22 @@ class SqliteLocalStore implements LocalStore {
         for (final r in existing)
           r['id'] as String: (r['is_mine'] as int? ?? 0) == 1,
       };
+      final prevCounts = {
+        for (final r in existing)
+          r['id'] as String: (r['member_count'] as num?)?.toInt(),
+      };
+      if (replaceAll) {
+        final keepIds = teams.map((t) => t.id).toSet();
+        for (final id in prevMine.keys) {
+          if (!keepIds.contains(id)) {
+            await txn.delete(
+              'teams',
+              where: 'user_id = ? AND id = ?',
+              whereArgs: [userId, id],
+            );
+          }
+        }
+      }
       final batch = txn.batch();
       for (final t in teams) {
         batch.insert('teams', {
@@ -870,6 +954,7 @@ class SqliteLocalStore implements LocalStore {
           'dibuat_oleh': t.dibuatOleh,
           'is_private': t.isPrivate ? 1 : 0,
           'invite_code': t.inviteCode,
+          'member_count': t.memberCount ?? prevCounts[t.id],
           'created_at': t.createdAt?.toUtc().toIso8601String(),
           'is_mine': (isMine || (prevMine[t.id] ?? false)) ? 1 : 0,
           'updated_at': now,
@@ -902,10 +987,60 @@ class SqliteLocalStore implements LocalStore {
   }
 
   @override
+  Future<void> deleteTeamLocal(String userId, String teamId) async {
+    await _db.transaction((txn) async {
+      await txn.delete(
+        'teams',
+        where: 'user_id = ? AND id = ?',
+        whereArgs: [userId, teamId],
+      );
+      await txn.delete(
+        'team_rosters',
+        where: 'owner_user_id = ? AND team_id = ?',
+        whereArgs: [userId, teamId],
+      );
+    });
+  }
+
+  @override
+  Future<void> setTeamMembershipLocal(
+    String userId,
+    String teamId, {
+    bool? isMine,
+    int memberCountDelta = 0,
+  }) async {
+    await _db.transaction((txn) async {
+      final rows = await txn.query(
+        'teams',
+        columns: ['member_count'],
+        where: 'user_id = ? AND id = ?',
+        whereArgs: [userId, teamId],
+        limit: 1,
+      );
+      if (rows.isEmpty) return;
+      final cur = (rows.first['member_count'] as num?)?.toInt();
+      final nextCount = cur == null
+          ? null
+          : (cur + memberCountDelta).clamp(0, 1000000);
+      if (isMine == null && cur == null) return;
+      await txn.update(
+        'teams',
+        {
+          if (isMine != null) 'is_mine': isMine ? 1 : 0,
+          if (cur != null) 'member_count': nextCount,
+          'updated_at': _nowIso(),
+        },
+        where: 'user_id = ? AND id = ?',
+        whereArgs: [userId, teamId],
+      );
+    });
+  }
+
+  @override
   Future<void> saveTeamRoster(
     String userId,
     String teamId,
-    List<({String userId, String nama, String peran, String appPeran})> roster,
+    List<TeamRosterMember> roster,
   ) async {
     await _db.transaction((txn) async {
       await txn.delete(
@@ -926,6 +1061,7 @@ class SqliteLocalStore implements LocalStore {
           'nama': r.nama,
           'peran': r.peran,
           'app_peran': r.appPeran,
+          'joined_at': r.joinedAt?.toUtc().toIso8601String(),
           'updated_at': now,
         }, conflictAlgorithm: ConflictAlgorithm.replace);
       }
@@ -934,7 +1070,7 @@ class SqliteLocalStore implements LocalStore {
   }
 
   @override
-  Future<List<({String userId, String nama, String peran, String appPeran})>>
+  Future<List<TeamRosterMember>>
   getTeamRoster(String userId, String teamId) async {
     final rows = await _db.query(
       'team_rosters',
@@ -944,11 +1080,12 @@ class SqliteLocalStore implements LocalStore {
     );
     return [
       for (final r in rows)
-        (
+        TeamRosterMember(
           userId: r['member_user_id'] as String,
           nama: r['nama'] as String,
           peran: r['peran'] as String,
           appPeran: r['app_peran'] as String,
+          joinedAt: DateTime.tryParse(r['joined_at'] as String? ?? ''),
         ),
     ];
   }
@@ -1005,6 +1142,8 @@ class SqliteLocalStore implements LocalStore {
           'user_id': userId,
           'id': c.id,
           'dibuat_oleh': c.dibuatOleh,
+          'team_id': c.teamId,
+          'judul': c.judul,
           'jenis': c.jenis,
           'target_nilai': c.targetNilai,
           'target_satuan': c.targetSatuan,
@@ -1044,13 +1183,15 @@ class SqliteLocalStore implements LocalStore {
     await _db.transaction((txn) async {
       final pendingRows = await txn.query(
         'sync_outbox',
-        where: 'user_id = ? AND op_type IN (?, ?) AND status != ?',
+        where: 'user_id = ? AND op_type IN (?, ?, ?) AND status != ?',
         whereArgs: [
           userId,
           OutboxOp.joinChallenge,
           OutboxOp.leaveChallenge,
+          OutboxOp.activateChallenge,
           'synced',
         ],
+        orderBy: 'id ASC',
       );
       final pendingLeaveIds = <String>{
         for (final p in pendingRows)
@@ -1062,6 +1203,11 @@ class SqliteLocalStore implements LocalStore {
           if (p['op_type'] == OutboxOp.joinChallenge)
             p['entity_id'] as String: p,
       };
+      final pendingActivateIds = <String>[
+        for (final p in pendingRows)
+          if (p['op_type'] == OutboxOp.activateChallenge)
+            p['entity_id'] as String,
+      ];
 
       await txn.delete(
         'challenge_participations',
@@ -1080,12 +1226,15 @@ class SqliteLocalStore implements LocalStore {
           'id': item.id,
           'progress_nilai': item.progressNilai,
           'berhasil': item.berhasil ? 1 : 0,
+          'is_active': item.berhasil ? 0 : (item.isActive ? 1 : 0),
           'created_at': item.createdAt?.toUtc().toIso8601String(),
           'sync_state': 'synced',
         }, conflictAlgorithm: ConflictAlgorithm.replace);
       }
+      final newPendingJoinIds = <String>[];
       for (final entry in pendingJoinRows.entries) {
         if (inserted.contains(entry.key)) continue;
+        newPendingJoinIds.add(entry.key);
         final payload = jsonDecode(entry.value['payload_json'] as String) as Map;
         batch.insert('challenge_participations', {
           'user_id': userId,
@@ -1093,6 +1242,7 @@ class SqliteLocalStore implements LocalStore {
           'id': payload['id'] as String? ?? entry.key,
           'progress_nilai': 0.0,
           'berhasil': 0,
+          'is_active': 1,
           'created_at':
               payload['created_at'] as String? ??
               entry.value['created_at'] as String?,
@@ -1100,6 +1250,12 @@ class SqliteLocalStore implements LocalStore {
         }, conflictAlgorithm: ConflictAlgorithm.replace);
       }
       await batch.commit(noResult: true);
+      for (final cid in newPendingJoinIds) {
+        await _applyActivationSlotTxn(txn, userId, cid);
+      }
+      for (final cid in pendingActivateIds) {
+        await _applyActivationSlotTxn(txn, userId, cid);
+      }
     });
   }
 
@@ -1117,6 +1273,7 @@ class SqliteLocalStore implements LocalStore {
         PartisipasiChallenge.fromJson({
           ...r,
           'berhasil': (r['berhasil'] as int? ?? 0) == 1,
+          'is_active': (r['is_active'] as int? ?? 1) == 1,
         }),
     ];
     final challenges = await getChallenges(userId);
@@ -1150,9 +1307,11 @@ class SqliteLocalStore implements LocalStore {
         'id': p.id,
         'progress_nilai': 0.0,
         'berhasil': 0,
+        'is_active': 1,
         'created_at': p.createdAt!.toIso8601String(),
         'sync_state': 'pending',
       }, conflictAlgorithm: ConflictAlgorithm.replace);
+      await _applyActivationSlotTxn(txn, userId, challengeId);
 
       await txn.delete(
         'sync_outbox',
@@ -1180,6 +1339,87 @@ class SqliteLocalStore implements LocalStore {
       });
     });
     return p;
+  }
+
+  @override
+  Future<List<PartisipasiChallenge>> queueActivateChallenge(
+    String userId,
+    String challengeId,
+  ) async {
+    await _db.transaction((txn) async {
+      await _applyActivationSlotTxn(txn, userId, challengeId);
+      await txn.delete(
+        'sync_outbox',
+        where: 'user_id = ? AND entity_id = ? AND op_type = ? AND status = ?',
+        whereArgs: [
+          userId,
+          challengeId,
+          OutboxOp.activateChallenge,
+          'pending',
+        ],
+      );
+      await txn.insert('sync_outbox', {
+        'user_id': userId,
+        'op_type': OutboxOp.activateChallenge,
+        'entity_id': challengeId,
+        'payload_json': jsonEncode({'challenge_id': challengeId}),
+        'status': 'pending',
+        'attempts': 0,
+        'created_at': _nowIso(),
+      });
+    });
+    return getParticipations(userId);
+  }
+
+  Future<void> _applyActivationSlotTxn(
+    DatabaseExecutor txn,
+    String userId,
+    String challengeId,
+  ) async {
+    final partRows = await txn.query(
+      'challenge_participations',
+      columns: ['challenge_id', 'berhasil'],
+      where: 'user_id = ?',
+      whereArgs: [userId],
+    );
+    final targetRow = partRows
+        .where((r) => r['challenge_id'] == challengeId)
+        .firstOrNull;
+    if (targetRow == null || (targetRow['berhasil'] as int? ?? 0) == 1) {
+      return;
+    }
+
+    final chalRows = await txn.query(
+      'challenges',
+      columns: ['id', 'team_id'],
+      where: 'user_id = ?',
+      whereArgs: [userId],
+    );
+    final isTeamById = {
+      for (final c in chalRows)
+        c['id'] as String: ((c['team_id'] as String?) ?? '').isNotEmpty,
+    };
+    final targetIsTeam = isTeamById[challengeId] ?? false;
+
+    for (final row in partRows) {
+      final cid = row['challenge_id'] as String;
+      final done = (row['berhasil'] as int? ?? 0) == 1;
+      if (cid == challengeId) {
+        await txn.update(
+          'challenge_participations',
+          {'is_active': 1},
+          where: 'user_id = ? AND challenge_id = ?',
+          whereArgs: [userId, cid],
+        );
+      } else if (!done && (isTeamById[cid] ?? false) == targetIsTeam) {
+        await txn.update(
+          'challenge_participations',
+          {'is_active': 0},
+          where: 'user_id = ? AND challenge_id = ?',
+          whereArgs: [userId, cid],
+        );
+      }
+    }
   }
 
   @override
@@ -1218,6 +1458,7 @@ class SqliteLocalStore implements LocalStore {
       final cur = PartisipasiChallenge.fromJson({
         ...r,
         'berhasil': (r['berhasil'] as int? ?? 0) == 1,
+        'is_active': (r['is_active'] as int? ?? 1) == 1,
       });
       final updated = applyActivityDeltaToBaseline(
         baseline: cur,
@@ -1226,12 +1467,14 @@ class SqliteLocalStore implements LocalStore {
         sign: sign,
       );
       if (updated.progressNilai != cur.progressNilai ||
-          updated.berhasil != cur.berhasil) {
+          updated.berhasil != cur.berhasil ||
+          updated.isActive != cur.isActive) {
         await txn.update(
           'challenge_participations',
           {
             'progress_nilai': updated.progressNilai,
             'berhasil': updated.berhasil ? 1 : 0,
+            'is_active': updated.isActive ? 1 : 0,
           },
           where: 'user_id = ? AND challenge_id = ?',
           whereArgs: [userId, cur.challengeId],
@@ -1747,8 +1990,20 @@ class SqliteLocalStore implements LocalStore {
     });
   }
 
+  Map<String, Object?> _activityToSqliteRow(Activity a) {
+    final json = Map<String, Object?>.from(a.toJson());
+    json.remove('challenge_ids');
+    json['challenge_ids_json'] =
+        a.challengeIds == null ? null : jsonEncode(a.challengeIds);
+    return json;
+  }
+
   LocalActivity _localActivityFromRow(Map<String, Object?> row) {
     final map = Map<String, dynamic>.from(row);
+    final rawChallengeIds = map.remove('challenge_ids_json') as String?;
+    if (rawChallengeIds != null) {
+      map['challenge_ids'] = jsonDecode(rawChallengeIds) as List;
+    }
     return LocalActivity(
       activity: Activity.fromJson(map),
       status: parseRunStatus(row['status'] as String?),
@@ -1782,6 +2037,76 @@ class SqliteLocalStore implements LocalStore {
       lastError: row['last_error'] as String?,
       createdAt:
           DateTime.tryParse(row['created_at'] as String? ?? '') ?? DateTime.now().toUtc(),
+    );
+  }
+
+  @override
+  Future<void> saveNotifications(
+    String userId,
+    List<AppNotification> items,
+  ) async {
+    await _db.transaction((txn) async {
+      await txn.delete(
+        'user_notifications',
+        where: 'user_id = ?',
+        whereArgs: [userId],
+      );
+      if (items.isEmpty) return;
+      final batch = txn.batch();
+      for (final item in items) {
+        batch.insert('user_notifications', {
+          'user_id': userId,
+          'id': item.id,
+          'type': item.type,
+          'title': item.title,
+          'body': item.body,
+          'challenge_id': item.challengeId,
+          'team_id': item.teamId,
+          'is_read': item.isRead ? 1 : 0,
+          'created_at': item.createdAt?.toUtc().toIso8601String(),
+        }, conflictAlgorithm: ConflictAlgorithm.replace);
+      }
+      await batch.commit(noResult: true);
+    });
+  }
+
+  @override
+  Future<List<AppNotification>> getNotifications(String userId) async {
+    final rows = await _db.query(
+      'user_notifications',
+      where: 'user_id = ?',
+      whereArgs: [userId],
+      orderBy: 'created_at DESC',
+    );
+    return [
+      for (final r in rows)
+        AppNotification.fromJson({
+          ...r,
+          'is_read': (r['is_read'] as int? ?? 0) == 1,
+        }),
+    ];
+  }
+
+  @override
+  Future<void> markNotificationReadLocal(
+    String userId,
+    String notificationId,
+  ) async {
+    await _db.update(
+      'user_notifications',
+      {'is_read': 1},
+      where: 'user_id = ? AND id = ?',
+      whereArgs: [userId, notificationId],
+    );
+  }
+
+  @override
+  Future<void> markAllNotificationsReadLocal(String userId) async {
+    await _db.update(
+      'user_notifications',
+      {'is_read': 1},
+      where: 'user_id = ?',
+      whereArgs: [userId],
     );
   }
 

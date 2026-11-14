@@ -33,6 +33,40 @@ class TeamRepository {
     return id;
   }
 
+  Future<void> _expireTeamSyncMeta(String userId, {String? teamId}) async {
+    final epoch = DateTime.fromMillisecondsSinceEpoch(0, isUtc: true);
+    await _store.setSyncTimestamp('teams_my_$userId', epoch);
+    await _store.setSyncTimestamp('teams_list_$userId', epoch);
+    if (teamId != null) {
+      await _store.setSyncTimestamp('team_${userId}_$teamId', epoch);
+      await _store.setSyncTimestamp('team_roster_${userId}_$teamId', epoch);
+    }
+  }
+
+  Future<Map<String, int>> _fetchMemberCounts() async {
+    final c = _client;
+    if (c == null || c.auth.currentUser == null) return const {};
+    try {
+      final raw = await c.rpc('get_team_member_counts');
+      final rows = raw is List ? raw : (raw == null ? const [] : [raw]);
+      final counts = <String, int>{};
+      for (final item in rows) {
+        final row = Map<String, dynamic>.from(item as Map);
+        final id = row['team_id'] as String?;
+        final n = (row['member_count'] as num?)?.toInt();
+        if (id != null && n != null) counts[id] = n;
+      }
+      return counts;
+    } catch (_) {
+      return const {};
+    }
+  }
+
+  List<Team> _mergeCounts(List<Team> teams, Map<String, int> counts) => [
+    for (final t in teams)
+      counts.containsKey(t.id) ? t.copyWith(memberCount: counts[t.id]) : t,
+  ];
+
   Future<Team> createTeam({
     required String nama,
     double? targetNilai,
@@ -47,8 +81,11 @@ class TeamRepository {
     };
     if (targetNilai != null) payload['target_nilai'] = targetNilai;
     final row = await c.from('teams').insert(payload).select().single();
-    final team = Team.fromJson(Map<String, dynamic>.from(row));
+    final team = Team.fromJson(
+      Map<String, dynamic>.from(row),
+    ).copyWith(memberCount: 1);
     await _store.saveTeams(userId, [team], isMine: true);
+    await _expireTeamSyncMeta(userId, teamId: team.id);
     PacerCache.instance.invalidatePrefix('teams_');
     return team;
   }
@@ -57,13 +94,15 @@ class TeamRepository {
     String id, {
     String? nama,
     double? targetNilai,
+    bool? isPrivate,
   }) async {
     final c = _requireClient();
     final payload = <String, dynamic>{};
     if (nama != null) payload['nama'] = nama;
     if (targetNilai != null) payload['target_nilai'] = targetNilai;
+    if (isPrivate != null) payload['is_private'] = isPrivate;
     if (payload.isEmpty) {
-      throw ArgumentError('updateTeam needs nama or targetNilai to change.');
+      throw ArgumentError('updateTeam needs at least one field to change.');
     }
     final row = await c
         .from('teams')
@@ -71,18 +110,30 @@ class TeamRepository {
         .eq('id', id)
         .select()
         .single();
+    final updated = Team.fromJson(Map<String, dynamic>.from(row));
+    final uid = c.auth.currentUser?.id;
+    if (uid != null) {
+      await _store.saveTeams(uid, [updated], isMine: false);
+      await _expireTeamSyncMeta(uid, teamId: id);
+    }
     PacerCache.instance.invalidate('team_$id');
     PacerCache.instance.invalidatePrefix('teams_');
-    return Team.fromJson(Map<String, dynamic>.from(row));
+    return updated;
   }
 
   Future<void> deleteTeam(String id) async {
-    await _requireClient().from('teams').delete().eq('id', id);
+    final c = _requireClient();
+    await c.from('teams').delete().eq('id', id);
+    final uid = c.auth.currentUser?.id;
+    if (uid != null) {
+      await _store.deleteTeamLocal(uid, id);
+      await _expireTeamSyncMeta(uid, teamId: id);
+    }
     PacerCache.instance.invalidate('team_$id');
     PacerCache.instance.invalidatePrefix('teams_');
   }
 
-  /// All teams, newest first (cached locally via SWR for offline browsing).
+  /// All visible teams, newest first (cached locally via SWR for offline browsing).
   Future<List<Team>> listTeams({bool forceRefresh = false}) async {
     final userId = await resolveActiveUserId(client: _client, store: _store);
     if (userId == null) throw StateError('No signed-in user.');
@@ -95,14 +146,16 @@ class TeamRepository {
       staleAfter: const Duration(minutes: 3),
       readLocal: () => _store.getTeams(userId),
       fetchRemote: () async {
+        final countsFuture = _fetchMemberCounts();
         final rows = await c!
             .from('teams')
             .select()
             .order('created_at', ascending: false);
-        final list = [
+        final counts = await countsFuture;
+        final list = _mergeCounts([
           for (final row in rows) Team.fromJson(Map<String, dynamic>.from(row)),
-        ];
-        await _store.saveTeams(userId, list, isMine: false);
+        ], counts);
+        await _store.saveTeams(userId, list, isMine: false, replaceAll: true);
         return list;
       },
       writeLocal: (_) async {},
@@ -123,9 +176,14 @@ class TeamRepository {
       staleAfter: const Duration(minutes: 3),
       readLocal: () => _store.getTeam(userId, id),
       fetchRemote: () async {
+        final countsFuture = _fetchMemberCounts();
         final row = await c!.from('teams').select().eq('id', id).maybeSingle();
+        final counts = await countsFuture;
         if (row == null) return null;
-        final team = Team.fromJson(Map<String, dynamic>.from(row));
+        var team = Team.fromJson(Map<String, dynamic>.from(row));
+        if (counts.containsKey(team.id)) {
+          team = team.copyWith(memberCount: counts[team.id]);
+        }
         await _store.saveTeams(userId, [team], isMine: false);
         return team;
       },
@@ -135,20 +193,45 @@ class TeamRepository {
   }
 
   Future<void> joinTeam(String teamId, String code) async {
-    await _requireClient().rpc(
+    final c = _requireClient();
+    await c.rpc(
       'join_team',
       params: {'p_team_id': teamId, 'p_code': code},
     );
+    final uid = c.auth.currentUser?.id;
+    if (uid != null) {
+      await _store.setTeamMembershipLocal(
+        uid,
+        teamId,
+        isMine: true,
+        memberCountDelta: 1,
+      );
+      await _expireTeamSyncMeta(uid, teamId: teamId);
+    }
     PacerCache.instance.invalidatePrefix('teams_my_');
+    PacerCache.instance.invalidatePrefix('teams_');
   }
 
   Future<String> joinByCode(String code) async {
-    final id = await _requireClient().rpc(
+    final c = _requireClient();
+    final id = await c.rpc(
       'join_team_by_code',
       params: {'p_code': code},
     );
+    final teamId = id as String;
+    final uid = c.auth.currentUser?.id;
+    if (uid != null) {
+      await _store.setTeamMembershipLocal(
+        uid,
+        teamId,
+        isMine: true,
+        memberCountDelta: 1,
+      );
+      await _expireTeamSyncMeta(uid, teamId: teamId);
+    }
     PacerCache.instance.invalidatePrefix('teams_my_');
-    return id as String;
+    PacerCache.instance.invalidatePrefix('teams_');
+    return teamId;
   }
 
   Future<String?> getInviteCode(String teamId) async {
@@ -168,21 +251,42 @@ class TeamRepository {
   }
 
   Future<void> leaveTeam(String teamId) async {
+    final uid = _requireLiveUserId();
     await _requireClient()
         .from('team_members')
         .delete()
         .eq('team_id', teamId)
-        .eq('user_id', _requireLiveUserId());
+        .eq('user_id', uid);
+    await _store.setTeamMembershipLocal(
+      uid,
+      teamId,
+      isMine: false,
+      memberCountDelta: -1,
+    );
+    await _expireTeamSyncMeta(uid, teamId: teamId);
     PacerCache.instance.invalidatePrefix('teams_my_');
+    PacerCache.instance.invalidatePrefix('teams_');
   }
 
   Future<void> removeMember(String teamId, String userId) async {
-    await _requireClient()
+    final c = _requireClient();
+    await c
         .from('team_members')
         .delete()
         .eq('team_id', teamId)
         .eq('user_id', userId);
+    final callerId = c.auth.currentUser?.id;
+    if (callerId != null) {
+      await _store.setTeamMembershipLocal(
+        callerId,
+        teamId,
+        isMine: callerId == userId ? false : null,
+        memberCountDelta: -1,
+      );
+      await _expireTeamSyncMeta(callerId, teamId: teamId);
+    }
     PacerCache.instance.invalidatePrefix('teams_my_');
+    PacerCache.instance.invalidatePrefix('teams_');
   }
 
   /// Teams the caller belongs to, newest first (offline-first SWR).
@@ -198,6 +302,7 @@ class TeamRepository {
       staleAfter: const Duration(minutes: 3),
       readLocal: () => _store.getTeams(userId, mineOnly: true),
       fetchRemote: () async {
+        final countsFuture = _fetchMemberCounts();
         final memberRows = await c!
             .from('team_members')
             .select('team_id')
@@ -212,9 +317,10 @@ class TeamRepository {
             .select()
             .inFilter('id', teamIds)
             .order('created_at', ascending: false);
-        final list = [
+        final counts = await countsFuture;
+        final list = _mergeCounts([
           for (final row in rows) Team.fromJson(Map<String, dynamic>.from(row)),
-        ];
+        ], counts);
         await _store.saveTeams(userId, list, isMine: true);
         return list;
       },
@@ -223,15 +329,15 @@ class TeamRepository {
     );
   }
 
-  /// Roster with display names + app roles (offline-first SWR).
-  Future<List<({String userId, String nama, String peran, String appPeran})>>
-  teamRoster(String teamId, {bool forceRefresh = false}) async {
+  /// Roster with display names, roles, and join date (offline-first SWR).
+  Future<List<TeamRosterMember>> teamRoster(
+    String teamId, {
+    bool forceRefresh = false,
+  }) async {
     final ownerId = await resolveActiveUserId(client: _client, store: _store);
     if (ownerId == null) throw StateError('No signed-in user.');
     final c = _client;
-    return offlineRead<
-      List<({String userId, String nama, String peran, String appPeran})>
-    >(
+    return offlineRead<List<TeamRosterMember>>(
       store: _store,
       syncKey: 'team_roster_${ownerId}_$teamId',
       forceRefresh: forceRefresh,
@@ -239,42 +345,121 @@ class TeamRepository {
       staleAfter: const Duration(minutes: 3),
       readLocal: () => _store.getTeamRoster(ownerId, teamId),
       fetchRemote: () async {
-        final rows = await c!
-            .from('team_members')
-            .select('user_id, peran, users!inner(nama,peran)')
-            .eq('team_id', teamId)
-            .order('created_at', ascending: true);
-        final roster = [
-          for (final raw in rows)
-            () {
-              final row = Map<String, dynamic>.from(raw as Map);
-              final uid = row['user_id'] as String;
-              final nested = row['users'];
-              final nestedMap = nested is Map
-                  ? nested
-                  : (nested is List && nested.isNotEmpty
-                        ? (nested.first as Map)
-                        : const <String, dynamic>{});
-              final nameRaw = nestedMap['nama'];
-              final roleRaw = nestedMap['peran'];
-              final nama = nameRaw is String && nameRaw.isNotEmpty
-                  ? nameRaw
-                  : (uid.length > 8 ? '${uid.substring(0, 8)}…' : uid);
-              final appPeran = roleRaw is String ? roleRaw : 'user';
-              return (
-                userId: uid,
-                nama: nama,
-                peran: row['peran'] as String? ?? 'anggota',
-                appPeran: appPeran,
-              );
-            }(),
-        ];
+        List<TeamRosterMember> roster;
+        try {
+          final raw = await c!.rpc(
+            'get_team_roster',
+            params: {'p_team_id': teamId},
+          );
+          final rows = raw is List ? raw : (raw == null ? const [] : [raw]);
+          roster = [
+            for (final item in rows)
+              () {
+                final m = TeamRosterMember.fromJson(
+                  Map<String, dynamic>.from(item as Map),
+                );
+                if (m.nama.isNotEmpty) return m;
+                final fallback = m.userId.length > 8
+                    ? '${m.userId.substring(0, 8)}…'
+                    : m.userId;
+                return TeamRosterMember(
+                  userId: m.userId,
+                  nama: fallback,
+                  peran: m.peran,
+                  appPeran: m.appPeran,
+                  joinedAt: m.joinedAt,
+                );
+              }(),
+          ];
+        } on PostgrestException catch (e) {
+          final code = (e.code ?? '').toUpperCase();
+          if (code != 'PGRST202' && code != '42883') rethrow;
+          final rows = await c!
+              .from('team_members')
+              .select('user_id, peran, created_at, users!inner(nama,peran)')
+              .eq('team_id', teamId)
+              .order('created_at', ascending: true);
+          roster = [
+            for (final raw in rows)
+              () {
+                final row = Map<String, dynamic>.from(raw as Map);
+                final uid = row['user_id'] as String;
+                final nested = row['users'];
+                final nestedMap = nested is Map
+                    ? nested
+                    : (nested is List && nested.isNotEmpty
+                          ? (nested.first as Map)
+                          : const <String, dynamic>{});
+                final nameRaw = nestedMap['nama'];
+                final roleRaw = nestedMap['peran'];
+                final nama = nameRaw is String && nameRaw.isNotEmpty
+                    ? nameRaw
+                    : (uid.length > 8 ? '${uid.substring(0, 8)}…' : uid);
+                final appPeran = roleRaw is String ? roleRaw : 'user';
+                final joinedRaw = row['created_at'] as String?;
+                return TeamRosterMember(
+                  userId: uid,
+                  nama: nama,
+                  peran: row['peran'] as String? ?? 'anggota',
+                  appPeran: appPeran,
+                  joinedAt:
+                      joinedRaw == null ? null : DateTime.tryParse(joinedRaw),
+                );
+              }(),
+          ];
+        }
         await _store.saveTeamRoster(ownerId, teamId, roster);
         return roster;
       },
       writeLocal: (_) async {},
       isEmpty: (r) => r.isEmpty,
     );
+  }
+
+  /// Aggregate weekly/total stats + membership flags for the Teams Dashboard.
+  Future<TeamDashboardStats?> getTeamDashboardStats(String teamId) async {
+    final c = _client;
+    if (c == null || c.auth.currentUser == null) return null;
+    try {
+      final raw = await c.rpc(
+        'get_team_dashboard_stats',
+        params: {'p_team_id': teamId},
+      );
+      final rows = raw is List ? raw : (raw == null ? const [] : [raw]);
+      if (rows.isEmpty || rows.first == null) return null;
+      return TeamDashboardStats.fromJson(
+        Map<String, dynamic>.from(rows.first as Map),
+      );
+    } on PostgrestException catch (e) {
+      final code = (e.code ?? '').toUpperCase();
+      if (code == 'PGRST202' || code == '42883') return null;
+      rethrow;
+    } catch (_) {
+      return null;
+    }
+  }
+
+  /// Promotes or demotes a team member between `'ketua'` and `'anggota'`.
+  Future<void> setMemberRole({
+    required String teamId,
+    required String userId,
+    required String peran,
+  }) async {
+    final c = _requireClient();
+    await c.rpc(
+      'set_team_member_role',
+      params: {
+        'p_team_id': teamId,
+        'p_user_id': userId,
+        'p_peran': peran,
+      },
+    );
+    final callerId = c.auth.currentUser?.id;
+    if (callerId != null) {
+      await _expireTeamSyncMeta(callerId, teamId: teamId);
+    }
+    PacerCache.instance.invalidatePrefix('teams_my_');
+    PacerCache.instance.invalidatePrefix('teams_');
   }
 
   Future<List<TeamMember>> teamMembers(String teamId) async {

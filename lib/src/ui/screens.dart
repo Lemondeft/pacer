@@ -8,6 +8,8 @@ import 'package:pacer/src/demo/pacer_dummy_data.dart';
 import 'package:pacer/src/local/local_models.dart';
 import 'package:pacer/src/local/local_store.dart';
 import 'package:pacer/src/local/swr_helper.dart';
+import 'package:pacer/src/notifications/notification_model.dart';
+import 'package:pacer/src/notifications/notification_repository.dart';
 import 'package:pacer/src/sync/sync_engine.dart';
 import 'package:pacer/src/teams/team_model.dart';
 import 'package:pacer/src/teams/team_repository.dart';
@@ -329,6 +331,7 @@ class _HomeData {
   final List<Team> teams;
   final String initials;
   final bool isDemo;
+  final AppNotification? assignedBanner;
   const _HomeData({
     this.activities = const [],
     this.streak = 0,
@@ -336,24 +339,51 @@ class _HomeData {
     this.teams = const [],
     this.initials = '?',
     this.isDemo = false,
+    this.assignedBanner,
   });
+
+  _HomeData copyWith({AppNotification? Function()? assignedBanner}) => _HomeData(
+    activities: activities,
+    streak: streak,
+    streakLast: streakLast,
+    teams: teams,
+    initials: initials,
+    isDemo: isDemo,
+    assignedBanner: assignedBanner != null
+        ? assignedBanner()
+        : this.assignedBanner,
+  );
 }
 
 class HomeScreenState extends State<HomeScreen> {
   _HomeData? _data;
   bool _wasSyncing = false;
+  final NotificationRepository _notifRepo = NotificationRepository();
 
   @override
   void initState() {
     super.initState();
     SyncEngine.instance.addListener(_onSyncChanged);
+    NotificationRepository.revisionNotifier.addListener(_onNotifRevision);
+    _notifRepo.watchNotifications();
     reload();
   }
 
   @override
   void dispose() {
     SyncEngine.instance.removeListener(_onSyncChanged);
+    NotificationRepository.revisionNotifier.removeListener(_onNotifRevision);
+    _notifRepo.dispose();
     super.dispose();
+  }
+
+  void _onNotifRevision() {
+    if (!mounted) return;
+    _notifRepo.listNotifications().then((items) {
+      if (!mounted || _data == null) return;
+      final top = NotificationRepository.topAssignedBannerFrom(items);
+      setState(() => _data = _data!.copyWith(assignedBanner: () => top));
+    }).catchError((_) {});
   }
 
   void _onSyncChanged() {
@@ -370,8 +400,9 @@ class HomeScreenState extends State<HomeScreen> {
     if (mounted) setState(() => _data = d);
   }
 
-  _HomeData _demoData() {
+  Future<_HomeData> _demoData() async {
     final now = DateTime.now();
+    final notifs = await _notifRepo.listNotifications();
     return _HomeData(
       activities: PacerDummyData.activities
           .take(3)
@@ -385,16 +416,17 @@ class HomeScreenState extends State<HomeScreen> {
           .toList(),
       streak: 5,
       streakLast: now.subtract(const Duration(hours: 4)),
-      teams: PacerDummyData.teams.take(3).toList(),
+      teams: PacerDummyData.demoMyTeams,
       initials: 'PD',
       isDemo: true,
+      assignedBanner: NotificationRepository.topAssignedBannerFrom(notifs),
     );
   }
 
   Future<_HomeData> _load({bool forceRefresh = false}) async {
     try {
       if (await isDemoAccount()) {
-        return _demoData();
+        return await _demoData();
       }
       final repo = ActivityRepository();
       final auth = AuthRepository();
@@ -406,6 +438,9 @@ class HomeScreenState extends State<HomeScreen> {
       final teams = await TeamRepository().myTeams(forceRefresh: forceRefresh);
       final profile = await auth.getProfile(forceRefresh: forceRefresh);
       final email = await auth.getSavedEmail();
+      final notifs = await _notifRepo.listNotifications(
+        forceRefresh: forceRefresh,
+      );
       final name = (profile?.nama ?? '').trim();
       final label = name.isNotEmpty ? name : (email ?? 'P');
       return _HomeData(
@@ -415,10 +450,11 @@ class HomeScreenState extends State<HomeScreen> {
         teams: teams,
         initials: initialsOf(label),
         isDemo: false,
+        assignedBanner: NotificationRepository.topAssignedBannerFrom(notifs),
       );
     } catch (_) {
       if (await isDemoAccount()) {
-        return _demoData();
+        return await _demoData();
       }
       return const _HomeData(
         activities: [],
@@ -431,13 +467,15 @@ class HomeScreenState extends State<HomeScreen> {
   }
 
   Widget _header(BuildContext context) {
+    final scheme = PacerScheme.of(context);
     return SizedBox(
       height: 48,
       child: Row(
         children: [
           IconButton(
             onPressed: () => Navigator.of(context)
-                .push(MaterialPageRoute(builder: (_) => const FiturScreen())),
+                .push(MaterialPageRoute(builder: (_) => const FiturScreen()))
+                .then((_) => reload()),
             icon: const Icon(Icons.menu, size: 32),
           ),
           Expanded(
@@ -445,6 +483,66 @@ class HomeScreenState extends State<HomeScreen> {
               // One consistent logo across the app.
               child: PacerLogo(width: 112),
             ),
+          ),
+          ValueListenableBuilder<int>(
+            valueListenable: NotificationRepository.unreadCountNotifier,
+            builder: (context, unread, _) {
+              return IconButton(
+                tooltip: S.notifications,
+                onPressed: () => Navigator.of(context)
+                    .push(
+                      MaterialPageRoute(
+                        builder: (_) => const NotificationsScreen(),
+                      ),
+                    )
+                    .then((_) => reload()),
+                icon: Stack(
+                  clipBehavior: Clip.none,
+                  children: [
+                    Icon(
+                      unread > 0
+                          ? Icons.notifications_active_outlined
+                          : Icons.notifications_none_rounded,
+                      size: 26,
+                      color: scheme.ink,
+                    ),
+                    if (unread > 0)
+                      Positioned(
+                        right: -4,
+                        top: -4,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 5,
+                            vertical: 1.5,
+                          ),
+                          decoration: BoxDecoration(
+                            color: PacerColors.errorRed,
+                            borderRadius: BorderRadius.circular(999),
+                            border: Border.all(
+                              color: scheme.scaffold,
+                              width: 1.5,
+                            ),
+                          ),
+                          constraints: const BoxConstraints(
+                            minWidth: 18,
+                            minHeight: 16,
+                          ),
+                          child: Text(
+                            unread > 9 ? '9+' : '$unread',
+                            textAlign: TextAlign.center,
+                            style: const TextStyle(
+                              fontSize: 9.5,
+                              fontWeight: FontWeight.w800,
+                              color: Colors.white,
+                              height: 1.1,
+                            ),
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+              );
+            },
           ),
           // Logged-in user's initials (Figma spec). Tap → Account.
           // 48px tap target around the 42px visual.
@@ -577,7 +675,29 @@ class HomeScreenState extends State<HomeScreen> {
                   else
                     for (var i = 0; i < teams.length; i++) ...[
                       if (i > 0) const SizedBox(width: 19),
-                      TeamCard(name: teams[i].nama, width: cardW),
+                      GestureDetector(
+                        onTap: () async {
+                          final changed = await Navigator.of(context)
+                              .push<bool>(
+                                MaterialPageRoute(
+                                  builder: (_) => TeamDashboardScreen(
+                                    teamId: teams[i].id,
+                                    initialTeam: teams[i],
+                                  ),
+                                ),
+                              );
+                          if (changed == true && mounted) {
+                            reload(forceRefresh: true);
+                          }
+                        },
+                        child: TeamCard(
+                          name: teams[i].nama,
+                          width: cardW,
+                          memberCount: teams[i].memberCount,
+                          isJoined: true,
+                          isPrivate: teams[i].isPrivate,
+                        ),
+                      ),
                     ],
                 ],
               );
@@ -601,6 +721,33 @@ class HomeScreenState extends State<HomeScreen> {
             _header(context),
             const SizedBox(height: 12),
             if (_data != null && !_data!.isDemo) const SyncStatusBanner(),
+            if (_data?.assignedBanner != null) ...[
+              const SizedBox(height: 8),
+              _AssignedChallengeBanner(
+                notification: _data!.assignedBanner!,
+                onDismiss: () => NotificationRepository.dismissBanner(
+                  _data!.assignedBanner!.id,
+                ),
+                onOpen: () async {
+                  final b = _data!.assignedBanner!;
+                  await _notifRepo.markAsRead(b.id);
+                  if (!context.mounted) return;
+                  if (b.challengeId != null && b.challengeId!.isNotEmpty) {
+                    await ChallengeDetailSheet.show(
+                      context,
+                      challengeId: b.challengeId,
+                    );
+                  } else {
+                    await Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (_) => const NotificationsScreen(),
+                      ),
+                    );
+                  }
+                  if (mounted) reload();
+                },
+              ),
+            ],
             const SizedBox(height: 4),
             LayoutBuilder(
               builder: (context, c) {
@@ -674,6 +821,7 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
   DateTime? _lastBackAt;
   String _activeSport = 'lari';
   String? _activeGoal;
+  List<String>? _activeChallengeIds;
   ActiveDraftRun? _resumedDraft;
   bool _draftPrompted = false;
   final GlobalKey<HomeScreenState> _homeKey = GlobalKey<HomeScreenState>();
@@ -745,6 +893,7 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
           _resumedDraft = draft;
           _activeSport = draft.jenis;
           _activeGoal = null;
+          _activeChallengeIds = null;
           _index = 1;
         });
         break;
@@ -790,6 +939,9 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
         _tabHistory.add(_index);
         if (_tabHistory.length > 12) _tabHistory.removeAt(0);
       }
+      if (_index == 1 && i != 1) {
+        _activeChallengeIds = null;
+      }
       if (i == 0) {
         _resumedDraft = null;
         _homeKey.currentState?.reload();
@@ -802,6 +954,7 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
     if (_tabHistory.isNotEmpty) {
       final prev = _tabHistory.removeLast();
       setState(() {
+        if (_index == 1 && prev != 1) _activeChallengeIds = null;
         _resumedDraft = null;
         _index = prev;
       });
@@ -812,6 +965,7 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
     }
     if (_index != 0) {
       setState(() {
+        if (_index == 1) _activeChallengeIds = null;
         _resumedDraft = null;
         _index = 0;
       });
@@ -851,6 +1005,21 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
   void _goSetup() => Navigator.of(context).push(
     MaterialPageRoute(
       builder: (_) => RunSetupScreen(
+        onStartWithChallenges: (sport, goal, challengeIds) {
+          Navigator.of(context).pop();
+          setState(() {
+            if (_index != 1 &&
+                (_tabHistory.isEmpty || _tabHistory.last != _index)) {
+              _tabHistory.add(_index);
+              if (_tabHistory.length > 12) _tabHistory.removeAt(0);
+            }
+            _resumedDraft = null;
+            _activeSport = sport;
+            _activeGoal = goal;
+            _activeChallengeIds = challengeIds;
+            _index = 1;
+          });
+        },
         onStartWithConfig: (sport, goal) {
           Navigator.of(context).pop();
           setState(() {
@@ -862,6 +1031,7 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
             _resumedDraft = null;
             _activeSport = sport;
             _activeGoal = goal;
+            _activeChallengeIds = null;
             _index = 1;
           });
         },
@@ -874,6 +1044,7 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
               if (_tabHistory.length > 12) _tabHistory.removeAt(0);
             }
             _resumedDraft = null;
+            _activeChallengeIds = null;
             _index = 1;
           });
         },
@@ -897,6 +1068,7 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
           sportType: _activeSport,
           goal: _activeGoal,
           initialDraft: _resumedDraft,
+          initialChallengeIds: _activeChallengeIds,
         )
       else
         const SizedBox.shrink(),
@@ -1034,10 +1206,24 @@ class _PacerNavRail extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final scheme = PacerScheme.of(context);
+    final dark = scheme.isDark;
+    final selFg = dark ? PacerColors.lime : const Color(0xFF102A43);
     return NavigationRail(
       extended: true,
       minExtendedWidth: 220,
-      backgroundColor: PacerScheme.of(context).navBar,
+      backgroundColor: scheme.navBar,
+      indicatorColor: PacerColors.lime.withValues(alpha: dark ? 0.22 : 0.62),
+      unselectedIconTheme: IconThemeData(color: scheme.navIcon),
+      unselectedLabelTextStyle: TextStyle(
+        color: scheme.navIcon,
+        fontWeight: FontWeight.w500,
+      ),
+      selectedIconTheme: IconThemeData(color: selFg),
+      selectedLabelTextStyle: TextStyle(
+        color: selFg,
+        fontWeight: FontWeight.w700,
+      ),
       selectedIndex: index,
       onDestinationSelected: onTap,
       leading: Padding(
@@ -1069,28 +1255,111 @@ class _PacerNavRail extends StatelessWidget {
       destinations: [
         NavigationRailDestination(
           icon: const Icon(Icons.home_outlined),
-          selectedIcon: const Icon(Icons.home, color: PacerColors.lime),
+          selectedIcon: Icon(Icons.home, color: selFg),
           label: Text(S.home),
         ),
         NavigationRailDestination(
           icon: const Icon(Icons.directions_run_outlined),
-          selectedIcon: const Icon(
-            Icons.directions_run,
-            color: PacerColors.lime,
-          ),
+          selectedIcon: Icon(Icons.directions_run, color: selFg),
           label: Text(S.running),
         ),
         NavigationRailDestination(
           icon: const Icon(Icons.groups_outlined),
-          selectedIcon: const Icon(Icons.groups, color: PacerColors.lime),
+          selectedIcon: Icon(Icons.groups, color: selFg),
           label: Text(S.teams),
         ),
         NavigationRailDestination(
           icon: const Icon(Icons.leaderboard_outlined),
-          selectedIcon: const Icon(Icons.leaderboard, color: PacerColors.lime),
+          selectedIcon: Icon(Icons.leaderboard, color: selFg),
           label: Text(S.leaderboard),
         ),
       ],
+    );
+  }
+}
+
+class _AssignedChallengeBanner extends StatelessWidget {
+  final AppNotification notification;
+  final VoidCallback onDismiss;
+  final VoidCallback onOpen;
+  const _AssignedChallengeBanner({
+    required this.notification,
+    required this.onDismiss,
+    required this.onOpen,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = PacerScheme.of(context);
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+      decoration: BoxDecoration(
+        color: scheme.card,
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(
+          color: PacerColors.primary.withValues(alpha: 0.45),
+        ),
+        boxShadow: [scheme.shadowBox],
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: PacerColors.primary.withValues(alpha: 0.16),
+              shape: BoxShape.circle,
+            ),
+            child: Icon(
+              Icons.flag_circle_outlined,
+              size: 20,
+              color: scheme.accent,
+            ),
+          ),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  notification.title,
+                  style: TextStyle(
+                    fontWeight: FontWeight.w700,
+                    fontSize: 13.5,
+                    color: scheme.ink,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  notification.body,
+                  maxLines: 2,
+                  overflow: TextOverflow.ellipsis,
+                  style: TextStyle(fontSize: 12.5, color: scheme.bodyGray),
+                ),
+                const SizedBox(height: 6),
+                InkWell(
+                  onTap: onOpen,
+                  borderRadius: BorderRadius.circular(8),
+                  child: Text(
+                    S.viewChallenge,
+                    style: TextStyle(
+                      fontSize: 12.5,
+                      fontWeight: FontWeight.w700,
+                      color: scheme.accent,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+          IconButton(
+            visualDensity: VisualDensity.compact,
+            onPressed: onDismiss,
+            icon: Icon(Icons.close, size: 18, color: scheme.muted),
+          ),
+        ],
+      ),
     );
   }
 }

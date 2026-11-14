@@ -17,6 +17,7 @@ class OutboxOp {
   static const String updateProfile = 'update_profile';
   static const String updateLanguage = 'update_language';
   static const String joinChallenge = 'join_challenge';
+  static const String activateChallenge = 'activate_challenge';
   static const String leaveChallenge = 'leave_challenge';
   static const String sendChat = 'send_chat';
 }
