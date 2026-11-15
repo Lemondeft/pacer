@@ -25,6 +25,7 @@ import 'package:pacer/src/teams/team_model.dart';
 import 'package:pacer/src/teams/team_repository.dart';
 import 'package:pacer/src/tracking/recorder.dart';
 import 'package:pacer/src/tracking/route_map.dart';
+import 'package:pacer/src/update/github_update_service.dart';
 import 'package:pacer/supabase.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -5213,6 +5214,7 @@ class AccountScreen extends StatefulWidget {
 class _AccountScreenState extends State<AccountScreen> {
   ({String? nama, String? email})? _profile;
   bool _isDemo = true;
+  bool _checkingUpdates = false;
 
   @override
   void initState() {
@@ -5238,6 +5240,41 @@ class _AccountScreenState extends State<AccountScreen> {
       return (nama: profile?.nama, email: email, isDemo: false);
     } catch (_) {
       return (nama: null, email: null, isDemo: await isDemoAccount());
+    }
+  }
+
+  Future<void> _checkForUpdates(BuildContext context) async {
+    if (_checkingUpdates) return;
+    _checkingUpdates = true;
+    final messenger = ScaffoldMessenger.of(context);
+    messenger
+      ..clearSnackBars()
+      ..showSnackBar(
+        SnackBar(
+          content: Text(S.checkingUpdates),
+          duration: const Duration(seconds: 7),
+        ),
+      );
+    try {
+      final result = await GitHubUpdateService.instance.checkForUpdate(
+        respectDismissed: false,
+      );
+      if (!context.mounted) return;
+      messenger.clearSnackBars();
+      switch (result.status) {
+        case UpdateCheckStatus.available:
+          await UpdateAvailableSheet.show(context, result.release!);
+        case UpdateCheckStatus.upToDate:
+          messenger.showSnackBar(
+            SnackBar(
+              content: Text(S.upToDateMsg(GitHubUpdateService.currentVersion)),
+            ),
+          );
+        case UpdateCheckStatus.failed:
+          messenger.showSnackBar(SnackBar(content: Text(S.updateCheckFailed)));
+      }
+    } finally {
+      _checkingUpdates = false;
     }
   }
 
@@ -5366,6 +5403,14 @@ class _AccountScreenState extends State<AccountScreen> {
                           builder: (_) => const ThemeSettingsScreen(),
                         ),
                       ),
+                    ),
+                    Divider(height: 1, color: scheme.border),
+                    _menuRow(
+                      context,
+                      label: S.checkForUpdates(
+                        GitHubUpdateService.currentVersion,
+                      ),
+                      onTap: () => _checkForUpdates(context),
                     ),
                     Divider(height: 1, color: scheme.border),
                     _menuRow(
@@ -8658,6 +8703,226 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
             ],
           ),
         ),
+      ),
+    );
+  }
+}
+
+/// Modal bottom sheet displayed when a newer GitHub Release is available.
+class UpdateAvailableSheet extends StatelessWidget {
+  final GitHubReleaseInfo release;
+
+  const UpdateAvailableSheet({super.key, required this.release});
+
+  static Future<void> show(BuildContext context, GitHubReleaseInfo release) {
+    final scheme = PacerScheme.of(context);
+    return showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: scheme.card,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(28)),
+      ),
+      builder: (_) => UpdateAvailableSheet(release: release),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = PacerScheme.of(context);
+    final apkSize = release.formattedApkSize;
+    return SafeArea(
+      top: false,
+      child: Padding(
+        padding: EdgeInsets.fromLTRB(
+          20,
+          12,
+          20,
+          MediaQuery.viewInsetsOf(context).bottom + 20,
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Center(
+              child: Container(
+                width: 40,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: scheme.border,
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+            ),
+            const SizedBox(height: 16),
+            _buildHeader(scheme, apkSize),
+            const SizedBox(height: 12),
+            Text(
+              S.updateAvailableSub(
+                GitHubUpdateService.currentVersion,
+                release.tagName,
+              ),
+              style: TextStyle(fontSize: 13.5, color: scheme.bodyGray, height: 1.4),
+            ),
+            const SizedBox(height: 14),
+            Text(
+              S.releaseNotesTitle,
+              style: GoogleFonts.spaceGrotesk(
+                fontWeight: FontWeight.w700,
+                fontSize: 13,
+                color: scheme.muted,
+                letterSpacing: 0.4,
+              ),
+            ),
+            const SizedBox(height: 6),
+            ConstrainedBox(
+              constraints: const BoxConstraints(maxHeight: 220),
+              child: Container(
+                padding: const EdgeInsets.all(14),
+                decoration: BoxDecoration(
+                  color: scheme.scaffold,
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(color: scheme.border),
+                ),
+                child: SingleChildScrollView(
+                  child: Text(
+                    release.notes.isNotEmpty ? release.notes : S.noReleaseNotes,
+                    style: TextStyle(fontSize: 13, color: scheme.chipFg, height: 1.45),
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(height: 18),
+            LimeActionBar(
+              S.downloadUpdateCta,
+              onPressed: () async {
+                final messenger = ScaffoldMessenger.maybeOf(context);
+                final ok = await GitHubUpdateService.instance.openReleaseDownload(
+                  release,
+                );
+                if (!context.mounted) return;
+                if (ok) {
+                  Navigator.of(context).pop();
+                } else {
+                  messenger?.showSnackBar(SnackBar(content: Text(S.updateOpenFailed)));
+                }
+              },
+            ),
+            const SizedBox(height: 8),
+            Row(
+              children: [
+                Expanded(
+                  child: TextButton(
+                    onPressed: () async {
+                      await GitHubUpdateService.instance.dismissVersion(
+                        release.tagName,
+                      );
+                      if (context.mounted) Navigator.of(context).pop();
+                    },
+                    child: Text(
+                      S.skipVersionCta,
+                      style: TextStyle(
+                        color: scheme.muted,
+                        fontWeight: FontWeight.w600,
+                        fontSize: 13,
+                      ),
+                    ),
+                  ),
+                ),
+                Expanded(
+                  child: TextButton(
+                    onPressed: () => Navigator.of(context).pop(),
+                    child: Text(
+                      S.laterCta,
+                      style: TextStyle(
+                        color: scheme.chipFg,
+                        fontWeight: FontWeight.w700,
+                        fontSize: 13,
+                      ),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildHeader(PacerScheme scheme, String? apkSize) {
+    return Row(
+      children: [
+        Container(
+          width: 46,
+          height: 46,
+          decoration: BoxDecoration(
+            color: scheme.accent.withValues(alpha: 0.14),
+            borderRadius: BorderRadius.circular(14),
+            border: Border.all(color: scheme.accent.withValues(alpha: 0.35)),
+          ),
+          child: Icon(
+            Icons.system_update_alt_rounded,
+            color: scheme.accent,
+            size: 24,
+          ),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                S.updateAvailableTitle,
+                style: GoogleFonts.spaceGrotesk(
+                  fontWeight: FontWeight.w800,
+                  fontSize: 18,
+                  color: scheme.chipFg,
+                ),
+              ),
+              const SizedBox(height: 4),
+              Wrap(
+                spacing: 8,
+                runSpacing: 4,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                children: [
+                  _badge(
+                    'v${GitHubUpdateService.currentVersion} → ${release.tagName}',
+                    bg: scheme.brandAccent,
+                    fg: scheme.onBrandAccent,
+                  ),
+                  if (apkSize != null)
+                    _badge(
+                      'APK • $apkSize',
+                      bg: scheme.scaffold,
+                      fg: scheme.muted,
+                      borderColor: scheme.border,
+                    ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ],
+    );
+  }
+
+  Widget _badge(
+    String text, {
+    required Color bg,
+    required Color fg,
+    Color? borderColor,
+  }) {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      decoration: BoxDecoration(
+        color: bg,
+        borderRadius: BorderRadius.circular(999),
+        border: borderColor == null ? null : Border.all(color: borderColor),
+      ),
+      child: Text(
+        text,
+        style: TextStyle(fontSize: 11, fontWeight: FontWeight.w800, color: fg),
       ),
     );
   }

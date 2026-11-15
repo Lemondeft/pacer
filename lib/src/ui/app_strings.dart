@@ -695,4 +695,35 @@ class S {
   static List<String> get dayLetters => _en
       ? const ['M', 'T', 'W', 'T', 'F', 'S', 'S']
       : const ['S', 'S', 'R', 'K', 'J', 'S', 'M'];
+
+  // GitHub Release Updater
+  static String checkForUpdates(String currentVer) => _en
+      ? 'Check for Updates (v$currentVer)'
+      : 'Periksa Pembaruan (v$currentVer)';
+  static String get checkingUpdates => _en
+      ? 'Checking GitHub Releases...'
+      : 'Memeriksa rilis GitHub terbaru...';
+  static String upToDateMsg(String currentVer) => _en
+      ? 'Pacer is up to date (v$currentVer).'
+      : 'Pacer sudah versi terbaru (v$currentVer).';
+  static String get updateAvailableTitle =>
+      _en ? 'Update Available' : 'Pembaruan Tersedia';
+  static String updateAvailableSub(String currentVer, String latestTag) => _en
+      ? 'A new GitHub release ($latestTag) is ready. You are on v$currentVer.'
+      : 'Rilis GitHub baru ($latestTag) tersedia. Versi saat ini v$currentVer.';
+  static String get releaseNotesTitle =>
+      _en ? 'Release Notes' : 'Catatan Rilis';
+  static String get noReleaseNotes => _en
+      ? 'Download the latest release package from GitHub Releases.'
+      : 'Unduh paket rilis terbaru dari GitHub Releases.';
+  static String get downloadUpdateCta =>
+      _en ? 'Download Update' : 'Unduh Pembaruan';
+  static String get updateCheckFailed => _en
+      ? 'Could not check for updates. Try again later.'
+      : 'Gagal memeriksa pembaruan. Coba lagi nanti.';
+  static String get updateOpenFailed =>
+      _en ? 'Could not open download link.' : 'Gagal membuka tautan unduhan.';
+  static String get skipVersionCta =>
+      _en ? 'Skip This Version' : 'Lewati Versi Ini';
+  static String get laterCta => _en ? 'Later' : 'Nanti';
 }

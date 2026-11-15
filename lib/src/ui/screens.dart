@@ -21,6 +21,7 @@ import 'package:pacer/src/sync/sync_engine.dart';
 import 'package:pacer/src/teams/team_model.dart';
 import 'package:pacer/src/teams/team_repository.dart';
 import 'package:pacer/src/tracking/recorder.dart';
+import 'package:pacer/src/update/github_update_service.dart';
 import 'package:pacer/supabase.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -679,10 +680,14 @@ class HomeScreenState extends State<HomeScreen> {
                 .then((_) => reload()),
             icon: const Icon(Icons.menu, size: 32),
           ),
-          Expanded(
+          // Balance right-side avatar (48px) so Expanded matches bell+avatar symmetry.
+          const SizedBox(width: 48),
+          const Expanded(
             child: Center(
-              // One consistent logo across the app.
-              child: PacerLogo(width: 112),
+              child: FittedBox(
+                fit: BoxFit.scaleDown,
+                child: PacerLogo(width: 112),
+              ),
             ),
           ),
           ValueListenableBuilder<int>(
@@ -1961,10 +1966,24 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      _checkPendingDraft();
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
       _glassController.captureOnce();
+      if (await _checkPendingDraft() || !mounted) return;
+      await _checkGithubUpdate();
     });
+  }
+
+  Future<void> _checkGithubUpdate() async {
+    final svc = GitHubUpdateService.instance;
+    if (svc.clientFactory == null &&
+        WidgetsBinding.instance.runtimeType.toString().contains(
+          'TestWidgetsFlutterBinding',
+        )) {
+      return;
+    }
+    final release = await svc.checkOnceOnStartup();
+    if (release == null || !mounted) return;
+    await UpdateAvailableSheet.show(context, release);
   }
 
   @override
@@ -2041,12 +2060,12 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
     }
   }
 
-  Future<void> _checkPendingDraft() async {
-    if (_draftPrompted) return;
+  Future<bool> _checkPendingDraft() async {
+    if (_draftPrompted) return false;
     final uid = await AuthRepository().resolveUserId();
-    if (uid == null || !mounted) return;
+    if (uid == null || !mounted) return false;
     final draft = await LocalStore.instance.loadActiveDraft(uid);
-    if (draft == null || !mounted) return;
+    if (draft == null || !mounted) return false;
     _draftPrompted = true;
     final choice = await showDialog<String>(
       context: context,
@@ -2076,7 +2095,7 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
         ],
       ),
     );
-    if (!mounted) return;
+    if (!mounted) return true;
     switch (choice) {
       case 'resume':
         setState(() {
@@ -2114,6 +2133,7 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
         await LocalStore.instance.discardDraft(draft.id);
         break;
     }
+    return true;
   }
 
   void _onPillTap(int i) {
