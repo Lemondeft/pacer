@@ -14,6 +14,7 @@ import 'package:pacer/src/teams/team_repository.dart';
 import 'app_strings.dart';
 import 'app_theme.dart';
 import 'format.dart';
+import 'pacer_glass.dart' show PacerSquircleBorder;
 import 'widgets.dart';
 
 /// Coach class board (PE grading): pick a team and see every member's
@@ -362,16 +363,13 @@ class _CoachBoardScreenState extends State<CoachBoardScreen> {
 
   Widget _rowCard(_CoachRow r) {
     final scheme = PacerScheme.of(context);
-    return Container(
-      width: double.infinity,
-      margin: const EdgeInsets.only(bottom: 8),
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final okColor = isDark ? const Color(0xFF4ADE80) : const Color(0xFF15803D);
+    final completed = r.berhasil == true;
+    return PacerSurface(
+      radius: PacerRadii.md,
+      margin: const EdgeInsets.only(bottom: 10),
       padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: scheme.card,
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: scheme.border),
-        boxShadow: [scheme.shadowBox],
-      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -382,38 +380,33 @@ class _CoachBoardScreenState extends State<CoachBoardScreen> {
                   r.nama,
                   maxLines: 1,
                   overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    fontWeight: FontWeight.w700,
-                    fontSize: 16,
-                  ),
+                  style: PacerText.cardTitleOf(context),
                 ),
               ),
-              if (r.berhasil == true)
+              if (completed)
                 Container(
                   padding: const EdgeInsets.symmetric(
                     horizontal: 8,
-                    vertical: 2,
+                    vertical: 3,
                   ),
-                  decoration: BoxDecoration(
-                    color: Colors.green.withValues(alpha: 0.15),
-                    borderRadius: BorderRadius.circular(12),
-                    border: Border.all(color: Colors.green),
+                  decoration: ShapeDecoration(
+                    color: okColor.withValues(alpha: 0.14),
+                    shape: PacerSquircleBorder(
+                      PacerRadii.sm,
+                      side: BorderSide(color: okColor.withValues(alpha: 0.55)),
+                    ),
                   ),
                   child: Row(
                     mainAxisSize: MainAxisSize.min,
                     children: [
-                      const Icon(
-                        Icons.check_circle,
-                        color: Colors.green,
-                        size: 14,
-                      ),
+                      Icon(Icons.check_circle, color: okColor, size: 14),
                       const SizedBox(width: 4),
                       Text(
                         S.challengeCompletedLabel,
                         style: TextStyle(
                           fontSize: 11,
                           fontWeight: FontWeight.w700,
-                          color: Colors.green.shade700,
+                          color: okColor,
                         ),
                       ),
                     ],
@@ -426,30 +419,30 @@ class _CoachBoardScreenState extends State<CoachBoardScreen> {
             '${r.sessions} ${S.sessionsCol} • ${fmtKmNum(r.weekKm * 1000)} Km • streak ${r.streak}',
             maxLines: 2,
             overflow: TextOverflow.ellipsis,
-            style: TextStyle(fontSize: 13, color: scheme.muted),
+            style: TextStyle(fontSize: 13, color: scheme.muted).tabularFigures(),
           ),
           if (r.progress != null) ...[
-            const SizedBox(height: 6),
+            const SizedBox(height: 8),
             ClipRRect(
-              borderRadius: BorderRadius.circular(4),
+              borderRadius: BorderRadius.circular(999),
               child: LinearProgressIndicator(
                 value: (r.progress! / 100).clamp(0.0, 1.0),
-                backgroundColor: scheme.softBorder,
+                backgroundColor: scheme.groupedDivider,
                 valueColor: AlwaysStoppedAnimation<Color>(
-                  r.berhasil == true ? Colors.green : PacerColors.lime,
+                  completed ? okColor : scheme.brandAccent,
                 ),
                 minHeight: 6,
               ),
             ),
-            const SizedBox(height: 4),
+            const SizedBox(height: 6),
             Text(
               S.coachEvaluationLine(
                 r.progress!.toStringAsFixed(1),
-                r.berhasil == true,
+                completed,
               ),
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: TextStyle(fontSize: 12, color: scheme.soft),
+              style: TextStyle(fontSize: 12, color: scheme.soft).tabularFigures(),
             ),
           ],
         ],

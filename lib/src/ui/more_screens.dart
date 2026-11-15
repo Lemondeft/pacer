@@ -33,6 +33,7 @@ import 'app_strings.dart';
 import 'app_theme.dart';
 import 'coach_board.dart';
 import 'format.dart';
+import 'pacer_glass.dart' show PacerSquircleBorder;
 import 'screens.dart';
 import 'widgets.dart';
 
@@ -322,15 +323,19 @@ class _RunSetupScreenState extends State<RunSetupScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Container(
-                width: 48,
-                height: 48,
-                decoration: BoxDecoration(
-                  color: scheme.card,
-                  shape: BoxShape.circle,
-                  boxShadow: [scheme.shadowBox],
+              PacerTapScale(
+                pressedScale: 0.92,
+                child: Container(
+                  width: 48,
+                  height: 48,
+                  decoration: BoxDecoration(
+                    color: scheme.card,
+                    shape: BoxShape.circle,
+                    border: Border.all(color: scheme.border),
+                    boxShadow: [scheme.shadowBox],
+                  ),
+                  child: BackButton(color: scheme.ink),
                 ),
-                child: BackButton(color: scheme.ink),
               ),
               const SizedBox(height: 16),
               Column(
@@ -373,6 +378,13 @@ class _RunSetupScreenState extends State<RunSetupScreen> {
                     itemBuilder: (context, index) {
                       final item = _sports[index];
                       final isSelected = _selectedSport == index;
+                      final accentFill = isSelected
+                          ? Color.lerp(
+                              scheme.card,
+                              scheme.brandAccent,
+                              scheme.isDark ? 0.14 : 0.22,
+                            )!
+                          : scheme.card;
                       return PacerTapScale(
                         pressedScale: 0.97,
                         child: InkWell(
@@ -380,33 +392,34 @@ class _RunSetupScreenState extends State<RunSetupScreen> {
                             HapticFeedback.selectionClick();
                             setState(() => _selectedSport = index);
                           },
-                          borderRadius: BorderRadius.circular(16),
+                          customBorder: const PacerSquircleBorder(
+                            PacerRadii.md,
+                          ),
                           child: AnimatedContainer(
                             duration: const Duration(milliseconds: 200),
                             padding: const EdgeInsets.symmetric(
                               horizontal: 16,
                               vertical: 12,
                             ),
-                            decoration: BoxDecoration(
-                              color: isSelected
-                                  ? (scheme.isDark
-                                        ? const Color(0xFF1E293B)
-                                        : const Color(0xFFF1F5F9))
-                                  : scheme.card,
-                              border: Border.all(
-                                color: isSelected
-                                    ? PacerColors.lime
-                                    : scheme.hairline,
-                                width: isSelected ? 2 : 1,
+                            decoration: ShapeDecoration(
+                              color: accentFill,
+                              shape: PacerSquircleBorder(
+                                PacerRadii.md,
+                                side: BorderSide(
+                                  color: isSelected
+                                      ? scheme.brandAccent
+                                      : scheme.hairline,
+                                  width: isSelected ? 1.8 : 1,
+                                ),
+                                rimColor: scheme.cardTopRim,
                               ),
-                              borderRadius: BorderRadius.circular(16),
-                              boxShadow: isSelected
+                              shadows: isSelected
                                   ? [
                                       BoxShadow(
-                                        color: PacerColors.lime.withValues(
-                                          alpha: 0.2,
+                                        color: scheme.brandAccent.withValues(
+                                          alpha: 0.22,
                                         ),
-                                        blurRadius: 10,
+                                        blurRadius: 12,
                                         offset: const Offset(0, 4),
                                       ),
                                     ]
@@ -417,17 +430,19 @@ class _RunSetupScreenState extends State<RunSetupScreen> {
                                 Container(
                                   width: 44,
                                   height: 44,
-                                  decoration: BoxDecoration(
+                                  decoration: ShapeDecoration(
                                     color: isSelected
-                                        ? PacerColors.lime
-                                        : scheme.softBorder,
-                                    borderRadius: BorderRadius.circular(12),
+                                        ? scheme.brandAccent
+                                        : scheme.searchBg,
+                                    shape: const PacerSquircleBorder(
+                                      PacerRadii.sm,
+                                    ),
                                   ),
                                   child: Icon(
                                     item.icon,
                                     size: 24,
                                     color: isSelected
-                                        ? PacerColors.navy
+                                        ? scheme.onBrandAccent
                                         : scheme.ink,
                                   ),
                                 ),
@@ -467,21 +482,21 @@ class _RunSetupScreenState extends State<RunSetupScreen> {
                                   height: 22,
                                   decoration: BoxDecoration(
                                     color: isSelected
-                                        ? PacerColors.lime
+                                        ? scheme.brandAccent
                                         : Colors.transparent,
                                     shape: BoxShape.circle,
                                     border: Border.all(
                                       color: isSelected
-                                          ? PacerColors.lime
+                                          ? scheme.brandAccent
                                           : scheme.chipBorder,
                                       width: 1.5,
                                     ),
                                   ),
                                   child: isSelected
-                                      ? const Icon(
+                                      ? Icon(
                                           Icons.check,
                                           size: 14,
-                                          color: PacerColors.navy,
+                                          color: scheme.onBrandAccent,
                                         )
                                       : null,
                                 ),
@@ -557,13 +572,9 @@ class _RunSetupScreenState extends State<RunSetupScreen> {
                         if (!_optedOutIds.contains(e.challenge.id))
                           e.challenge.id,
                     };
-                    return Container(
+                    return PacerSurface(
+                      radius: PacerRadii.md,
                       padding: const EdgeInsets.all(14),
-                      decoration: BoxDecoration(
-                        color: scheme.card,
-                        borderRadius: BorderRadius.circular(14),
-                        border: Border.all(color: scheme.border),
-                      ),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
@@ -601,32 +612,7 @@ class _RunSetupScreenState extends State<RunSetupScreen> {
                 ),
               ],
               const SizedBox(height: 24),
-              PacerTapScale(
-                pressedScale: 0.98,
-                child: SizedBox(
-                  width: double.infinity,
-                  height: 52,
-                  child: ElevatedButton(
-                    onPressed: _handleStart,
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: scheme.chipSelBg,
-                      foregroundColor: scheme.chipSelFg,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      elevation: 1,
-                    ),
-                    child: Text(
-                      S.startRun,
-                      style: GoogleFonts.spaceGrotesk(
-                        fontWeight: FontWeight.w600,
-                        fontSize: 16,
-                        height: 24 / 16,
-                      ),
-                    ),
-                  ),
-                ),
-              ),
+              LimeActionBar(S.startRun, onPressed: _handleStart),
               const SizedBox(height: 24),
             ],
           ),
@@ -951,8 +937,9 @@ class _RunTrackerScreenState extends State<RunTrackerScreen> {
                             width: 48,
                             height: 48,
                             decoration: BoxDecoration(
-                              color: scheme.card,
+                              color: scheme.card.withValues(alpha: 0.92),
                               shape: BoxShape.circle,
+                              border: Border.all(color: scheme.cardTopRim),
                               boxShadow: [scheme.shadowBox],
                             ),
                             child: IconButton(
@@ -963,14 +950,19 @@ class _RunTrackerScreenState extends State<RunTrackerScreen> {
                           const Spacer(),
                           Container(
                             padding: const EdgeInsets.symmetric(
-                              horizontal: 10,
-                              vertical: 4,
+                              horizontal: 12,
+                              vertical: 5,
                             ),
-                            decoration: BoxDecoration(
-                              color: scheme.card.withValues(alpha: 0.8),
-                              borderRadius: BorderRadius.circular(20),
-                              border: Border.all(
-                                color: PacerColors.lime.withValues(alpha: 0.4),
+                            decoration: ShapeDecoration(
+                              color: scheme.card.withValues(alpha: 0.88),
+                              shape: PacerSquircleBorder(
+                                PacerRadii.md,
+                                rimColor: scheme.cardTopRim,
+                                side: BorderSide(
+                                  color: scheme.brandAccent.withValues(
+                                    alpha: 0.45,
+                                  ),
+                                ),
                               ),
                             ),
                             child: Row(
@@ -1901,37 +1893,9 @@ class _TeamsScreenState extends State<TeamsScreen> {
   }
 
   Widget _sectionHeader(BuildContext context, String title, int count) {
-    final scheme = PacerScheme.of(context);
     return Padding(
       padding: const EdgeInsets.only(bottom: 10),
-      child: Row(
-        children: [
-          Expanded(
-            child: Text(
-              title,
-              style: PacerText.statValueOf(context).copyWith(fontSize: 18),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-            ),
-          ),
-          Container(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
-            decoration: BoxDecoration(
-              color: scheme.card,
-              borderRadius: BorderRadius.circular(999),
-              border: Border.all(color: scheme.border),
-            ),
-            child: Text(
-              '$count',
-              style: TextStyle(
-                fontSize: 12,
-                fontWeight: FontWeight.w700,
-                color: scheme.ink,
-              ),
-            ),
-          ),
-        ],
-      ),
+      child: SectionHeader(title: title, count: count),
     );
   }
 
@@ -1940,31 +1904,10 @@ class _TeamsScreenState extends State<TeamsScreen> {
     required String value,
     required String label,
   }) {
-    final scheme = PacerScheme.of(context);
     final selected = _filter == value;
-    return InkWell(
+    return GestureDetector(
       onTap: () => setState(() => _filter = value),
-      borderRadius: BorderRadius.circular(20),
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 150),
-        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 7),
-        decoration: BoxDecoration(
-          color: selected ? scheme.brandAccent : scheme.card,
-          borderRadius: BorderRadius.circular(20),
-          border: Border.all(
-            color: selected ? scheme.brandAccent : scheme.border,
-            width: selected ? 1.5 : 1,
-          ),
-        ),
-        child: Text(
-          label,
-          style: TextStyle(
-            fontSize: 12,
-            fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
-            color: selected ? scheme.onBrandAccent : scheme.ink,
-          ),
-        ),
-      ),
+      child: GoalChip(label: label, selected: selected, useBrandAccent: true),
     );
   }
 
@@ -2127,30 +2070,31 @@ class _TeamsScreenState extends State<TeamsScreen> {
                 ),
               ),
               const SizedBox(height: 12),
-              GestureDetector(
-                onTap: () async {
-                  final created = await Navigator.of(context).push<bool>(
-                    MaterialPageRoute(
-                      builder: (_) => const PersyaratanScreen(),
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton.icon(
+                  onPressed: () async {
+                    final created = await Navigator.of(context).push<bool>(
+                      MaterialPageRoute(
+                        builder: (_) => const PersyaratanScreen(),
+                      ),
+                    );
+                    if (created == true && mounted) {
+                      _reload(forceRefresh: true);
+                    }
+                  },
+                  icon: const Icon(Icons.group_add_outlined, size: 20),
+                  label: Text(S.createTeam),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: scheme.brandAccent,
+                    foregroundColor: scheme.onBrandAccent,
+                    elevation: 0,
+                    minimumSize: const Size.fromHeight(54),
+                    shape: PacerSquircleBorder(PacerRadii.md),
+                    textStyle: const TextStyle(
+                      fontSize: 15,
+                      fontWeight: FontWeight.w700,
                     ),
-                  );
-                  if (created == true && mounted) {
-                    _reload(forceRefresh: true);
-                  }
-                },
-                child: Container(
-                  width: double.infinity,
-                  height: 58,
-                  alignment: Alignment.center,
-                  decoration: BoxDecoration(
-                    color: scheme.card,
-                    borderRadius: BorderRadius.circular(50),
-                    border: Border.all(color: scheme.border),
-                    boxShadow: [scheme.shadowBox],
-                  ),
-                  child: Text(
-                    S.createTeam,
-                    style: const TextStyle(fontWeight: FontWeight.w600),
                   ),
                 ),
               ),
@@ -2753,149 +2697,175 @@ class _TeamDashboardScreenState extends State<TeamDashboardScreen> {
         ? (totalKm / targetKm).clamp(0.0, 1.0)
         : null;
 
-    return Container(
-      width: double.infinity,
-      padding: const EdgeInsets.all(20),
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(16),
-        gradient: LinearGradient(
-          colors: scheme.heroCardGradient,
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
+    return ClipPath.shape(
+      shape: PacerSquircleBorder(PacerRadii.hero),
+      child: Container(
+        width: double.infinity,
+        decoration: ShapeDecoration(
+          gradient: LinearGradient(
+            colors: scheme.heroCardGradient,
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          ),
+          shape: PacerSquircleBorder(
+            PacerRadii.hero,
+            rimColor: Colors.white.withValues(alpha: 0.22),
+            side: BorderSide(color: Colors.white.withValues(alpha: 0.14)),
+          ),
+          shadows: [scheme.shadowBox],
         ),
-        boxShadow: [scheme.shadowBox],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Wrap(
-            spacing: 8,
-            runSpacing: 6,
-            children: [
-              Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 10,
-                  vertical: 4,
-                ),
-                decoration: BoxDecoration(
-                  color: Colors.white.withValues(alpha: 0.16),
-                  borderRadius: BorderRadius.circular(999),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Icon(
-                      isPrivate ? Icons.lock_outline : Icons.public,
-                      size: 13,
-                      color: Colors.white,
-                    ),
-                    const SizedBox(width: 5),
-                    Text(
-                      isPrivate ? S.privateBadge : S.publicBadge,
-                      style: const TextStyle(
-                        fontSize: 11,
-                        fontWeight: FontWeight.w700,
-                        color: Colors.white,
-                      ),
-                    ),
-                  ],
+        child: Stack(
+          children: [
+            Positioned.fill(
+              child: IgnorePointer(
+                child: CustomPaint(
+                  painter: PacerTrackLinesPainter(
+                    color: Colors.white.withValues(alpha: 0.055),
+                    count: 4,
+                  ),
                 ),
               ),
-              if (_joined == true)
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 10,
-                    vertical: 4,
+            ),
+            Padding(
+              padding: const EdgeInsets.all(20),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 6,
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 10,
+                          vertical: 4,
+                        ),
+                        decoration: BoxDecoration(
+                          color: Colors.white.withValues(alpha: 0.16),
+                          borderRadius: BorderRadius.circular(999),
+                        ),
+                        child: Row(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            Icon(
+                              isPrivate ? Icons.lock_outline : Icons.public,
+                              size: 13,
+                              color: Colors.white,
+                            ),
+                            const SizedBox(width: 5),
+                            Text(
+                              isPrivate ? S.privateBadge : S.publicBadge,
+                              style: const TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.w700,
+                                color: Colors.white,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                      if (_joined == true)
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 10,
+                            vertical: 4,
+                          ),
+                          decoration: BoxDecoration(
+                            color: scheme.brandAccent,
+                            borderRadius: BorderRadius.circular(999),
+                          ),
+                          child: Text(
+                            S.joinedBadge,
+                            style: TextStyle(
+                              fontSize: 11,
+                              fontWeight: FontWeight.w800,
+                              color: scheme.onBrandAccent,
+                            ),
+                          ),
+                        ),
+                      if (_memberCount != null)
+                        Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 10,
+                            vertical: 4,
+                          ),
+                          decoration: BoxDecoration(
+                            color: Colors.white.withValues(alpha: 0.16),
+                            borderRadius: BorderRadius.circular(999),
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              const Icon(
+                                Icons.group_outlined,
+                                size: 13,
+                                color: Colors.white,
+                              ),
+                              const SizedBox(width: 5),
+                              Text(
+                                S.membersCount(_memberCount!),
+                                style: const TextStyle(
+                                  fontSize: 11,
+                                  fontWeight: FontWeight.w700,
+                                  color: Colors.white,
+                                ).tabularFigures(),
+                              ),
+                            ],
+                          ),
+                        ),
+                    ],
                   ),
-                  decoration: BoxDecoration(
-                    color: scheme.brandAccent,
-                    borderRadius: BorderRadius.circular(999),
-                  ),
-                  child: Text(
-                    S.joinedBadge,
-                    style: TextStyle(
-                      fontSize: 11,
-                      fontWeight: FontWeight.w800,
-                      color: scheme.onBrandAccent,
+                  const SizedBox(height: 14),
+                  Text(
+                    title,
+                    style: PacerText.pageTitle.copyWith(
+                      color: Colors.white,
+                      fontSize: 28,
                     ),
                   ),
-                ),
-              if (_memberCount != null)
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 10,
-                    vertical: 4,
-                  ),
-                  decoration: BoxDecoration(
-                    color: Colors.white.withValues(alpha: 0.16),
-                    borderRadius: BorderRadius.circular(999),
-                  ),
-                  child: Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      const Icon(
-                        Icons.group_outlined,
-                        size: 13,
-                        color: Colors.white,
-                      ),
-                      const SizedBox(width: 5),
-                      Text(
-                        S.membersCount(_memberCount!),
-                        style: const TextStyle(
-                          fontSize: 11,
-                          fontWeight: FontWeight.w700,
-                          color: Colors.white,
+                  if (targetKm != null) ...[
+                    const SizedBox(height: 12),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(
+                          S.targetGoal,
+                          style: const TextStyle(
+                            fontSize: 12,
+                            color: Colors.white70,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                        Text(
+                          '${totalKm.toStringAsFixed(1)} / ${targetKm.toStringAsFixed(targetKm == targetKm.truncateToDouble() ? 0 : 1)} km',
+                          style: const TextStyle(
+                            fontSize: 12,
+                            color: Colors.white,
+                            fontWeight: FontWeight.w700,
+                          ).tabularFigures(),
+                        ),
+                      ],
+                    ),
+                    if (progress != null) ...[
+                      const SizedBox(height: 6),
+                      ClipRRect(
+                        borderRadius: BorderRadius.circular(999),
+                        child: LinearProgressIndicator(
+                          value: progress,
+                          minHeight: 6,
+                          backgroundColor: Colors.white.withValues(alpha: 0.2),
+                          valueColor: AlwaysStoppedAnimation<Color>(
+                            scheme.brandAccent,
+                          ),
                         ),
                       ),
                     ],
-                  ),
-                ),
-            ],
-          ),
-          const SizedBox(height: 14),
-          Text(
-            title,
-            style: PacerText.pageTitle.copyWith(color: Colors.white, fontSize: 28),
-          ),
-          if (targetKm != null) ...[
-            const SizedBox(height: 12),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text(
-                  S.targetGoal,
-                  style: const TextStyle(
-                    fontSize: 12,
-                    color: Colors.white70,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-                Text(
-                  '${totalKm.toStringAsFixed(1)} / ${targetKm.toStringAsFixed(targetKm == targetKm.truncateToDouble() ? 0 : 1)} km',
-                  style: const TextStyle(
-                    fontSize: 12,
-                    color: Colors.white,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-              ],
-            ),
-            if (progress != null) ...[
-              const SizedBox(height: 6),
-              ClipRRect(
-                borderRadius: BorderRadius.circular(999),
-                child: LinearProgressIndicator(
-                  value: progress,
-                  minHeight: 6,
-                  backgroundColor: Colors.white.withValues(alpha: 0.2),
-                  valueColor: AlwaysStoppedAnimation<Color>(
-                    scheme.brandAccent,
-                  ),
-                ),
+                  ],
+                ],
               ),
-            ],
+            ),
           ],
-        ],
+        ),
       ),
     );
   }
@@ -2911,7 +2881,9 @@ class _TeamDashboardScreenState extends State<TeamDashboardScreen> {
         children: [
           Text(
             value,
-            style: PacerText.statValueOf(context).copyWith(fontSize: 20),
+            style: PacerText.statValueOf(context)
+                .copyWith(fontSize: 20)
+                .tabularFigures(),
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
           ),
@@ -2935,14 +2907,9 @@ class _TeamDashboardScreenState extends State<TeamDashboardScreen> {
     final weekKm =
         _stats == null ? '–' : '${_stats!.totalWeekKm.toStringAsFixed(1)} km';
 
-    return Container(
-      width: double.infinity,
+    return PacerSurface(
+      radius: PacerRadii.lg,
       padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: scheme.card,
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: scheme.border),
-      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -2951,20 +2918,39 @@ class _TeamDashboardScreenState extends State<TeamDashboardScreen> {
             style: PacerText.cardTitleOf(context).copyWith(fontSize: 14),
           ),
           const SizedBox(height: 12),
-          Row(
-            children: [
-              _statTile(context, value: '$count', label: S.membersSection),
-              _statTile(context, value: active, label: S.activeThisWeek),
-              _statTile(context, value: weekKm, label: S.weeklyDistance),
-            ],
+          IntrinsicHeight(
+            child: Row(
+              children: [
+                _statTile(context, value: '$count', label: S.membersSection),
+                VerticalDivider(
+                  width: 1,
+                  thickness: 1,
+                  indent: 4,
+                  endIndent: 4,
+                  color: scheme.groupedDivider,
+                ),
+                _statTile(context, value: active, label: S.activeThisWeek),
+                VerticalDivider(
+                  width: 1,
+                  thickness: 1,
+                  indent: 4,
+                  endIndent: 4,
+                  color: scheme.groupedDivider,
+                ),
+                _statTile(context, value: weekKm, label: S.weeklyDistance),
+              ],
+            ),
           ),
           if (_stats != null) ...[
-            const SizedBox(height: 10),
-            Divider(color: scheme.hairline, height: 1),
+            const SizedBox(height: 12),
+            Divider(color: scheme.groupedDivider, height: 1),
             const SizedBox(height: 10),
             Text(
               '${S.weeklySessions}: ${_stats!.totalWeekSessions}  ·  ${S.totalDistanceAll}: ${_stats!.totalAllKm.toStringAsFixed(1)} km',
-              style: TextStyle(fontSize: 12, color: scheme.muted),
+              style: TextStyle(
+                fontSize: 12,
+                color: scheme.muted,
+              ).tabularFigures(),
             ),
           ],
         ],
@@ -3746,28 +3732,37 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
     required bool mine,
   }) {
     final scheme = PacerScheme.of(context);
-    return Container(
-      width: double.infinity,
+    return PacerSurface(
+      radius: PacerRadii.md,
       margin: const EdgeInsets.only(bottom: 8),
-      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 16),
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: mine ? scheme.brandAccent : scheme.border),
-        color: mine
-            ? scheme.brandAccent.withValues(alpha: 0.1)
-            : scheme.card,
-      ),
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+      highlighted: mine,
+      color: mine ? scheme.brandAccent.withValues(alpha: 0.12) : null,
+      borderColor: mine ? scheme.brandAccent : null,
       child: Row(
         children: [
-          Text(
-            '$rank',
-            style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 16),
+          Container(
+            width: 30,
+            height: 30,
+            alignment: Alignment.center,
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              color: mine ? scheme.brandAccent : scheme.softBorder,
+            ),
+            child: Text(
+              '$rank',
+              style: TextStyle(
+                fontWeight: FontWeight.w700,
+                fontSize: 13,
+                color: mine ? scheme.onBrandAccent : scheme.ink,
+              ).tabularFigures(),
+            ),
           ),
           const SizedBox(width: 12),
           Expanded(
             child: Text(
               name,
-              style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 16),
+              style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 15),
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
             ),
@@ -3775,7 +3770,11 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
           const SizedBox(width: 8),
           Text(
             value,
-            style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 16),
+            style: TextStyle(
+              fontWeight: FontWeight.w700,
+              fontSize: 15,
+              color: mine ? scheme.accent : scheme.ink,
+            ).tabularFigures(),
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
           ),
@@ -3790,51 +3789,13 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
     required bool selected,
     required VoidCallback onTap,
   }) {
-    final scheme = PacerScheme.of(context);
-    return InkWell(
+    return GestureDetector(
       onTap: onTap,
-      borderRadius: BorderRadius.circular(20),
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 150),
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-        decoration: BoxDecoration(
-          color: selected ? scheme.brandAccent : scheme.card,
-          borderRadius: BorderRadius.circular(20),
-          border: Border.all(
-            color: selected ? scheme.brandAccent : scheme.border,
-            width: selected ? 1.5 : 1,
-          ),
-          boxShadow: selected
-              ? [
-                  BoxShadow(
-                    color: scheme.brandAccent.withValues(alpha: 0.25),
-                    blurRadius: 8,
-                    offset: const Offset(0, 2),
-                  ),
-                ]
-              : null,
-        ),
-        child: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            if (icon != null) ...[
-              Icon(
-                icon,
-                size: 14,
-                color: selected ? scheme.onBrandAccent : scheme.ink,
-              ),
-              const SizedBox(width: 4),
-            ],
-            Text(
-              label,
-              style: GoogleFonts.spaceGrotesk(
-                fontSize: 12,
-                fontWeight: selected ? FontWeight.w700 : FontWeight.w500,
-                color: selected ? scheme.onBrandAccent : scheme.ink,
-              ),
-            ),
-          ],
-        ),
+      child: GoalChip(
+        label: label,
+        icon: icon,
+        selected: selected,
+        useBrandAccent: true,
       ),
     );
   }
@@ -4150,15 +4111,23 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
     required int rank,
     required Color medal,
   }) {
-    // Bronze bar is dark — white badge text there; dark text on gold/silver.
     final badgeFg = medal == PacerColors.medalBronze
         ? Colors.white
         : Colors.black;
+    final topTint = Color.lerp(bar, Colors.white, 0.16) ?? bar;
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 8),
+      padding: const EdgeInsets.symmetric(horizontal: 6),
       child: Column(
         children: [
-          InitialAvatar(initialsOf(name)),
+          Container(
+            padding: const EdgeInsets.all(2.5),
+            decoration: BoxDecoration(
+              shape: BoxShape.circle,
+              border: Border.all(color: medal, width: 2),
+            ),
+            child: InitialAvatar(initialsOf(name)),
+          ),
+          const SizedBox(height: 6),
           SizedBox(
             width: 88,
             child: Text(
@@ -4166,35 +4135,53 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
               textAlign: TextAlign.center,
               maxLines: 1,
               overflow: TextOverflow.ellipsis,
-              style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 16),
+              style: const TextStyle(fontWeight: FontWeight.w800, fontSize: 15),
             ),
           ),
+          const SizedBox(height: 2),
           Text(
             valueText,
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
-            style: const TextStyle(fontWeight: FontWeight.w700, fontSize: 14),
-          ),
-          Container(
-            width: 57,
-            height: h,
-            decoration: BoxDecoration(
-              color: bar,
-              borderRadius: BorderRadius.circular(6),
-            ),
+            style: const TextStyle(
+              fontWeight: FontWeight.w700,
+              fontSize: 13,
+            ).tabularFigures(),
           ),
           const SizedBox(height: 8),
           Container(
-            width: 35,
-            height: 27,
-            alignment: Alignment.center,
-            decoration: BoxDecoration(
-              color: medal,
-              borderRadius: BorderRadius.circular(4),
+            width: 70,
+            height: h + 14,
+            padding: const EdgeInsets.only(top: 10),
+            alignment: Alignment.topCenter,
+            decoration: ShapeDecoration(
+              gradient: LinearGradient(
+                begin: Alignment.topCenter,
+                end: Alignment.bottomCenter,
+                colors: [topTint, bar.withValues(alpha: 0.88)],
+              ),
+              shape: PacerSquircleBorder(
+                PacerRadii.md,
+                rimColor: Colors.white.withValues(alpha: 0.35),
+                side: BorderSide(color: medal.withValues(alpha: 0.5)),
+              ),
             ),
-            child: Text(
-              '$rank',
-              style: TextStyle(fontWeight: FontWeight.w800, color: badgeFg),
+            child: Container(
+              width: 28,
+              height: 28,
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                color: medal,
+                shape: BoxShape.circle,
+              ),
+              child: Text(
+                '$rank',
+                style: TextStyle(
+                  fontWeight: FontWeight.w800,
+                  fontSize: 13,
+                  color: badgeFg,
+                ).tabularFigures(),
+              ),
             ),
           ),
         ],
@@ -4359,13 +4346,17 @@ class _HistoryScreenState extends State<HistoryScreen> {
                                 style: PacerText.giantNumOf(
                                   context,
                                   fluid(w, 88, 140),
-                                ),
+                                ).tabularFigures(),
                               ),
-                              Text(
-                                S.kilometersUnit,
-                                style: const TextStyle(
-                                  fontWeight: FontWeight.w300,
-                                  fontSize: 24,
+                              Padding(
+                                padding: const EdgeInsets.only(bottom: 14),
+                                child: Text(
+                                  S.kilometersUnit,
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.w400,
+                                    fontSize: 22,
+                                    color: PacerScheme.of(context).muted,
+                                  ),
                                 ),
                               ),
                             ],
@@ -4376,34 +4367,43 @@ class _HistoryScreenState extends State<HistoryScreen> {
                       // Wrap instead of a fixed Row so the summary never overflows.
                       Wrap(
                         crossAxisAlignment: WrapCrossAlignment.center,
-                        spacing: 12,
+                        spacing: 14,
+                        runSpacing: 6,
                         children: [
                           Text(
                             S.runsCount(list.length),
-                            style: const TextStyle(
-                              fontWeight: FontWeight.w500,
-                              fontSize: 24,
-                            ),
+                            style: TextStyle(
+                              fontWeight: FontWeight.w700,
+                              fontSize: 20,
+                              color: PacerScheme.of(context).ink,
+                            ).tabularFigures(),
                           ),
                           Text(
                             list.isEmpty
                                 ? '– ${S.averagePace}'
                                 : '${fmtPace(totalS, totalKm)} ${S.averagePace}',
-                            style: const TextStyle(
-                              fontWeight: FontWeight.w300,
-                              fontSize: 20,
-                            ),
+                            style: TextStyle(
+                              fontWeight: FontWeight.w400,
+                              fontSize: 18,
+                              color: PacerScheme.of(context).muted,
+                            ).tabularFigures(),
                           ),
                           Text(
                             '${fmtDurasi(totalS)} ${S.time}',
-                            style: const TextStyle(
-                              fontWeight: FontWeight.w300,
-                              fontSize: 20,
-                            ),
+                            style: TextStyle(
+                              fontWeight: FontWeight.w400,
+                              fontSize: 18,
+                              color: PacerScheme.of(context).muted,
+                            ).tabularFigures(),
                           ),
                         ],
                       ),
-                      const SizedBox(height: 12),
+                      const SizedBox(height: 16),
+                      Divider(
+                        height: 1,
+                        color: PacerScheme.of(context).groupedDivider,
+                      ),
+                      const SizedBox(height: 16),
                       _historyGrid(context, [
                         for (final a in list) _activityCard(a),
                       ]),
@@ -5280,29 +5280,40 @@ class _AccountScreenState extends State<AccountScreen> {
 
   Widget _menuRow(
     BuildContext context, {
+    required IconData icon,
     required String label,
     required VoidCallback onTap,
+    bool destructive = false,
   }) {
+    final scheme = PacerScheme.of(context);
+    final dangerColor = scheme.isDark
+        ? const Color(0xFFF87171)
+        : PacerColors.errorRed;
+    final fg = destructive ? dangerColor : scheme.ink;
     return InkWell(
       onTap: onTap,
-      borderRadius: BorderRadius.circular(8),
       child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 4),
+        padding: const EdgeInsets.symmetric(vertical: 15, horizontal: 16),
         child: Row(
           children: [
+            Icon(icon, size: 20, color: destructive ? dangerColor : scheme.muted),
+            const SizedBox(width: 14),
             Expanded(
               child: Text(
                 label,
-                style: const TextStyle(
+                style: TextStyle(
                   fontWeight: FontWeight.w500,
                   fontSize: 15,
+                  color: fg,
                 ),
               ),
             ),
             Icon(
               Icons.chevron_right,
               size: 20,
-              color: PacerScheme.of(context).soft,
+              color: destructive
+                  ? dangerColor.withValues(alpha: 0.75)
+                  : scheme.soft,
             ),
           ],
         ),
@@ -5329,6 +5340,7 @@ class _AccountScreenState extends State<AccountScreen> {
                     decoration: BoxDecoration(
                       color: scheme.card,
                       shape: BoxShape.circle,
+                      border: Border.all(color: scheme.cardTopRim),
                       boxShadow: [scheme.shadowBox],
                     ),
                     child: IconButton(
@@ -5340,141 +5352,142 @@ class _AccountScreenState extends State<AccountScreen> {
                 ],
               ),
               const SizedBox(height: 12),
-              InitialAvatar(initialsOf(_profile?.nama), size: 99),
-              const SizedBox(height: 8),
+              Container(
+                padding: const EdgeInsets.all(3),
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  border: Border.all(
+                    color: scheme.brandAccent.withValues(alpha: 0.5),
+                    width: 2,
+                  ),
+                ),
+                child: InitialAvatar(initialsOf(_profile?.nama), size: 96),
+              ),
+              const SizedBox(height: 10),
               Text(
                 _profile?.nama ?? '–',
-                style: const TextStyle(
-                  fontWeight: FontWeight.w600,
-                  fontSize: 16,
-                ),
+                style: PacerText.cardTitleOf(context),
               ),
-              const SizedBox(height: 12),
-              Container(
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(16),
-                  border: Border.all(color: scheme.border),
-                ),
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    _menuRow(
-                      context,
-                      label: S.email,
-                      onTap: () => ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(content: Text(_profile?.email ?? '–')),
+              const SizedBox(height: 16),
+              PacerGroupedPanel(
+                children: [
+                  _menuRow(
+                    context,
+                    icon: Icons.mail_outline_rounded,
+                    label: S.email,
+                    onTap: () => ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text(_profile?.email ?? '–')),
+                    ),
+                  ),
+                  _menuRow(
+                    context,
+                    icon: Icons.person_outline_rounded,
+                    label: S.aboutMe,
+                    onTap: () => Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (_) => const AboutMeScreen(),
                       ),
                     ),
-                    Divider(height: 1, color: scheme.border),
-                    _menuRow(
-                      context,
-                      label: S.aboutMe,
-                      onTap: () => Navigator.of(context).push(
-                        MaterialPageRoute(
-                          builder: (_) => const AboutMeScreen(),
-                        ),
+                  ),
+                  _menuRow(
+                    context,
+                    icon: Icons.auto_awesome_outlined,
+                    label: S.features,
+                    onTap: () => Navigator.of(context).push(
+                      MaterialPageRoute(builder: (_) => const FiturScreen()),
+                    ),
+                  ),
+                  _menuRow(
+                    context,
+                    icon: Icons.translate_rounded,
+                    label: S.language,
+                    onTap: () => Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (_) => const LanguageSettingsScreen(),
                       ),
                     ),
-                    Divider(height: 1, color: scheme.border),
-                    _menuRow(
-                      context,
-                      label: S.features,
-                      onTap: () => Navigator.of(context).push(
-                        MaterialPageRoute(builder: (_) => const FiturScreen()),
+                  ),
+                  _menuRow(
+                    context,
+                    icon: Icons.palette_outlined,
+                    label: S.theme,
+                    onTap: () => Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (_) => const ThemeSettingsScreen(),
                       ),
                     ),
-                    Divider(height: 1, color: scheme.border),
-                    _menuRow(
-                      context,
-                      label: S.language,
-                      onTap: () => Navigator.of(context).push(
-                        MaterialPageRoute(
-                          builder: (_) => const LanguageSettingsScreen(),
-                        ),
-                      ),
+                  ),
+                  _menuRow(
+                    context,
+                    icon: Icons.system_update_outlined,
+                    label: S.checkForUpdates(
+                      GitHubUpdateService.currentVersion,
                     ),
-                    Divider(height: 1, color: scheme.border),
-                    _menuRow(
-                      context,
-                      label: S.theme,
-                      onTap: () => Navigator.of(context).push(
-                        MaterialPageRoute(
-                          builder: (_) => const ThemeSettingsScreen(),
-                        ),
-                      ),
-                    ),
-                    Divider(height: 1, color: scheme.border),
-                    _menuRow(
-                      context,
-                      label: S.checkForUpdates(
-                        GitHubUpdateService.currentVersion,
-                      ),
-                      onTap: () => _checkForUpdates(context),
-                    ),
-                    Divider(height: 1, color: scheme.border),
-                    _menuRow(
-                      context,
-                      label: S.out,
-                      onTap: () async {
-                        if (!_isDemo) {
-                          final pending = await AuthRepository()
-                              .pendingSyncCount();
-                          if (pending > 0) {
-                            if (!context.mounted) return;
-                            final confirm = await showDialog<bool>(
-                              context: context,
-                              builder: (ctx) => AlertDialog(
-                                title: Text(S.unsyncedSignOutTitle),
-                                content: Text(S.unsyncedSignOutBody(pending)),
-                                actions: [
-                                  TextButton(
-                                    onPressed: () =>
-                                        Navigator.of(ctx).pop(false),
-                                    child: Text(S.cancelLabel),
-                                  ),
-                                  TextButton(
-                                    onPressed: () =>
-                                        Navigator.of(ctx).pop(true),
-                                    child: Text(S.signOutAnyway),
-                                  ),
-                                ],
-                              ),
-                            );
-                            if (confirm != true) return;
-                          }
-                        }
-                        try {
-                          await AuthRepository().signOut();
-                        } catch (_) {
-                          // Demo mode (no backend): just leave.
-                        }
-                        if (!context.mounted) return;
-                        Navigator.of(context).pushAndRemoveUntil(
-                          MaterialPageRoute(
-                            builder: (_) => GetStartedScreen(
-                              onSignIn: () => Navigator.of(context)
-                                  .pushAndRemoveUntil(
-                                    MaterialPageRoute(
-                                      builder: (_) => const MainShell(),
-                                    ),
-                                    (route) => false,
-                                  ),
-                              onLogIn: () => Navigator.of(context)
-                                  .pushAndRemoveUntil(
-                                    MaterialPageRoute(
-                                      builder: (_) => const MainShell(),
-                                    ),
-                                    (route) => false,
-                                  ),
+                    onTap: () => _checkForUpdates(context),
+                  ),
+                  _menuRow(
+                    context,
+                    icon: Icons.logout_rounded,
+                    label: S.out,
+                    destructive: true,
+                    onTap: () async {
+                      if (!_isDemo) {
+                        final pending = await AuthRepository()
+                            .pendingSyncCount();
+                        if (pending > 0) {
+                          if (!context.mounted) return;
+                          final confirm = await showDialog<bool>(
+                            context: context,
+                            builder: (ctx) => AlertDialog(
+                              title: Text(S.unsyncedSignOutTitle),
+                              content: Text(S.unsyncedSignOutBody(pending)),
+                              actions: [
+                                TextButton(
+                                  onPressed: () =>
+                                      Navigator.of(ctx).pop(false),
+                                  child: Text(S.cancelLabel),
+                                ),
+                                TextButton(
+                                  onPressed: () =>
+                                      Navigator.of(ctx).pop(true),
+                                  child: Text(S.signOutAnyway),
+                                ),
+                              ],
                             ),
+                          );
+                          if (confirm != true) return;
+                        }
+                      }
+                      try {
+                        await AuthRepository().signOut();
+                      } catch (_) {
+                        // Demo mode (no backend): just leave.
+                      }
+                      if (!context.mounted) return;
+                      Navigator.of(context).pushAndRemoveUntil(
+                        MaterialPageRoute(
+                          builder: (_) => GetStartedScreen(
+                            onSignIn: () => Navigator.of(context)
+                                .pushAndRemoveUntil(
+                                  MaterialPageRoute(
+                                    builder: (_) => const MainShell(),
+                                  ),
+                                  (route) => false,
+                                ),
+                            onLogIn: () => Navigator.of(context)
+                                .pushAndRemoveUntil(
+                                  MaterialPageRoute(
+                                    builder: (_) => const MainShell(),
+                                  ),
+                                  (route) => false,
+                                ),
                           ),
-                          (route) => false,
-                        );
-                      },
-                    ),
-                  ],
-                ),
+                        ),
+                        (route) => false,
+                      );
+                    },
+                  ),
+                ],
               ),
               if (!_isDemo) ...[
                 const SizedBox(height: 16),
@@ -5569,91 +5582,76 @@ class _StatisticScreenState extends State<StatisticScreen> {
                   Widget total = FutureBuilder<({double km, int seconds})?>(
                     future: _future,
                     builder: (context, snap) {
+                      final scheme = PacerScheme.of(context);
                       final d = snap.data;
                       // No mocks: offline and empty week show zeros.
-                      if (d == null) {
-                        return Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              fmtKm(0),
-                              style: const TextStyle(
-                                fontWeight: FontWeight.w700,
-                                fontSize: 32,
+                      final headline = d == null
+                          ? fmtKm(0)
+                          : fmtKmNum(d.km * 1000);
+                      final cards = d == null
+                          ? [
+                              _StatCard(S.averagePace, '–', '/km'),
+                              _StatCard(S.totalTime, '–', S.unitMinutes),
+                              _StatCard(S.activeCalories, '–', S.unitKcal),
+                            ]
+                          : [
+                              _StatCard(
+                                S.averagePace,
+                                fmtPace(d.seconds, d.km * 1000),
+                                '/km',
                               ),
-                            ),
-                            Text(
-                              S.totalRunDistance,
-                              style: TextStyle(
-                                fontSize: 11,
-                                color: PacerScheme.of(context).soft,
+                              _StatCard(
+                                S.totalTime,
+                                fmtDurasi(d.seconds),
+                                S.unitMinutes,
                               ),
-                            ),
-                            const SizedBox(height: 12),
-                            Row(
-                              children: [
-                                Expanded(
-                                  child: _StatCard(S.averagePace, '–', '/km'),
-                                ),
-                                const SizedBox(width: 8),
-                                Expanded(
-                                  child: _StatCard(
-                                    S.totalTime,
-                                    '–',
-                                    S.unitMinutes,
-                                  ),
-                                ),
-                                const SizedBox(width: 8),
-                                Expanded(
-                                  child: _StatCard(
-                                    S.activeCalories,
-                                    '–',
-                                    S.unitKcal,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ],
-                        );
-                      }
+                              const _StatCard('–', '', ''),
+                            ];
                       return Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
                           Text(
-                            fmtKmNum(d.km * 1000),
-                            style: const TextStyle(
-                              fontWeight: FontWeight.w700,
-                              fontSize: 32,
-                            ),
+                            headline,
+                            style: PacerText.pageTitleOf(context)
+                                .copyWith(fontSize: 34)
+                                .tabularFigures(),
                           ),
+                          const SizedBox(height: 2),
                           Text(
                             S.totalRunDistance,
-                            style: TextStyle(
-                              fontSize: 11,
-                              color: PacerScheme.of(context).soft,
-                            ),
+                            style: TextStyle(fontSize: 12, color: scheme.soft),
                           ),
                           const SizedBox(height: 16),
-                          Row(
-                            children: [
-                              Expanded(
-                                child: _StatCard(
-                                  S.averagePace,
-                                  fmtPace(d.seconds, d.km * 1000),
-                                  '/km',
-                                ),
-                              ),
-                              const SizedBox(width: 8),
-                              Expanded(
-                                child: _StatCard(
-                                  S.totalTime,
-                                  fmtDurasi(d.seconds),
-                                  S.unitMinutes,
-                                ),
-                              ),
-                              const SizedBox(width: 8),
-                              const Expanded(child: _StatCard('–', '', '')),
-                            ],
+                          LayoutBuilder(
+                            builder: (context, sc) {
+                              if (sc.maxWidth < 340) {
+                                return Column(
+                                  children: [
+                                    Row(
+                                      children: [
+                                        Expanded(child: cards[0]),
+                                        const SizedBox(width: 8),
+                                        Expanded(child: cards[1]),
+                                      ],
+                                    ),
+                                    const SizedBox(height: 8),
+                                    SizedBox(
+                                      width: double.infinity,
+                                      child: cards[2],
+                                    ),
+                                  ],
+                                );
+                              }
+                              return Row(
+                                children: [
+                                  Expanded(child: cards[0]),
+                                  const SizedBox(width: 10),
+                                  Expanded(child: cards[1]),
+                                  const SizedBox(width: 10),
+                                  Expanded(child: cards[2]),
+                                ],
+                              );
+                            },
                           ),
                         ],
                       );
@@ -5696,12 +5694,9 @@ class _StatCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = PacerScheme.of(context);
-    return Container(
+    return PacerSurface(
+      radius: PacerRadii.md,
       padding: const EdgeInsets.all(14),
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: scheme.border),
-      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -5711,6 +5706,7 @@ class _StatCard extends StatelessWidget {
             maxLines: 1,
             overflow: TextOverflow.ellipsis,
           ),
+          const SizedBox(height: 4),
           FittedBox(
             fit: BoxFit.scaleDown,
             alignment: Alignment.centerLeft,
@@ -5720,7 +5716,7 @@ class _StatCard extends StatelessWidget {
                 fontWeight: FontWeight.w800,
                 fontSize: 20,
                 color: scheme.headline,
-              ),
+              ).tabularFigures(),
             ),
           ),
           Text(
@@ -5831,11 +5827,11 @@ class _StreaksScreenState extends State<StreaksScreen> {
                       children: [
                         Text(
                           '${S.thisWeek} • ${S.daysOf7(0)}',
-                          style: const TextStyle(
-                            color: PacerColors.streakBlue,
+                          style: TextStyle(
+                            color: PacerScheme.of(context).accent,
                             fontWeight: FontWeight.w600,
                             fontSize: 12,
-                          ),
+                          ).tabularFigures(),
                         ),
                         const SizedBox(height: 12),
                         StreakCard(
@@ -5857,11 +5853,11 @@ class _StreaksScreenState extends State<StreaksScreen> {
                     children: [
                       Text(
                         '${S.thisWeek} • ${S.daysOf7(doneThisWeek)}',
-                        style: const TextStyle(
-                          color: PacerColors.streakBlue,
+                        style: TextStyle(
+                          color: PacerScheme.of(context).accent,
                           fontWeight: FontWeight.w600,
                           fontSize: 12,
-                        ),
+                        ).tabularFigures(),
                       ),
                       const SizedBox(height: 12),
                       StreakCard(
@@ -6031,27 +6027,37 @@ class _ChallengeListScreenState extends State<ChallengeListScreen> {
     final Color statusFg;
     if (part?.berhasil == true) {
       statusLabel = S.challengeCompletedLabel;
-      statusBg = Colors.green.withValues(alpha: 0.25);
-      statusFg = Colors.greenAccent;
+      statusBg = const Color(0xFF4ADE80).withValues(alpha: 0.2);
+      statusFg = const Color(0xFF4ADE80);
     } else if (part != null && part.isActive) {
       statusLabel = S.activeSlotBadge;
-      statusBg = scheme.brandAccent.withValues(alpha: 0.28);
+      statusBg = scheme.brandAccent.withValues(alpha: 0.26);
       statusFg = scheme.brandAccent;
     } else if (part != null) {
       statusLabel = S.waitingSlotBadge;
-      statusBg = Colors.white24;
+      statusBg = Colors.white.withValues(alpha: 0.16);
       statusFg = Colors.white;
     } else if (!active) {
       statusLabel = S.challengeEnded;
-      statusBg = Colors.white12;
+      statusBg = Colors.white.withValues(alpha: 0.12);
       statusFg = Colors.white70;
     } else {
       statusLabel = S.challengeActive;
-      statusBg = Colors.white12;
+      statusBg = Colors.white.withValues(alpha: 0.14);
       statusFg = Colors.white;
     }
 
-    return GestureDetector(
+    return PacerSurface(
+      radius: PacerRadii.hero,
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: EdgeInsets.zero,
+      borderColor: Colors.white.withValues(alpha: 0.14),
+      gradient: LinearGradient(
+        colors: scheme.heroCardGradient,
+        begin: Alignment.topLeft,
+        end: Alignment.bottomRight,
+      ),
+      shadows: [scheme.shadowBox],
       onTap: () async {
         await ChallengeDetailSheet.show(
           context,
@@ -6061,139 +6067,149 @@ class _ChallengeListScreenState extends State<ChallengeListScreen> {
         );
         _reload();
       },
-      child: Container(
-        width: double.infinity,
-        constraints: BoxConstraints(minHeight: fluid(w, 179, 220)),
-        margin: const EdgeInsets.only(bottom: 12),
-        padding: const EdgeInsets.all(20),
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(20),
-          gradient: LinearGradient(
-            colors: scheme.heroCardGradient,
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
+      child: Stack(
+        children: [
+          Positioned.fill(
+            child: IgnorePointer(
+              child: CustomPaint(
+                painter: PacerTrackLinesPainter(
+                  color: Colors.white.withValues(alpha: 0.055),
+                  count: 4,
+                ),
+              ),
+            ),
           ),
-          boxShadow: [scheme.shadowBox],
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisAlignment: MainAxisAlignment.spaceBetween,
-          children: [
-            Wrap(
-              spacing: 6,
-              runSpacing: 6,
-              crossAxisAlignment: WrapCrossAlignment.center,
-              children: [
-                _ChallengeScopeBadge(
-                  c,
-                  teamName: teamName,
-                  lightOnDark: true,
-                ),
-                _ChallengeBadge(
-                  S.sportName(c.jenis),
-                  bg: Colors.white12,
-                  fg: Colors.white,
-                ),
-                _ChallengeBadge(
-                  statusLabel,
-                  bg: statusBg,
-                  fg: statusFg,
-                ),
-              ],
-            ),
-            if (c.judul != null && c.judul!.trim().isNotEmpty) ...[
-              const SizedBox(height: 10),
-              Text(
-                c.judul!.trim(),
-                style: const TextStyle(
-                  color: Colors.white,
-                  fontWeight: FontWeight.w700,
-                  fontSize: 16,
-                ),
-              ),
-            ],
-            const SizedBox(height: 8),
-            Row(
-              crossAxisAlignment: CrossAxisAlignment.end,
-              children: [
-                // Hero number flexes and scales down so long
-                // live values never push the date off-screen.
-                Flexible(
-                  child: FittedBox(
-                    fit: BoxFit.scaleDown,
-                    alignment: Alignment.bottomLeft,
-                    child: Text(
-                      S.challengeTargetValue(c.targetNilai, c.targetSatuan),
-                      style: PacerText.giantNum(
-                        fluid(w, 84, 128),
-                      ).copyWith(color: PacerColors.primary),
-                    ),
-                  ),
-                ),
-                Text(
-                  ' ${S.challengeTargetUnit(c.targetSatuan)}',
-                  style: PacerText.kmSuffix.copyWith(fontSize: 36),
-                ),
-                const SizedBox(width: 8),
-                Flexible(
-                  child: Text(
-                    _heroDate(c),
-                    maxLines: 1,
-                    overflow: TextOverflow.ellipsis,
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontWeight: FontWeight.w600,
-                      fontSize: 16,
-                    ),
-                  ),
-                ),
-              ],
-            ),
-            if (part != null) ...[
-              const SizedBox(height: 10),
-              ClipRRect(
-                borderRadius: BorderRadius.circular(4),
-                child: LinearProgressIndicator(
-                  value: (pct / 100).clamp(0.0, 1.0),
-                  minHeight: 6,
-                  backgroundColor: Colors.white24,
-                  valueColor: AlwaysStoppedAnimation<Color>(
-                    part.berhasil ? Colors.greenAccent : PacerColors.primary,
-                  ),
-                ),
-              ),
-              const SizedBox(height: 6),
-              Row(
+          ConstrainedBox(
+            constraints: BoxConstraints(minHeight: fluid(w, 179, 220)),
+            child: Padding(
+              padding: const EdgeInsets.all(20),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Expanded(
-                    child: Text(
-                      '${S.challengeTargetSummary(part.progressNilai, c.targetSatuan)} / '
-                      '${S.challengeTargetSummary(c.targetNilai, c.targetSatuan)} • '
-                      '${pct.toInt()}%',
+                  Wrap(
+                    spacing: 6,
+                    runSpacing: 6,
+                    crossAxisAlignment: WrapCrossAlignment.center,
+                    children: [
+                      _ChallengeScopeBadge(
+                        c,
+                        teamName: teamName,
+                        lightOnDark: true,
+                      ),
+                      _ChallengeBadge(
+                        S.sportName(c.jenis),
+                        bg: Colors.white12,
+                        fg: Colors.white,
+                      ),
+                      _ChallengeBadge(
+                        statusLabel,
+                        bg: statusBg,
+                        fg: statusFg,
+                      ),
+                    ],
+                  ),
+                  if (c.judul != null && c.judul!.trim().isNotEmpty) ...[
+                    const SizedBox(height: 10),
+                    Text(
+                      c.judul!.trim(),
                       style: const TextStyle(
-                        color: Colors.white70,
-                        fontSize: 12,
-                        fontWeight: FontWeight.w600,
+                        color: Colors.white,
+                        fontWeight: FontWeight.w700,
+                        fontSize: 16,
                       ),
                     ),
-                  ),
-                  if (!part.berhasil && !part.isActive)
-                    TextButton(
-                      onPressed: _busy ? null : () => _activate(c.id),
-                      style: TextButton.styleFrom(
-                        foregroundColor: scheme.brandAccent,
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 10,
-                          vertical: 4,
+                  ],
+                  const SizedBox(height: 8),
+                  Row(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      // Hero number flexes and scales down so long
+                      // live values never push the date off-screen.
+                      Flexible(
+                        child: FittedBox(
+                          fit: BoxFit.scaleDown,
+                          alignment: Alignment.bottomLeft,
+                          child: Text(
+                            S.challengeTargetValue(
+                              c.targetNilai,
+                              c.targetSatuan,
+                            ),
+                            style: PacerText.giantNum(
+                              fluid(w, 84, 128),
+                            ).copyWith(color: scheme.brandAccent).tabularFigures(),
+                          ),
                         ),
                       ),
-                      child: Text(S.chooseActiveChallenge),
+                      Text(
+                        ' ${S.challengeTargetUnit(c.targetSatuan)}',
+                        style: PacerText.kmSuffix.copyWith(fontSize: 36),
+                      ),
+                      const SizedBox(width: 8),
+                      Flexible(
+                        child: Text(
+                          _heroDate(c),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.w600,
+                            fontSize: 16,
+                          ).tabularFigures(),
+                        ),
+                      ),
+                    ],
+                  ),
+                  if (part != null) ...[
+                    const SizedBox(height: 10),
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(999),
+                      child: LinearProgressIndicator(
+                        value: (pct / 100).clamp(0.0, 1.0),
+                        minHeight: 6,
+                        backgroundColor: Colors.white24,
+                        valueColor: AlwaysStoppedAnimation<Color>(
+                          part.berhasil
+                              ? const Color(0xFF4ADE80)
+                              : scheme.brandAccent,
+                        ),
+                      ),
                     ),
+                    const SizedBox(height: 6),
+                    Row(
+                      children: [
+                        Expanded(
+                          child: Text(
+                            '${S.challengeTargetSummary(part.progressNilai, c.targetSatuan)} / '
+                            '${S.challengeTargetSummary(c.targetNilai, c.targetSatuan)} • '
+                            '${pct.toInt()}%',
+                            style: const TextStyle(
+                              color: Colors.white70,
+                              fontSize: 12,
+                              fontWeight: FontWeight.w600,
+                            ).tabularFigures(),
+                          ),
+                        ),
+                        if (!part.berhasil && !part.isActive)
+                          TextButton(
+                            onPressed: _busy ? null : () => _activate(c.id),
+                            style: TextButton.styleFrom(
+                              foregroundColor: scheme.brandAccent,
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 10,
+                                vertical: 4,
+                              ),
+                            ),
+                            child: Text(S.chooseActiveChallenge),
+                          ),
+                      ],
+                    ),
+                  ],
                 ],
               ),
-            ],
-          ],
-        ),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -8235,29 +8251,7 @@ class ThemeSettingsScreen extends StatelessWidget {
                 ),
               ),
               const SizedBox(height: 28),
-              Row(
-                children: [
-                  Container(
-                    width: 4,
-                    height: 18,
-                    decoration: BoxDecoration(
-                      color: scheme.accent,
-                      borderRadius: BorderRadius.circular(99),
-                    ),
-                  ),
-                  const SizedBox(width: 10),
-                  Expanded(
-                    child: Text(
-                      'Classic Linux Desktop Themes',
-                      style: GoogleFonts.spaceGrotesk(
-                        fontWeight: FontWeight.w700,
-                        fontSize: 18,
-                        color: scheme.ink,
-                      ),
-                    ),
-                  ),
-                ],
-              ),
+              const SectionHeader(title: 'Classic Linux Desktop Themes'),
               const SizedBox(height: 6),
               Text(
                 'Iconic Linux desktop environment palettes for both Dark & Light modes.',
@@ -8294,97 +8288,90 @@ class ThemeSettingsScreen extends StatelessWidget {
     required VoidCallback onTap,
   }) {
     final scheme = PacerScheme.of(context);
-    return InkWell(
+    return PacerSurface(
       key: ValueKey('linux_theme_${info.id.name}'),
+      radius: PacerRadii.md,
+      padding: const EdgeInsets.all(14),
+      highlighted: selected,
+      borderColor: selected ? info.accent : null,
+      borderWidth: selected ? 2 : 1,
       onTap: onTap,
-      borderRadius: BorderRadius.circular(14),
-      child: Container(
-        padding: const EdgeInsets.all(14),
-        decoration: BoxDecoration(
-          color: scheme.card,
-          borderRadius: BorderRadius.circular(14),
-          border: Border.all(
-            color: selected ? info.accent : scheme.border,
-            width: selected ? 2 : 1,
-          ),
-        ),
-        child: Row(
-          children: [
-            // Live color swatch preview pill
-            Container(
-              width: 48,
-              height: 44,
-              padding: const EdgeInsets.all(6),
-              decoration: BoxDecoration(
-                color: info.darkBg,
-                borderRadius: BorderRadius.circular(11),
-                border: Border.all(
-                  color: info.accent.withValues(alpha: 0.45),
+      child: Row(
+        children: [
+          // Live color swatch preview pill
+          Container(
+            width: 48,
+            height: 44,
+            padding: const EdgeInsets.all(6),
+            decoration: ShapeDecoration(
+              color: info.darkBg,
+              shape: PacerSquircleBorder(
+                PacerRadii.sm,
+                side: BorderSide(color: info.accent.withValues(alpha: 0.45)),
+              ),
+            ),
+            child: Column(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Container(
+                      width: 14,
+                      height: 14,
+                      decoration: BoxDecoration(
+                        color: info.accent,
+                        shape: BoxShape.circle,
+                      ),
+                    ),
+                    Container(
+                      width: 14,
+                      height: 14,
+                      decoration: BoxDecoration(
+                        color: info.secondaryAccent,
+                        shape: BoxShape.circle,
+                      ),
+                    ),
+                  ],
                 ),
-              ),
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Container(
-                        width: 14,
-                        height: 14,
-                        decoration: BoxDecoration(
-                          color: info.accent,
-                          shape: BoxShape.circle,
-                        ),
-                      ),
-                      Container(
-                        width: 14,
-                        height: 14,
-                        decoration: BoxDecoration(
-                          color: info.secondaryAccent,
-                          shape: BoxShape.circle,
-                        ),
-                      ),
-                    ],
+                Container(
+                  height: 8,
+                  width: double.infinity,
+                  decoration: BoxDecoration(
+                    color: info.darkSurface,
+                    borderRadius: BorderRadius.circular(4),
                   ),
-                  Container(
-                    height: 8,
-                    width: double.infinity,
-                    decoration: BoxDecoration(
-                      color: info.darkSurface,
-                      borderRadius: BorderRadius.circular(4),
-                    ),
-                  ),
-                ],
-              ),
+                ),
+              ],
             ),
-            const SizedBox(width: 14),
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    info.name,
-                    style: GoogleFonts.spaceGrotesk(
-                      fontWeight: FontWeight.w700,
-                      fontSize: 15.5,
-                      color: scheme.ink,
-                    ),
+          ),
+          const SizedBox(width: 14),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  info.name,
+                  style: GoogleFonts.spaceGrotesk(
+                    fontWeight: FontWeight.w700,
+                    fontSize: 15.5,
+                    color: scheme.ink,
                   ),
-                  const SizedBox(height: 2),
-                  Text(
-                    info.desktopEnv,
-                    style: TextStyle(fontSize: 12, color: scheme.soft),
-                  ),
-                ],
-              ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  info.desktopEnv,
+                  style: TextStyle(fontSize: 12, color: scheme.soft),
+                ),
+              ],
             ),
-            const SizedBox(width: 8),
-            Icon(
-              selected ? Icons.check_circle : Icons.radio_button_off,
-              color: selected ? info.accent : scheme.soft,
-            ),
-          ],
-        ),
+          ),
+          const SizedBox(width: 8),
+          Icon(
+            selected ? Icons.check_circle : Icons.radio_button_off,
+            color: selected ? info.accent : scheme.soft,
+          ),
+        ],
       ),
     );
   }
@@ -8397,41 +8384,33 @@ class ThemeSettingsScreen extends StatelessWidget {
     required VoidCallback onTap,
   }) {
     final scheme = PacerScheme.of(context);
-    return InkWell(
+    return PacerSurface(
+      radius: PacerRadii.md,
+      padding: const EdgeInsets.all(16),
+      highlighted: selected,
+      borderColor: selected ? scheme.accent : null,
+      borderWidth: selected ? 2 : 1,
       onTap: onTap,
-      borderRadius: BorderRadius.circular(12),
-      child: Container(
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(
-            color: selected ? scheme.accent : scheme.border,
-            width: selected ? 2 : 1,
+      child: Row(
+        children: [
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  label,
+                  style: PacerText.cardTitleOf(context).copyWith(fontSize: 16),
+                ),
+                const SizedBox(height: 2),
+                Text(sub, style: TextStyle(fontSize: 12, color: scheme.soft)),
+              ],
+            ),
           ),
-        ),
-        child: Row(
-          children: [
-            Expanded(
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    label,
-                    style: const TextStyle(
-                      fontWeight: FontWeight.w600,
-                      fontSize: 16,
-                    ),
-                  ),
-                  Text(sub, style: TextStyle(fontSize: 12, color: scheme.soft)),
-                ],
-              ),
-            ),
-            Icon(
-              selected ? Icons.check_circle : Icons.radio_button_off,
-              color: selected ? scheme.accent : scheme.soft,
-            ),
-          ],
-        ),
+          Icon(
+            selected ? Icons.check_circle : Icons.radio_button_off,
+            color: selected ? scheme.accent : scheme.soft,
+          ),
+        ],
       ),
     );
   }

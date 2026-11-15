@@ -170,6 +170,13 @@ class PacerText {
       hint.copyWith(color: PacerScheme.of(context).hint);
 }
 
+extension PacerTextStyleX on TextStyle {
+  /// Returns this style with proportional-width lining replaced by fixed-width
+  /// tabular figures for aligned counters, pace splits, and standings.
+  TextStyle tabularFigures() =>
+      copyWith(fontFeatures: const [FontFeature.tabularFigures()]);
+}
+
 /// Shared 8pt-grid spacing steps and one soft card shadow.
 /// Screens snap odd paddings/gaps to these instead of inventing new values.
 class PacerGaps {
@@ -177,6 +184,15 @@ class PacerGaps {
   static const double sm = 16;
   static const double md = 24;
   static const double lg = 32;
+}
+
+/// Unified corner radius ladder aligned with continuous squircle cards.
+class PacerRadii {
+  static const double sm = 12;
+  static const double md = 16;
+  static const double lg = 20;
+  static const double hero = 24;
+  static const double pill = 999;
 }
 
 class PacerShadows {
@@ -743,6 +759,21 @@ class PacerScheme {
 
   bool get isDark => brightness == Brightness.dark;
 
+  /// Optical rim & surface layering tokens matching the Liquid Glass nav bar.
+  Color get cardTopRim => isDark
+      ? Colors.white.withValues(alpha: 0.14)
+      : Colors.white.withValues(alpha: 0.88);
+
+  Color get cardBottomRim =>
+      isDark ? Colors.black.withValues(alpha: 0.28) : border;
+
+  Color get surfaceSheen => isDark
+      ? Color.lerp(card, Colors.white, 0.045)!
+      : Color.lerp(card, Colors.white, 0.45)!;
+
+  Color get groupedDivider =>
+      border.withValues(alpha: isDark ? 0.55 : 0.72);
+
   List<Color> get heroCardGradient {
     switch (linuxThemeNotifier.value) {
       case PacerLinuxTheme.defaultPacer:
@@ -832,6 +863,11 @@ class PacerTheme {
       bottomSheetTheme: BottomSheetThemeData(
         backgroundColor: scheme.card,
         surfaceTintColor: Colors.transparent,
+        shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(
+            top: Radius.circular(PacerRadii.hero),
+          ),
+        ),
       ),
       appBarTheme: AppBarTheme(
         backgroundColor: scheme.scaffold,
@@ -842,13 +878,17 @@ class PacerTheme {
         filled: true,
         fillColor: scheme.authField,
         hintStyle: PacerText.hint.copyWith(color: scheme.hint),
-        border: OutlineInputBorder(borderRadius: BorderRadius.circular(5)),
+        border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)),
         enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(5),
+          borderRadius: BorderRadius.circular(14),
           borderSide: BorderSide(color: scheme.border),
         ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(14),
+          borderSide: BorderSide(color: scheme.accent, width: 1.5),
+        ),
         contentPadding: const EdgeInsets.symmetric(
-          horizontal: 44,
+          horizontal: 20,
           vertical: 16,
         ),
       ),
@@ -856,10 +896,23 @@ class PacerTheme {
         style: ElevatedButton.styleFrom(
           backgroundColor: PacerColors.primary,
           foregroundColor: scheme.ink,
-          minimumSize: const Size(315, 50),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(5)),
+          minimumSize: const Size(0, 52),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(PacerRadii.md),
+          ),
           textStyle: PacerText.button,
-          elevation: 1,
+          elevation: 0,
+        ),
+      ),
+      outlinedButtonTheme: OutlinedButtonThemeData(
+        style: OutlinedButton.styleFrom(
+          foregroundColor: scheme.ink,
+          minimumSize: const Size(0, 50),
+          side: BorderSide(color: scheme.border, width: 1.2),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(PacerRadii.md),
+          ),
+          textStyle: PacerText.button.copyWith(fontSize: 15),
         ),
       ),
     );
@@ -909,17 +962,25 @@ class PacerTheme {
         foregroundColor: scheme.ink,
         elevation: 1,
       ),
+      cardTheme: CardThemeData(
+        color: scheme.card,
+        surfaceTintColor: Colors.transparent,
+      ),
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
         fillColor: scheme.card,
         hintStyle: PacerText.hint.copyWith(color: scheme.hint),
-        border: OutlineInputBorder(borderRadius: BorderRadius.circular(5)),
+        border: OutlineInputBorder(borderRadius: BorderRadius.circular(14)),
         enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(5),
+          borderRadius: BorderRadius.circular(14),
           borderSide: BorderSide(color: scheme.border),
         ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(14),
+          borderSide: BorderSide(color: scheme.accent, width: 1.5),
+        ),
         contentPadding: const EdgeInsets.symmetric(
-          horizontal: 44,
+          horizontal: 20,
           vertical: 16,
         ),
       ),
@@ -927,10 +988,32 @@ class PacerTheme {
         style: ElevatedButton.styleFrom(
           backgroundColor: PacerColors.primary,
           foregroundColor: PacerColors.ink,
-          minimumSize: const Size(315, 50),
-          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(5)),
+          minimumSize: const Size(0, 52),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(PacerRadii.md),
+          ),
           textStyle: PacerText.button,
-          elevation: 1,
+          elevation: 0,
+        ),
+      ),
+      outlinedButtonTheme: OutlinedButtonThemeData(
+        style: OutlinedButton.styleFrom(
+          foregroundColor: scheme.ink,
+          minimumSize: const Size(0, 50),
+          side: BorderSide(color: scheme.border, width: 1.2),
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(PacerRadii.md),
+          ),
+          textStyle: PacerText.button.copyWith(fontSize: 15),
+        ),
+      ),
+      bottomSheetTheme: BottomSheetThemeData(
+        backgroundColor: scheme.card,
+        surfaceTintColor: Colors.transparent,
+        shape: const RoundedRectangleBorder(
+          borderRadius: BorderRadius.vertical(
+            top: Radius.circular(PacerRadii.hero),
+          ),
         ),
       ),
       snackBarTheme: SnackBarThemeData(
@@ -940,6 +1023,10 @@ class PacerTheme {
       ),
       dialogTheme: DialogThemeData(
         backgroundColor: scheme.card,
+        surfaceTintColor: Colors.transparent,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(PacerRadii.hero),
+        ),
         titleTextStyle: TextStyle(color: scheme.ink, fontSize: 20),
         contentTextStyle: TextStyle(color: scheme.ink),
       ),

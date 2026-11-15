@@ -93,16 +93,32 @@ class _GlassBackdropScope extends InheritedWidget {
 }
 
 /// Continuous-corner squircle border using liquid_glass_easy's continuous path.
-class PacerSquircleBorder extends ShapeBorder {
-  const PacerSquircleBorder(this.radius);
+class PacerSquircleBorder extends OutlinedBorder {
+  const PacerSquircleBorder(
+    this.radius, {
+    super.side = BorderSide.none,
+    this.rimColor,
+  });
 
   final double radius;
+  final Color? rimColor;
 
   @override
   EdgeInsetsGeometry get dimensions => EdgeInsets.zero;
 
   @override
-  ShapeBorder scale(double t) => PacerSquircleBorder(radius * t);
+  OutlinedBorder scale(double t) => PacerSquircleBorder(
+    radius * t,
+    side: side.scale(t),
+    rimColor: rimColor,
+  );
+
+  @override
+  OutlinedBorder copyWith({BorderSide? side}) => PacerSquircleBorder(
+    radius,
+    side: side ?? this.side,
+    rimColor: rimColor,
+  );
 
   @override
   Path getOuterPath(Rect rect, {TextDirection? textDirection}) =>
@@ -113,14 +129,53 @@ class PacerSquircleBorder extends ShapeBorder {
       getOuterPath(rect, textDirection: textDirection);
 
   @override
-  void paint(Canvas canvas, Rect rect, {TextDirection? textDirection}) {}
+  void paint(Canvas canvas, Rect rect, {TextDirection? textDirection}) {
+    if (side == BorderSide.none && rimColor == null) return;
+    final path = getOuterPath(rect, textDirection: textDirection);
+    if (side != BorderSide.none) {
+      canvas.save();
+      canvas.clipPath(path);
+      canvas.drawPath(
+        path,
+        Paint()
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = side.width * 2
+          ..color = side.color,
+      );
+      canvas.restore();
+    }
+    if (rimColor != null && rimColor!.a > 0) {
+      canvas.save();
+      canvas.clipPath(path);
+      canvas.drawPath(
+        path,
+        Paint()
+          ..style = PaintingStyle.stroke
+          ..strokeWidth = 1.6
+          ..shader = LinearGradient(
+            begin: Alignment.topCenter,
+            end: Alignment.bottomCenter,
+            stops: const [0.0, 0.38, 1.0],
+            colors: [
+              rimColor!,
+              rimColor!.withValues(alpha: 0.0),
+              Colors.transparent,
+            ],
+          ).createShader(rect),
+      );
+      canvas.restore();
+    }
+  }
 
   @override
   bool operator ==(Object other) =>
-      other is PacerSquircleBorder && other.radius == radius;
+      other is PacerSquircleBorder &&
+      other.radius == radius &&
+      other.side == side &&
+      other.rimColor == rimColor;
 
   @override
-  int get hashCode => radius.hashCode;
+  int get hashCode => Object.hash(radius, side, rimColor);
 }
 
 /// Two-stroke hairline rim painter: subtle contact edge + top-light illumination.

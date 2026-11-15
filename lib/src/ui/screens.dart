@@ -98,58 +98,72 @@ class GetStartedScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
+    final scheme = PacerScheme.of(context);
     return Scaffold(
-      body: SafeArea(
-        child: ResponsiveScroll(
-          maxWidth: 720,
-          centerContent: true,
-          child: Column(
-            children: [
-              const PacerLogo(width: 280),
-              const SizedBox(height: 24),
-              Text(
-                S.appTagline,
-                style: const TextStyle(
-                  fontWeight: FontWeight.w600,
-                  fontSize: 24,
-                ),
-                textAlign: TextAlign.center,
-              ),
-              const SizedBox(height: 32),
-              SizedBox(
-                width: double.infinity,
-                height: 69,
-                child: ElevatedButton(
-                  onPressed: onSignIn,
-                  style: ElevatedButton.styleFrom(
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(5),
-                    ),
-                  ),
-                  child: Text(S.signIn),
+      body: Stack(
+        children: [
+          Positioned.fill(
+            child: IgnorePointer(
+              child: CustomPaint(
+                painter: PacerTrackLinesPainter(
+                  color: scheme.border.withValues(alpha: scheme.isDark ? 0.28 : 0.55),
+                  count: 5,
                 ),
               ),
-              const SizedBox(height: 16),
-              SizedBox(
-                width: double.infinity,
-                height: 69,
-                child: OutlinedButton(
-                  onPressed: onLogIn,
-                  style: OutlinedButton.styleFrom(
-                    side: BorderSide(
-                      width: 2,
-                      color: PacerScheme.of(context).accent,
-                    ),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(5),
-                    ),
-                  ),
-                  child: Text(S.logIn),
-                ),
-              ),
-            ],
+            ),
           ),
-        ),
+          SafeArea(
+            child: ResponsiveScroll(
+              maxWidth: 720,
+              centerContent: true,
+              child: Column(
+                children: [
+                  const PacerLogo(width: 280),
+                  const SizedBox(height: 24),
+                  Text(
+                    S.appTagline,
+                    style: GoogleFonts.spaceGrotesk(
+                      fontWeight: FontWeight.w700,
+                      fontSize: 24,
+                      letterSpacing: -0.4,
+                      color: scheme.ink,
+                    ),
+                    textAlign: TextAlign.center,
+                  ),
+                  const SizedBox(height: 36),
+                  PrimaryButton(label: S.signIn, onPressed: onSignIn),
+                  const SizedBox(height: 14),
+                  PacerTapScale(
+                    pressedScale: 0.98,
+                    child: SizedBox(
+                      width: double.infinity,
+                      height: 54,
+                      child: OutlinedButton(
+                        onPressed: onLogIn,
+                        style: OutlinedButton.styleFrom(
+                          backgroundColor: scheme.card.withValues(alpha: 0.72),
+                          side: BorderSide(
+                            width: 1.6,
+                            color: scheme.accent,
+                          ),
+                          shape: const PacerSquircleBorder(PacerRadii.md),
+                        ),
+                        child: Text(
+                          S.logIn,
+                          style: GoogleFonts.spaceGrotesk(
+                            fontWeight: FontWeight.w700,
+                            fontSize: 16,
+                            color: scheme.ink,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ],
       ),
     );
   }
@@ -293,14 +307,10 @@ class _CreateAccountScreenState extends State<CreateAccountScreen> {
               ),
               const SizedBox(height: 12),
               Center(
-                child: Container(
-                  width: 38,
-                  height: 38,
-                  decoration: BoxDecoration(
-                    color: PacerScheme.of(context).card,
-                    borderRadius: BorderRadius.circular(19),
-                    border: Border.all(color: PacerScheme.of(context).border),
-                  ),
+                child: PacerSurface(
+                  width: 48,
+                  height: 48,
+                  radius: PacerRadii.md,
                   child: Icon(
                     Icons.person_add_alt_outlined,
                     color: PacerScheme.of(context).ink,
@@ -674,14 +684,28 @@ class HomeScreenState extends State<HomeScreen> {
       height: 48,
       child: Row(
         children: [
-          IconButton(
-            onPressed: () => Navigator.of(context)
-                .push(MaterialPageRoute(builder: (_) => const FiturScreen()))
-                .then((_) => reload()),
-            icon: const Icon(Icons.menu, size: 32),
+          PacerTapScale(
+            pressedScale: 0.92,
+            child: Container(
+              width: 44,
+              height: 44,
+              decoration: BoxDecoration(
+                color: scheme.card,
+                shape: BoxShape.circle,
+                border: Border.all(color: scheme.border),
+                boxShadow: [scheme.shadowBox],
+              ),
+              child: IconButton(
+                padding: EdgeInsets.zero,
+                onPressed: () => Navigator.of(context)
+                    .push(MaterialPageRoute(builder: (_) => const FiturScreen()))
+                    .then((_) => reload()),
+                icon: Icon(Icons.menu_rounded, size: 24, color: scheme.ink),
+              ),
+            ),
           ),
-          // Balance right-side avatar (48px) so Expanded matches bell+avatar symmetry.
-          const SizedBox(width: 48),
+          // Balance right-side bell (44) + gap (6) + avatar (48) = 98px so PacerLogo centers cleanly.
+          const SizedBox(width: 54),
           const Expanded(
             child: Center(
               child: FittedBox(
@@ -693,74 +717,101 @@ class HomeScreenState extends State<HomeScreen> {
           ValueListenableBuilder<int>(
             valueListenable: NotificationRepository.unreadCountNotifier,
             builder: (context, unread, _) {
-              return IconButton(
-                tooltip: S.notifications,
-                onPressed: () => Navigator.of(context)
-                    .push(
-                      MaterialPageRoute(
-                        builder: (_) => const NotificationsScreen(),
-                      ),
-                    )
-                    .then((_) => reload()),
-                icon: Stack(
-                  clipBehavior: Clip.none,
-                  children: [
-                    Icon(
-                      unread > 0
-                          ? Icons.notifications_active_outlined
-                          : Icons.notifications_none_rounded,
-                      size: 26,
-                      color: scheme.ink,
-                    ),
-                    if (unread > 0)
-                      Positioned(
-                        right: -4,
-                        top: -4,
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 5,
-                            vertical: 1.5,
+              return PacerTapScale(
+                pressedScale: 0.92,
+                child: Container(
+                  width: 44,
+                  height: 44,
+                  decoration: BoxDecoration(
+                    color: scheme.card,
+                    shape: BoxShape.circle,
+                    border: Border.all(color: scheme.border),
+                    boxShadow: [scheme.shadowBox],
+                  ),
+                  child: IconButton(
+                    padding: EdgeInsets.zero,
+                    tooltip: S.notifications,
+                    onPressed: () => Navigator.of(context)
+                        .push(
+                          MaterialPageRoute(
+                            builder: (_) => const NotificationsScreen(),
                           ),
-                          decoration: BoxDecoration(
-                            color: PacerColors.errorRed,
-                            borderRadius: BorderRadius.circular(999),
-                            border: Border.all(
-                              color: scheme.scaffold,
-                              width: 1.5,
-                            ),
-                          ),
-                          constraints: const BoxConstraints(
-                            minWidth: 18,
-                            minHeight: 16,
-                          ),
-                          child: Text(
-                            unread > 9 ? '9+' : '$unread',
-                            textAlign: TextAlign.center,
-                            style: const TextStyle(
-                              fontSize: 9.5,
-                              fontWeight: FontWeight.w800,
-                              color: Colors.white,
-                              height: 1.1,
-                            ),
-                          ),
+                        )
+                        .then((_) => reload()),
+                    icon: Stack(
+                      clipBehavior: Clip.none,
+                      children: [
+                        Icon(
+                          unread > 0
+                              ? Icons.notifications_active_outlined
+                              : Icons.notifications_none_rounded,
+                          size: 22,
+                          color: scheme.ink,
                         ),
-                      ),
-                  ],
+                        if (unread > 0)
+                          Positioned(
+                            right: -6,
+                            top: -6,
+                            child: Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 5,
+                                vertical: 1.5,
+                              ),
+                              decoration: BoxDecoration(
+                                color: PacerColors.errorRed,
+                                borderRadius: BorderRadius.circular(999),
+                                border: Border.all(
+                                  color: scheme.scaffold,
+                                  width: 1.5,
+                                ),
+                              ),
+                              constraints: const BoxConstraints(
+                                minWidth: 18,
+                                minHeight: 16,
+                              ),
+                              child: Text(
+                                unread > 9 ? '9+' : '$unread',
+                                textAlign: TextAlign.center,
+                                style: const TextStyle(
+                                  fontSize: 9.5,
+                                  fontWeight: FontWeight.w800,
+                                  color: Colors.white,
+                                  height: 1.1,
+                                ),
+                              ),
+                            ),
+                          ),
+                      ],
+                    ),
+                  ),
                 ),
               );
             },
           ),
+          const SizedBox(width: 6),
           // Logged-in user's initials (Figma spec). Tap → Account.
           // 48px tap target around the 42px visual.
           GestureDetector(
             onTap: () => Navigator.of(context)
                 .push(MaterialPageRoute(builder: (_) => const AccountScreen()))
                 .then((_) => reload()),
-            child: SizedBox(
-              width: 48,
-              height: 48,
-              child: Center(
-                child: InitialAvatar(_data?.initials ?? '?', size: 42),
+            child: PacerTapScale(
+              pressedScale: 0.92,
+              child: SizedBox(
+                width: 48,
+                height: 48,
+                child: Center(
+                  child: Container(
+                    decoration: BoxDecoration(
+                      shape: BoxShape.circle,
+                      border: Border.all(
+                        color: scheme.border,
+                        width: 1.5,
+                      ),
+                    ),
+                    child: InitialAvatar(_data?.initials ?? '?', size: 40),
+                  ),
+                ),
               ),
             ),
           ),
@@ -842,115 +893,85 @@ class HomeScreenState extends State<HomeScreen> {
   Widget _quickActions() {
     final scheme = PacerScheme.of(context);
     final dark = Theme.of(context).brightness == Brightness.dark;
+    final secondary = dark ? PacerColors.primary : const Color(0xFF0284C7);
     final items = [
       (key: 'lari', icon: Icons.directions_run_rounded, accent: scheme.accent),
-      (key: 'joging', icon: Icons.directions_walk_rounded, accent: PacerColors.primary),
-      (key: 'bersepeda', icon: Icons.directions_bike_rounded, accent: const Color(0xFF7C4DFF)),
-      (key: 'berjalan', icon: Icons.nordic_walking_rounded, accent: const Color(0xFFFF8A00)),
+      (key: 'joging', icon: Icons.directions_walk_rounded, accent: secondary),
+      (key: 'bersepeda', icon: Icons.directions_bike_rounded, accent: scheme.accent),
+      (key: 'berjalan', icon: Icons.nordic_walking_rounded, accent: secondary),
     ];
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Padding(
-          padding: const EdgeInsets.only(bottom: 12),
-          child: Row(
-            children: [
-              Container(
-                width: 4,
-                height: 18,
-                decoration: BoxDecoration(
-                  color: scheme.accent,
-                  borderRadius: BorderRadius.circular(99),
-                ),
-              ),
-              const SizedBox(width: 10),
-              Expanded(
-                child: Text(
-                  S.quickStartTitle,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: GoogleFonts.spaceGrotesk(
-                    fontWeight: FontWeight.w700,
-                    fontSize: 18.5,
-                    letterSpacing: -0.3,
-                    color: scheme.ink,
-                  ),
-                ),
-              ),
-            ],
-          ),
-        ),
+        SectionHeader(title: S.quickStartTitle),
+        const SizedBox(height: 12),
         Row(
           children: [
             for (var i = 0; i < items.length; i++) ...[
               if (i > 0) const SizedBox(width: 8),
               Expanded(
-                child: GestureDetector(
+                child: PacerSurface(
+                  radius: PacerRadii.md,
+                  borderColor: items[i].accent.withValues(
+                    alpha: dark ? 0.28 : 0.36,
+                  ),
+                  gradient: LinearGradient(
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                    colors: [
+                      Color.lerp(
+                        scheme.card,
+                        items[i].accent,
+                        dark ? 0.10 : 0.06,
+                      )!,
+                      scheme.card,
+                    ],
+                  ),
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 6,
+                    vertical: 12,
+                  ),
                   onTap: () => _startSport(items[i].key),
-                  behavior: HitTestBehavior.opaque,
-                  child: PacerTapScale(
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 6,
-                        vertical: 12,
-                      ),
-                      decoration: BoxDecoration(
-                        gradient: LinearGradient(
-                          begin: Alignment.topLeft,
-                          end: Alignment.bottomRight,
-                          colors: [
-                            Color.lerp(
-                              scheme.card,
-                              items[i].accent,
-                              dark ? 0.08 : 0.06,
-                            )!,
-                            scheme.card,
-                          ],
-                        ),
-                        borderRadius: BorderRadius.circular(18),
-                        border: Border.all(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Container(
+                        width: 38,
+                        height: 38,
+                        decoration: ShapeDecoration(
                           color: items[i].accent.withValues(
-                            alpha: dark ? 0.28 : 0.35,
+                            alpha: dark ? 0.16 : 0.14,
+                          ),
+                          shape: PacerSquircleBorder(
+                            PacerRadii.sm,
+                            side: BorderSide(
+                              color: items[i].accent.withValues(alpha: 0.34),
+                            ),
+                            rimColor: Colors.white.withValues(
+                              alpha: dark ? 0.14 : 0.65,
+                            ),
+                          ),
+                        ),
+                        child: Icon(
+                          items[i].icon,
+                          size: 20,
+                          color: items[i].accent,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      FittedBox(
+                        fit: BoxFit.scaleDown,
+                        child: Text(
+                          S.sportName(items[i].key),
+                          maxLines: 1,
+                          style: GoogleFonts.spaceGrotesk(
+                            fontSize: 12.5,
+                            fontWeight: FontWeight.w700,
+                            color: scheme.ink,
                           ),
                         ),
                       ),
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Container(
-                            width: 38,
-                            height: 38,
-                            decoration: BoxDecoration(
-                              color: items[i].accent.withValues(
-                                alpha: dark ? 0.16 : 0.14,
-                              ),
-                              borderRadius: BorderRadius.circular(12),
-                              border: Border.all(
-                                color: items[i].accent.withValues(alpha: 0.32),
-                              ),
-                            ),
-                            child: Icon(
-                              items[i].icon,
-                              size: 20,
-                              color: items[i].accent,
-                            ),
-                          ),
-                          const SizedBox(height: 8),
-                          FittedBox(
-                            fit: BoxFit.scaleDown,
-                            child: Text(
-                              S.sportName(items[i].key),
-                              maxLines: 1,
-                              style: GoogleFonts.spaceGrotesk(
-                                fontSize: 12.5,
-                                fontWeight: FontWeight.w700,
-                                color: scheme.ink,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
+                    ],
                   ),
                 ),
               ),
@@ -982,8 +1003,7 @@ class HomeScreenState extends State<HomeScreen> {
       child: PacerTapScale(
         child: Container(
           width: double.infinity,
-          clipBehavior: Clip.antiAlias,
-          decoration: BoxDecoration(
+          decoration: ShapeDecoration(
             gradient: LinearGradient(
               begin: Alignment.topLeft,
               end: Alignment.bottomRight,
@@ -996,14 +1016,20 @@ class HomeScreenState extends State<HomeScreen> {
                 Color.lerp(scheme.scaffold, scheme.card, 0.55)!,
               ],
             ),
-            borderRadius: BorderRadius.circular(24),
-            border: Border.all(
-              color: dark
-                  ? scheme.accent.withValues(alpha: 0.25)
-                  : scheme.border,
+            shape: PacerSquircleBorder(
+              PacerRadii.hero,
+              side: BorderSide(
+                color: dark
+                    ? scheme.accent.withValues(alpha: 0.25)
+                    : scheme.border,
+              ),
+              rimColor: scheme.cardTopRim,
             ),
+            shadows: [scheme.shadowBox],
           ),
-          child: Stack(
+          child: ClipPath.shape(
+            shape: const PacerSquircleBorder(PacerRadii.hero),
+            child: Stack(
             children: [
               Positioned(
                 right: -24,
@@ -1263,37 +1289,73 @@ class HomeScreenState extends State<HomeScreen> {
                       ),
                     ),
                     const SizedBox(height: 12),
-                    Row(
-                      children: [
-                        Expanded(
-                          child: _WeeklyStatMetric(
-                            icon: Icons.timer_outlined,
-                            label: S.time,
-                            value: weeklySec > 0 ? fmtDurasi(weeklySec) : '0m',
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: _WeeklyStatMetric(
-                            icon: Icons.speed_rounded,
-                            label: S.avgPaceShort,
-                            value: paceText,
-                          ),
-                        ),
-                        const SizedBox(width: 8),
-                        Expanded(
-                          child: _WeeklyStatMetric(
-                            icon: Icons.bolt_rounded,
-                            label: S.workoutsShort,
-                            value: '$weeklyCount',
-                          ),
-                        ),
-                      ],
+                    Container(height: 0.8, color: scheme.groupedDivider),
+                    const SizedBox(height: 12),
+                    LayoutBuilder(
+                      builder: (context, c) {
+                        final pace = _WeeklyStatMetric(
+                          icon: Icons.speed_rounded,
+                          label: S.avgPaceShort,
+                          value: paceText,
+                        );
+                        final time = _WeeklyStatMetric(
+                          icon: Icons.timer_outlined,
+                          label: S.time,
+                          value: weeklySec > 0 ? fmtDurasi(weeklySec) : '0m',
+                        );
+                        final workouts = _WeeklyStatMetric(
+                          icon: Icons.bolt_rounded,
+                          label: S.workoutsShort,
+                          value: '$weeklyCount',
+                        );
+                        final vDivider = Container(
+                          width: 0.8,
+                          height: 34,
+                          margin: const EdgeInsets.symmetric(horizontal: 10),
+                          color: scheme.groupedDivider,
+                        );
+                        // 2-up tablet cards (~300px inner width) wrap into 2+1
+                        // cleanly so Avg Pace & Workouts never truncate.
+                        if (c.maxWidth < 330) {
+                          return Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                children: [
+                                  Expanded(child: time),
+                                  vDivider,
+                                  Expanded(child: pace),
+                                ],
+                              ),
+                              Padding(
+                                padding: const EdgeInsets.symmetric(
+                                  vertical: 10,
+                                ),
+                                child: Container(
+                                  height: 0.8,
+                                  color: scheme.groupedDivider,
+                                ),
+                              ),
+                              workouts,
+                            ],
+                          );
+                        }
+                        return Row(
+                          children: [
+                            Expanded(child: time),
+                            vDivider,
+                            Expanded(child: pace),
+                            vDivider,
+                            Expanded(child: workouts),
+                          ],
+                        );
+                      },
                     ),
                   ],
                 ),
               ),
             ],
+            ),
           ),
         ),
       ),
@@ -1408,8 +1470,7 @@ class HomeScreenState extends State<HomeScreen> {
           child: PacerTapScale(
             child: Container(
               width: double.infinity,
-              clipBehavior: Clip.antiAlias,
-              decoration: BoxDecoration(
+              decoration: ShapeDecoration(
                 gradient: LinearGradient(
                   begin: Alignment.topLeft,
                   end: Alignment.bottomRight,
@@ -1422,14 +1483,20 @@ class HomeScreenState extends State<HomeScreen> {
                     Color.lerp(scheme.scaffold, scheme.card, 0.55)!,
                   ],
                 ),
-                borderRadius: BorderRadius.circular(22),
-                border: Border.all(
-                  color: summary != null
-                      ? scheme.accent.withValues(alpha: dark ? 0.45 : 0.65)
-                      : scheme.border,
+                shape: PacerSquircleBorder(
+                  PacerRadii.lg,
+                  side: BorderSide(
+                    color: summary != null
+                        ? scheme.accent.withValues(alpha: dark ? 0.45 : 0.65)
+                        : scheme.border,
+                  ),
+                  rimColor: scheme.cardTopRim,
                 ),
+                shadows: [scheme.shadowBox],
               ),
-              child: Stack(
+              child: ClipPath.shape(
+                shape: const PacerSquircleBorder(PacerRadii.lg),
+                child: Stack(
                 children: [
                   Positioned(
                     right: -12,
@@ -1621,6 +1688,7 @@ class HomeScreenState extends State<HomeScreen> {
                 ],
               ),
             ),
+            ),
           ),
         ),
       ],
@@ -1628,59 +1696,12 @@ class HomeScreenState extends State<HomeScreen> {
   }
 
   Widget _history() {
-    final scheme = PacerScheme.of(context);
     final activities = _data?.activities;
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        GestureDetector(
-          onTap: widget.onSeeHistory,
-          behavior: HitTestBehavior.opaque,
-          child: Padding(
-            padding: const EdgeInsets.symmetric(vertical: 8),
-            child: Row(
-              children: [
-                Container(
-                  width: 4,
-                  height: 18,
-                  decoration: BoxDecoration(
-                    color: scheme.accent,
-                    borderRadius: BorderRadius.circular(99),
-                  ),
-                ),
-                const SizedBox(width: 10),
-                Expanded(
-                  child: Text(
-                    S.history,
-                    style: GoogleFonts.spaceGrotesk(
-                      fontWeight: FontWeight.w700,
-                      fontSize: 18.5,
-                      letterSpacing: -0.3,
-                      color: scheme.ink,
-                    ),
-                  ),
-                ),
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 10,
-                    vertical: 5,
-                  ),
-                  decoration: BoxDecoration(
-                    color: scheme.card,
-                    borderRadius: BorderRadius.circular(999),
-                    border: Border.all(color: scheme.border),
-                  ),
-                  child: Icon(
-                    Icons.chevron_right_rounded,
-                    size: 16,
-                    color: scheme.ink,
-                  ),
-                ),
-              ],
-            ),
-          ),
-        ),
-        const SizedBox(height: 10),
+        SectionHeader(title: S.history, onSeeAll: widget.onSeeHistory),
+        const SizedBox(height: 12),
         // Empty state instead of mock cards when signed in.
         if (activities == null || activities.isEmpty)
           PacerEmptyState(
@@ -2463,71 +2484,103 @@ class _PacerNavRail extends StatelessWidget {
     final scheme = PacerScheme.of(context);
     final dark = scheme.isDark;
     final selFg = dark ? scheme.accent : const Color(0xFF102A43);
-    return NavigationRail(
-      extended: true,
-      minExtendedWidth: 220,
-      backgroundColor: scheme.navBar,
-      indicatorColor: scheme.brandAccent.withValues(alpha: dark ? 0.22 : 0.62),
-      unselectedIconTheme: IconThemeData(color: scheme.navIcon),
-      unselectedLabelTextStyle: TextStyle(
-        color: scheme.navIcon,
-        fontWeight: FontWeight.w500,
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: scheme.navBar,
+        border: Border(right: BorderSide(color: scheme.groupedDivider)),
       ),
-      selectedIconTheme: IconThemeData(color: selFg),
-      selectedLabelTextStyle: TextStyle(
-        color: selFg,
-        fontWeight: FontWeight.w700,
-      ),
-      selectedIndex: index,
-      onDestinationSelected: onTap,
-      leading: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 16),
-        child: GestureDetector(
-          onTap: onStart,
-          child: Container(
-            width: 70,
-            height: 70,
-            decoration: const BoxDecoration(
-              color: PacerColors.primary,
-              shape: BoxShape.circle,
-            ),
-            alignment: Alignment.center,
-            padding: const EdgeInsets.all(8),
-            child: FittedBox(
-              fit: BoxFit.scaleDown,
-              child: Text(
-                'START',
-                style: PacerText.fugazBrand.copyWith(
-                  fontSize: 20,
-                  color: Colors.black,
+      child: NavigationRail(
+        extended: true,
+        minExtendedWidth: 220,
+        backgroundColor: Colors.transparent,
+        indicatorColor: scheme.brandAccent.withValues(alpha: dark ? 0.22 : 0.62),
+        unselectedIconTheme: IconThemeData(color: scheme.navIcon),
+        unselectedLabelTextStyle: TextStyle(
+          color: scheme.navIcon,
+          fontWeight: FontWeight.w500,
+        ),
+        selectedIconTheme: IconThemeData(color: selFg),
+        selectedLabelTextStyle: TextStyle(
+          color: selFg,
+          fontWeight: FontWeight.w700,
+        ),
+        selectedIndex: index,
+        onDestinationSelected: onTap,
+        leading: Padding(
+          padding: const EdgeInsets.symmetric(vertical: 16),
+          child: PacerGlassPress(
+            radius: 36,
+            child: GestureDetector(
+              onTap: () {
+                HapticFeedback.mediumImpact();
+                onStart();
+              },
+              child: Container(
+                width: 72,
+                height: 72,
+                decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  gradient: const LinearGradient(
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                    colors: [
+                      Color(0xFF5CE7FF),
+                      PacerColors.primary,
+                      Color(0xFF00A6CE),
+                    ],
+                  ),
+                  border: Border.all(
+                    color: Colors.white.withValues(alpha: 0.45),
+                    width: 1.5,
+                  ),
+                  boxShadow: [
+                    BoxShadow(
+                      color: PacerColors.primary.withValues(alpha: 0.45),
+                      blurRadius: 16,
+                      offset: const Offset(0, 4),
+                    ),
+                  ],
+                ),
+                alignment: Alignment.center,
+                padding: const EdgeInsets.all(8),
+                child: FittedBox(
+                  fit: BoxFit.scaleDown,
+                  child: Text(
+                    'START',
+                    style: PacerText.fugazBrand.copyWith(
+                      fontSize: 19,
+                      letterSpacing: 0.8,
+                      color: const Color(0xFF0B132B),
+                    ),
+                  ),
                 ),
               ),
             ),
           ),
         ),
+        destinations: [
+          NavigationRailDestination(
+            icon: const Icon(Icons.home_outlined),
+            selectedIcon: Icon(Icons.home, color: selFg),
+            label: Text(S.home),
+          ),
+          NavigationRailDestination(
+            icon: const Icon(Icons.directions_run_outlined),
+            selectedIcon: Icon(Icons.directions_run, color: selFg),
+            label: Text(S.running),
+          ),
+          NavigationRailDestination(
+            icon: const Icon(Icons.groups_outlined),
+            selectedIcon: Icon(Icons.groups, color: selFg),
+            label: Text(S.teams),
+          ),
+          NavigationRailDestination(
+            icon: const Icon(Icons.leaderboard_outlined),
+            selectedIcon: Icon(Icons.leaderboard, color: selFg),
+            label: Text(S.leaderboard),
+          ),
+        ],
       ),
-      destinations: [
-        NavigationRailDestination(
-          icon: const Icon(Icons.home_outlined),
-          selectedIcon: Icon(Icons.home, color: selFg),
-          label: Text(S.home),
-        ),
-        NavigationRailDestination(
-          icon: const Icon(Icons.directions_run_outlined),
-          selectedIcon: Icon(Icons.directions_run, color: selFg),
-          label: Text(S.running),
-        ),
-        NavigationRailDestination(
-          icon: const Icon(Icons.groups_outlined),
-          selectedIcon: Icon(Icons.groups, color: selFg),
-          label: Text(S.teams),
-        ),
-        NavigationRailDestination(
-          icon: const Icon(Icons.leaderboard_outlined),
-          selectedIcon: Icon(Icons.leaderboard, color: selFg),
-          label: Text(S.leaderboard),
-        ),
-      ],
     );
   }
 }
@@ -2545,18 +2598,12 @@ class _AssignedChallengeBanner extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = PacerScheme.of(context);
-    return Container(
+    return PacerSurface(
       key: const ValueKey('assigned_challenge_banner'),
       width: double.infinity,
+      radius: PacerRadii.md,
+      borderColor: PacerColors.primary.withValues(alpha: 0.48),
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
-      decoration: BoxDecoration(
-        color: scheme.card,
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(
-          color: PacerColors.primary.withValues(alpha: 0.45),
-        ),
-        boxShadow: [scheme.shadowBox],
-      ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -2632,56 +2679,46 @@ class _WeeklyStatMetric extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final scheme = PacerScheme.of(context);
-    final dark = Theme.of(context).brightness == Brightness.dark;
-    return Container(
-      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 9),
-      decoration: BoxDecoration(
-        color: scheme.scaffold.withValues(alpha: dark ? 0.52 : 0.65),
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: scheme.border.withValues(alpha: 0.55)),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Row(
-            children: [
-              Icon(
-                icon,
-                size: 13,
-                color: scheme.accent,
-              ),
-              const SizedBox(width: 4),
-              Expanded(
-                child: Text(
-                  label,
-                  maxLines: 1,
-                  overflow: TextOverflow.ellipsis,
-                  style: TextStyle(
-                    fontSize: 11,
-                    fontWeight: FontWeight.w600,
-                    color: scheme.muted,
-                  ),
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 13.5, color: scheme.accent),
+            const SizedBox(width: 5),
+            Flexible(
+              child: Text(
+                label,
+                maxLines: 1,
+                softWrap: false,
+                overflow: TextOverflow.visible,
+                style: TextStyle(
+                  fontSize: 11.5,
+                  fontWeight: FontWeight.w600,
+                  color: scheme.muted,
                 ),
               ),
-            ],
-          ),
-          const SizedBox(height: 4),
-          FittedBox(
-            fit: BoxFit.scaleDown,
-            alignment: Alignment.centerLeft,
-            child: Text(
-              value,
-              maxLines: 1,
-              style: GoogleFonts.spaceGrotesk(
-                fontSize: 14.5,
-                fontWeight: FontWeight.w800,
-                color: scheme.ink,
-              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 3),
+        FittedBox(
+          fit: BoxFit.scaleDown,
+          alignment: Alignment.centerLeft,
+          child: Text(
+            value,
+            maxLines: 1,
+            style: GoogleFonts.spaceGrotesk(
+              fontSize: 15.5,
+              fontWeight: FontWeight.w800,
+              color: scheme.ink,
+              fontFeatures: const [FontFeature.tabularFigures()],
             ),
           ),
-        ],
-      ),
+        ),
+      ],
     );
   }
 }
@@ -2738,23 +2775,15 @@ class _HomeChallengeCard extends StatelessWidget {
               ? scheme.brandAccent
               : PacerColors.primary);
 
-    return GestureDetector(
+    return PacerSurface(
+      width: double.infinity,
+      radius: PacerRadii.lg,
+      padding: const EdgeInsets.all(16),
+      borderColor: challenge.isTeamChallenge
+          ? scheme.brandAccent.withValues(alpha: dark ? 0.30 : 0.48)
+          : scheme.border,
       onTap: onTap,
-      behavior: HitTestBehavior.opaque,
-      child: PacerTapScale(
-        child: Container(
-          width: double.infinity,
-          padding: const EdgeInsets.all(16),
-          decoration: BoxDecoration(
-            color: scheme.card,
-            borderRadius: BorderRadius.circular(20),
-            border: Border.all(
-              color: challenge.isTeamChallenge
-                  ? scheme.brandAccent.withValues(alpha: dark ? 0.26 : 0.45)
-                  : scheme.border,
-            ),
-          ),
-          child: Column(
+      child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Row(
@@ -2983,9 +3012,7 @@ class _HomeChallengeCard extends StatelessWidget {
               ],
             ],
           ),
-        ),
-      ),
-    );
+        );
   }
 }
 
@@ -3002,34 +3029,34 @@ class _HomeExploreClubsCard extends StatelessWidget {
     return SizedBox(
       width: width,
       height: 150,
-      child: GestureDetector(
+      child: PacerSurface(
+        radius: PacerRadii.lg,
         onTap: onTap,
-        behavior: HitTestBehavior.opaque,
-        child: PacerTapScale(
-          child: Container(
-            clipBehavior: Clip.antiAlias,
-            decoration: BoxDecoration(
-              gradient: LinearGradient(
-                begin: Alignment.topLeft,
-                end: Alignment.bottomRight,
-                colors: [
-                  Color.lerp(
-                    scheme.card,
-                    scheme.accent,
-                    dark ? 0.12 : 0.08,
-                  )!,
-                  Color.lerp(scheme.scaffold, scheme.card, 0.55)!,
-                ],
-              ),
-              borderRadius: BorderRadius.circular(20),
-              border: Border.all(
-                color: scheme.accent.withValues(
-                  alpha: dark ? 0.35 : 0.45,
+        borderColor: scheme.accent.withValues(alpha: dark ? 0.36 : 0.45),
+        gradient: LinearGradient(
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+          colors: [
+            Color.lerp(
+              scheme.card,
+              scheme.accent,
+              dark ? 0.12 : 0.08,
+            )!,
+            Color.lerp(scheme.scaffold, scheme.card, 0.55)!,
+          ],
+        ),
+        child: Stack(
+          children: [
+            Positioned.fill(
+              child: IgnorePointer(
+                child: CustomPaint(
+                  painter: PacerTrackLinesPainter(
+                    color: scheme.accent.withValues(alpha: dark ? 0.08 : 0.06),
+                    count: 3,
+                  ),
                 ),
               ),
             ),
-            child: Stack(
-              children: [
                 Positioned(
                   right: -12,
                   top: -12,
@@ -3101,8 +3128,6 @@ class _HomeExploreClubsCard extends StatelessWidget {
                 ),
               ],
             ),
-          ),
-        ),
       ),
     );
   }

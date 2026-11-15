@@ -164,11 +164,11 @@ void main() {
     test('dismissVersion suppresses auto-check unless respectDismissed=false', () async {
       final client = MockClient(
         (_) async => http.Response(
-          jsonEncode(_releasePayload(tag: 'v0.2.5', includeApk: false)),
+          jsonEncode(_releasePayload(tag: 'v9.9.9', includeApk: false)),
           200,
         ),
       );
-      await GitHubUpdateService.instance.dismissVersion('v0.2.5');
+      await GitHubUpdateService.instance.dismissVersion('v9.9.9');
 
       final autoRes = await GitHubUpdateService.instance.checkForUpdate(
         client: client,
@@ -181,7 +181,7 @@ void main() {
         respectDismissed: false,
       );
       expect(manualRes.status, UpdateCheckStatus.available);
-      expect(manualRes.release!.tagName, 'v0.2.5');
+      expect(manualRes.release!.tagName, 'v9.9.9');
     });
 
     test('openReleaseDownload rejects non-https schemes', () async {

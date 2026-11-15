@@ -1,3 +1,4 @@
+import 'dart:math' as math;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -27,7 +28,162 @@ class PacerLogo extends StatelessWidget {
       PacerLogoLockup(width: width, style: style);
 }
 
-/// Blue primary CTA. Full shell width; subtle shadow per dump (no heavy drop).
+/// Machined squircle surface matching BottomNavPill's optical rim language
+/// without adding extra BackdropFilter blur passes.
+class PacerSurface extends StatelessWidget {
+  final Widget child;
+  final double radius;
+  final Color? color;
+  final Gradient? gradient;
+  final Color? borderColor;
+  final double borderWidth;
+  final EdgeInsetsGeometry? padding;
+  final EdgeInsetsGeometry? margin;
+  final double? width;
+  final double? height;
+  final bool highlighted;
+  final List<BoxShadow>? shadows;
+  final VoidCallback? onTap;
+  final double pressedScale;
+
+  const PacerSurface({
+    super.key,
+    required this.child,
+    this.radius = PacerRadii.lg,
+    this.color,
+    this.gradient,
+    this.borderColor,
+    this.borderWidth = 1,
+    this.padding,
+    this.margin,
+    this.width,
+    this.height,
+    this.highlighted = false,
+    this.shadows,
+    this.onTap,
+    this.pressedScale = 0.97,
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = PacerScheme.of(context);
+    final base = color ?? scheme.card;
+    final edge =
+        borderColor ?? (highlighted ? scheme.accent : scheme.border);
+    final rim = highlighted
+        ? scheme.accent.withValues(alpha: scheme.isDark ? 0.55 : 0.45)
+        : scheme.cardTopRim;
+    final boxGradient =
+        gradient ??
+        LinearGradient(
+          begin: Alignment.topCenter,
+          end: Alignment.bottomCenter,
+          colors: [Color.lerp(base, scheme.surfaceSheen, 0.55)!, base],
+        );
+
+    Widget content = padding == null
+        ? child
+        : Padding(padding: padding!, child: child);
+
+    Widget surface = Container(
+      width: width,
+      height: height,
+      margin: margin,
+      decoration: ShapeDecoration(
+        gradient: gradient != null || color == null ? boxGradient : null,
+        color: gradient == null && color != null ? base : null,
+        shadows: shadows ?? [scheme.shadowBox],
+        shape: PacerSquircleBorder(
+          radius,
+          side: BorderSide(color: edge, width: borderWidth),
+          rimColor: rim,
+        ),
+      ),
+      child: ClipPath.shape(
+        shape: PacerSquircleBorder(radius),
+        child: content,
+      ),
+    );
+
+    if (onTap == null) return surface;
+    return PacerTapScale(
+      pressedScale: pressedScale,
+      child: GestureDetector(
+        behavior: HitTestBehavior.opaque,
+        onTap: () {
+          HapticFeedback.selectionClick();
+          onTap!();
+        },
+        child: surface,
+      ),
+    );
+  }
+}
+
+/// Unified grouped list panel with hairline inset dividers between rows.
+class PacerGroupedPanel extends StatelessWidget {
+  final List<Widget> children;
+  final double radius;
+  final EdgeInsetsGeometry dividerIndent;
+
+  const PacerGroupedPanel({
+    super.key,
+    required this.children,
+    this.radius = PacerRadii.lg,
+    this.dividerIndent = const EdgeInsets.symmetric(horizontal: 16),
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    final scheme = PacerScheme.of(context);
+    return PacerSurface(
+      radius: radius,
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          for (var i = 0; i < children.length; i++) ...[
+            if (i > 0)
+              Padding(
+                padding: dividerIndent,
+                child: Container(height: 0.8, color: scheme.groupedDivider),
+              ),
+            children[i],
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+/// Subtle -16° Pacer velocity speed-cut stripes for hero & onboarding canvases.
+class PacerTrackLinesPainter extends CustomPainter {
+  final Color color;
+  final int count;
+  const PacerTrackLinesPainter({required this.color, this.count = 4});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    if (size.isEmpty || color.a == 0) return;
+    final skew = math.tan(-16 * math.pi / 180);
+    final gap = size.width / (count + 1);
+    final paint = Paint()
+      ..color = color
+      ..strokeWidth = 1.2
+      ..style = PaintingStyle.stroke;
+
+    for (var i = 0; i < count; i++) {
+      final topX = gap * (i + 0.85);
+      final bottomX = topX + size.height * skew;
+      canvas.drawLine(Offset(topX, -12), Offset(bottomX, size.height + 12), paint);
+    }
+  }
+
+  @override
+  bool shouldRepaint(covariant PacerTrackLinesPainter oldDelegate) =>
+      color != oldDelegate.color || count != oldDelegate.count;
+}
+
+/// Primary CTA. Full shell width; squircle radius with subtle top highlight.
 class PrimaryButton extends StatelessWidget {
   final String label;
   final VoidCallback? onPressed;
@@ -35,20 +191,43 @@ class PrimaryButton extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      width: double.infinity,
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(5),
-        boxShadow: [PacerScheme.of(context).shadowBox],
+    final scheme = PacerScheme.of(context);
+    return PacerTapScale(
+      enabled: onPressed != null,
+      pressedScale: 0.98,
+      child: Container(
+        width: double.infinity,
+        decoration: ShapeDecoration(
+          shape: const PacerSquircleBorder(PacerRadii.md),
+          shadows: [
+            scheme.shadowBox,
+            BoxShadow(
+              color: PacerColors.primary.withValues(alpha: scheme.isDark ? 0.20 : 0.24),
+              blurRadius: 16,
+              offset: const Offset(0, 6),
+            ),
+          ],
+        ),
+        child: ElevatedButton(
+          onPressed: onPressed == null
+              ? null
+              : () {
+                  HapticFeedback.lightImpact();
+                  onPressed!();
+                },
+          style: ElevatedButton.styleFrom(
+            minimumSize: const Size(double.infinity, 54),
+            shape: const PacerSquircleBorder(PacerRadii.md),
+          ),
+          child: Text(label),
+        ),
       ),
-      child: ElevatedButton(onPressed: onPressed, child: Text(label)),
     );
   }
 }
 
-/// White auth field 315x50 r5 with leading icon.
-/// Inset shadow approximated with top inner darkening strip.
-class AuthField extends StatelessWidget {
+/// Squircle auth/form field with focus accent highlight and password toggle.
+class AuthField extends StatefulWidget {
   final String hint;
   final IconData icon;
   final bool obscure;
@@ -64,53 +243,69 @@ class AuthField extends StatelessWidget {
   });
 
   @override
+  State<AuthField> createState() => _AuthFieldState();
+}
+
+class _AuthFieldState extends State<AuthField> {
+  late bool _hidden = widget.obscure;
+  bool _focused = false;
+
+  @override
   Widget build(BuildContext context) {
     final scheme = PacerScheme.of(context);
-    return Container(
-      decoration: BoxDecoration(
+    return AnimatedContainer(
+      duration: const Duration(milliseconds: 160),
+      curve: Curves.easeOut,
+      decoration: ShapeDecoration(
         color: scheme.authField,
-        borderRadius: BorderRadius.circular(5),
-        border: Border.all(color: scheme.border),
-        boxShadow: [scheme.shadowBox],
+        shadows: [scheme.shadowBox],
+        shape: PacerSquircleBorder(
+          14,
+          side: BorderSide(
+            color: _focused ? scheme.accent : scheme.border,
+            width: _focused ? 1.5 : 1,
+          ),
+          rimColor: scheme.cardTopRim,
+        ),
       ),
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(5),
-        child: Stack(
-          children: [
-            Positioned(
-              top: 0,
-              left: 0,
-              right: 0,
-              height: 8,
-              child: Container(
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    colors: [
-                      Colors.black.withValues(alpha: 0.06),
-                      Colors.transparent,
-                    ],
-                    begin: Alignment.topCenter,
-                    end: Alignment.bottomCenter,
-                  ),
-                ),
-              ),
+      child: Focus(
+        onFocusChange: (hasFocus) {
+          if (_focused != hasFocus) setState(() => _focused = hasFocus);
+        },
+        child: TextField(
+          controller: widget.controller,
+          obscureText: _hidden,
+          keyboardType: widget.keyboardType,
+          style: PacerText.button.copyWith(color: scheme.ink, fontSize: 15),
+          decoration: InputDecoration(
+            filled: false,
+            hintText: widget.hint,
+            hintStyle: PacerText.hintOf(context),
+            border: InputBorder.none,
+            enabledBorder: InputBorder.none,
+            focusedBorder: InputBorder.none,
+            contentPadding: const EdgeInsets.symmetric(
+              horizontal: 16,
+              vertical: 16,
             ),
-            TextField(
-              controller: controller,
-              obscureText: obscure,
-              keyboardType: keyboardType,
-              style: PacerText.button.copyWith(color: scheme.ink),
-              decoration: InputDecoration(
-                hintText: hint,
-                hintStyle: PacerText.hintOf(context),
-                border: InputBorder.none,
-                prefixIcon: Icon(icon, color: scheme.subtle, size: 20),
-                suffixIcon: obscure
-                    ? const Icon(Icons.visibility_off_outlined, size: 20)
-                    : null,
-              ),
+            prefixIcon: Icon(
+              widget.icon,
+              color: _focused ? scheme.accent : scheme.subtle,
+              size: 20,
             ),
-          ],
+            suffixIcon: widget.obscure
+                ? IconButton(
+                    onPressed: () => setState(() => _hidden = !_hidden),
+                    icon: Icon(
+                      _hidden
+                          ? Icons.visibility_off_outlined
+                          : Icons.visibility_outlined,
+                      size: 20,
+                      color: scheme.muted,
+                    ),
+                  )
+                : null,
+          ),
         ),
       ),
     );
@@ -153,25 +348,25 @@ class RunSessionCard extends StatelessWidget {
                 Brightness.light
         ? PacerColors.navy
         : accentColor;
-    final card = Container(
+    final card = PacerSurface(
+      color: scheme.runCard,
+      radius: PacerRadii.lg,
+      borderColor: scheme.softBorder,
       padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: scheme.runCard,
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: scheme.softBorder),
-        boxShadow: [scheme.shadowBox],
-      ),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.center,
         children: [
           Container(
             width: 44,
             height: 44,
-            decoration: BoxDecoration(
-              color: accentColor.withValues(alpha: dark ? 0.15 : 0.20),
-              borderRadius: BorderRadius.circular(14),
-              border: Border.all(
-                color: accentColor.withValues(alpha: dark ? 0.30 : 0.35),
+            decoration: ShapeDecoration(
+              color: accentColor.withValues(alpha: dark ? 0.16 : 0.22),
+              shape: PacerSquircleBorder(
+                14,
+                side: BorderSide(
+                  color: accentColor.withValues(alpha: dark ? 0.32 : 0.38),
+                ),
+                rimColor: Colors.white.withValues(alpha: dark ? 0.15 : 0.65),
               ),
             ),
             child: Icon(Icons.directions_run, size: 24, color: iconFg),
@@ -218,7 +413,12 @@ class RunSessionCard extends StatelessWidget {
                         mainAxisSize: MainAxisSize.min,
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text(time, style: PacerText.cardTimeOf(context)),
+                          Text(
+                            time,
+                            style: PacerText.cardTimeOf(context).copyWith(
+                              fontFeatures: const [FontFeature.tabularFigures()],
+                            ),
+                          ),
                           Text(S.time, style: PacerText.cardSubOf(context)),
                         ],
                       ),
@@ -227,7 +427,12 @@ class RunSessionCard extends StatelessWidget {
                         mainAxisSize: MainAxisSize.min,
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text(pace, style: PacerText.cardPaceOf(context)),
+                          Text(
+                            pace,
+                            style: PacerText.cardPaceOf(context).copyWith(
+                              fontFeatures: const [FontFeature.tabularFigures()],
+                            ),
+                          ),
                           Text(S.pace, style: PacerText.cardSubOf(context)),
                         ],
                       ),
@@ -249,7 +454,9 @@ class RunSessionCard extends StatelessWidget {
                   alignment: Alignment.centerRight,
                   child: Text(
                     distance,
-                    style: PacerText.cardDistanceOf(context),
+                    style: PacerText.cardDistanceOf(context).copyWith(
+                      fontFeatures: const [FontFeature.tabularFigures()],
+                    ),
                   ),
                 ),
                 const SizedBox(height: 10),
@@ -322,187 +529,197 @@ class TeamCard extends StatelessWidget {
     final showLoc = location.isNotEmpty || memberCount == null;
     return Container(
       width: width,
-      clipBehavior: Clip.antiAlias,
-      decoration: BoxDecoration(
-        borderRadius: BorderRadius.circular(20),
+      decoration: ShapeDecoration(
         gradient: LinearGradient(
           colors: scheme.heroCardGradient,
           begin: Alignment.topLeft,
           end: Alignment.bottomRight,
         ),
-        border: Border.all(color: Colors.white.withValues(alpha: 0.14)),
-        boxShadow: [scheme.shadowBox],
+        shape: PacerSquircleBorder(
+          PacerRadii.lg,
+          side: BorderSide(color: Colors.white.withValues(alpha: 0.16)),
+          rimColor: Colors.white.withValues(alpha: 0.35),
+        ),
+        shadows: [scheme.shadowBox],
       ),
-      child: Stack(
-        fit: StackFit.passthrough,
-        children: [
-          Positioned(
-            right: -18,
-            bottom: -22,
-            child: IgnorePointer(
-              child: Icon(
-                Icons.groups_rounded,
-                size: 108,
-                color: Colors.white.withValues(alpha: 0.07),
+      child: ClipPath.shape(
+        shape: const PacerSquircleBorder(PacerRadii.lg),
+        child: Stack(
+          fit: StackFit.passthrough,
+          children: [
+            Positioned.fill(
+              child: IgnorePointer(
+                child: CustomPaint(
+                  painter: PacerTrackLinesPainter(
+                    color: Colors.white.withValues(alpha: 0.08),
+                    count: 3,
+                  ),
+                ),
               ),
             ),
-          ),
-          Padding(
-            padding: const EdgeInsets.all(16),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisAlignment: showBadges
-                  ? MainAxisAlignment.spaceBetween
-                  : MainAxisAlignment.end,
-              children: [
-                if (showBadges)
-                  Row(
-                    children: [
-                      if (isPrivate != null)
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 8,
-                            vertical: 3,
-                          ),
-                          decoration: BoxDecoration(
-                            color: Colors.white.withValues(alpha: 0.16),
-                            borderRadius: BorderRadius.circular(999),
-                          ),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              Icon(
-                                isPrivate! ? Icons.lock_outline : Icons.public,
-                                size: 11,
-                                color: Colors.white,
-                              ),
-                              const SizedBox(width: 4),
-                              Text(
-                                isPrivate! ? S.privateBadge : S.publicBadge,
-                                style: PacerText.teamLoc.copyWith(
-                                  fontSize: 10,
-                                  fontWeight: FontWeight.w700,
-                                  color: Colors.white,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      if (isPrivate != null && isJoined)
-                        const SizedBox(width: 6),
-                      if (isJoined)
-                        Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 8,
-                            vertical: 3,
-                          ),
-                          decoration: BoxDecoration(
-                            color: scheme.brandAccent,
-                            borderRadius: BorderRadius.circular(999),
-                          ),
-                          child: Text(
-                            S.joinedBadge,
-                            style: PacerText.teamLoc.copyWith(
-                              fontSize: 10,
-                              fontWeight: FontWeight.w800,
-                              color: scheme.onBrandAccent,
-                            ),
-                          ),
-                        ),
-                    ],
-                  ),
-                if (showBadges) const SizedBox(height: 6),
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      name,
-                      style: PacerText.teamName,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    const SizedBox(height: 4),
+            Positioned(
+              right: -18,
+              bottom: -22,
+              child: IgnorePointer(
+                child: Icon(
+                  Icons.groups_rounded,
+                  size: 108,
+                  color: Colors.white.withValues(alpha: 0.07),
+                ),
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.all(16),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                mainAxisAlignment: showBadges
+                    ? MainAxisAlignment.spaceBetween
+                    : MainAxisAlignment.end,
+                children: [
+                  if (showBadges)
                     Row(
                       children: [
-                        if (showLoc)
-                          Expanded(
+                        if (isPrivate != null)
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 8,
+                              vertical: 3,
+                            ),
+                            decoration: BoxDecoration(
+                              color: Colors.white.withValues(alpha: 0.16),
+                              borderRadius: BorderRadius.circular(999),
+                            ),
                             child: Row(
+                              mainAxisSize: MainAxisSize.min,
                               children: [
-                                const Icon(
-                                  Icons.location_on,
-                                  size: 18,
+                                Icon(
+                                  isPrivate! ? Icons.lock_outline : Icons.public,
+                                  size: 11,
                                   color: Colors.white,
                                 ),
-                                const SizedBox(width: 6),
-                                Expanded(
-                                  child: Text(
-                                    location,
-                                    style: PacerText.teamLoc,
-                                    maxLines: 1,
-                                    overflow: TextOverflow.ellipsis,
+                                const SizedBox(width: 4),
+                                Text(
+                                  isPrivate! ? S.privateBadge : S.publicBadge,
+                                  style: PacerText.teamLoc.copyWith(
+                                    fontSize: 10,
+                                    fontWeight: FontWeight.w700,
+                                    color: Colors.white,
                                   ),
                                 ),
                               ],
                             ),
                           ),
-                        if (showLoc && memberCount != null)
-                          const SizedBox(width: 8),
-                        if (memberCount != null)
-                          Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              const Icon(
-                                Icons.group_outlined,
-                                size: 16,
-                                color: Colors.white70,
+                        if (isPrivate != null && isJoined)
+                          const SizedBox(width: 6),
+                        if (isJoined)
+                          Container(
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 8,
+                              vertical: 3,
+                            ),
+                            decoration: BoxDecoration(
+                              color: scheme.brandAccent,
+                              borderRadius: BorderRadius.circular(999),
+                            ),
+                            child: Text(
+                              S.joinedBadge,
+                              style: PacerText.teamLoc.copyWith(
+                                fontSize: 10,
+                                fontWeight: FontWeight.w800,
+                                color: scheme.onBrandAccent,
                               ),
-                              const SizedBox(width: 4),
-                              Text(
-                                S.membersCount(memberCount!),
-                                style: PacerText.teamLoc.copyWith(
-                                  color: Colors.white.withValues(alpha: 0.9),
-                                ),
-                                maxLines: 1,
-                                overflow: TextOverflow.ellipsis,
-                              ),
-                            ],
+                            ),
                           ),
                       ],
                     ),
-                  ],
-                ),
-              ],
+                  if (showBadges) const SizedBox(height: 6),
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(
+                        name,
+                        style: PacerText.teamName,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      const SizedBox(height: 4),
+                      Row(
+                        children: [
+                          if (showLoc)
+                            Expanded(
+                              child: Row(
+                                children: [
+                                  const Icon(
+                                    Icons.location_on,
+                                    size: 18,
+                                    color: Colors.white,
+                                  ),
+                                  const SizedBox(width: 6),
+                                  Expanded(
+                                    child: Text(
+                                      location,
+                                      style: PacerText.teamLoc,
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          if (showLoc && memberCount != null)
+                            const SizedBox(width: 8),
+                          if (memberCount != null)
+                            Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                const Icon(
+                                  Icons.group_outlined,
+                                  size: 16,
+                                  color: Colors.white70,
+                                ),
+                                const SizedBox(width: 4),
+                                Text(
+                                  S.membersCount(memberCount!),
+                                  style: PacerText.teamLoc.copyWith(
+                                    color: Colors.white.withValues(alpha: 0.9),
+                                  ),
+                                  maxLines: 1,
+                                  overflow: TextOverflow.ellipsis,
+                                ),
+                              ],
+                            ),
+                        ],
+                      ),
+                    ],
+                  ),
+                ],
+              ),
             ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }
 }
 
-/// Section header row with "See all" (SpaceGrotesk 700/18.5 + capsule CTA).
+/// Section header row with crisp typography, optional count pill, and "See all" CTA.
 class SectionHeader extends StatelessWidget {
   final String title;
   final VoidCallback? onSeeAll;
-  const SectionHeader({super.key, required this.title, this.onSeeAll});
+  final int? count;
+  const SectionHeader({
+    super.key,
+    required this.title,
+    this.onSeeAll,
+    this.count,
+  });
 
   @override
   Widget build(BuildContext context) {
     final scheme = PacerScheme.of(context);
     return Row(
       children: [
-        Container(
-          width: 4,
-          height: 18,
-          decoration: BoxDecoration(
-            color: scheme.accent,
-            borderRadius: BorderRadius.circular(999),
-          ),
-        ),
-        const SizedBox(width: 10),
-        // Title flexes and scales instead of overflowing with long
-        // translations (e.g. "Lihat semua" + long section names).
         Expanded(
           child: FittedBox(
             fit: BoxFit.scaleDown,
@@ -511,43 +728,78 @@ class SectionHeader extends StatelessWidget {
               title,
               style: GoogleFonts.spaceGrotesk(
                 fontWeight: FontWeight.w700,
-                fontSize: 18.5,
-                letterSpacing: -0.3,
+                fontSize: 19,
+                letterSpacing: -0.4,
                 color: scheme.ink,
               ),
             ),
           ),
         ),
-        const SizedBox(width: 8),
-        TextButton(
-          onPressed: onSeeAll,
-          style: TextButton.styleFrom(
-            minimumSize: const Size(48, 38),
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-            tapTargetSize: MaterialTapTargetSize.padded,
-            backgroundColor: scheme.card,
-            shape: StadiumBorder(side: BorderSide(color: scheme.border)),
+        if (count != null) ...[
+          const SizedBox(width: 8),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 3),
+            decoration: ShapeDecoration(
+              color: scheme.card,
+              shape: PacerSquircleBorder(
+                999,
+                side: BorderSide(color: scheme.border),
+                rimColor: scheme.cardTopRim,
+              ),
+            ),
+            child: Text(
+              '$count',
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w700,
+                color: scheme.ink,
+                fontFeatures: const [FontFeature.tabularFigures()],
+              ),
+            ),
           ),
-          child: Row(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Text(
-                S.seeAll,
-                style: GoogleFonts.spaceGrotesk(
-                  color: scheme.ink,
-                  fontSize: 12.5,
-                  fontWeight: FontWeight.w700,
+        ],
+        if (onSeeAll != null) ...[
+          const SizedBox(width: 8),
+          PacerTapScale(
+            pressedScale: 0.95,
+            child: TextButton(
+              onPressed: onSeeAll,
+              style: TextButton.styleFrom(
+                minimumSize: const Size(48, 38),
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 12,
+                  vertical: 6,
+                ),
+                tapTargetSize: MaterialTapTargetSize.padded,
+                backgroundColor: scheme.card,
+                shape: PacerSquircleBorder(
+                  PacerRadii.pill,
+                  side: BorderSide(color: scheme.border),
+                  rimColor: scheme.cardTopRim,
                 ),
               ),
-              const SizedBox(width: 2),
-              Icon(
-                Icons.chevron_right_rounded,
-                size: 16,
-                color: scheme.accent,
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    S.seeAll,
+                    style: GoogleFonts.spaceGrotesk(
+                      color: scheme.ink,
+                      fontSize: 12.5,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  const SizedBox(width: 2),
+                  Icon(
+                    Icons.chevron_right_rounded,
+                    size: 16,
+                    color: scheme.accent,
+                  ),
+                ],
               ),
-            ],
+            ),
           ),
-        ),
+        ],
       ],
     );
   }
@@ -585,6 +837,7 @@ class PageHeader extends StatelessWidget {
             decoration: BoxDecoration(
               color: scheme.card,
               shape: BoxShape.circle,
+              border: Border.all(color: scheme.border),
               boxShadow: [scheme.shadowBox],
             ),
             child: BackButton(
@@ -738,24 +991,26 @@ class StreakCard extends StatelessWidget {
         child: AnimatedContainer(
           duration: _anim,
           curve: Curves.easeOut,
-          clipBehavior: Clip.antiAlias,
-          decoration: BoxDecoration(
-            borderRadius: BorderRadius.circular(16),
+          decoration: ShapeDecoration(
+            shape: PacerSquircleBorder(
+              PacerRadii.hero,
+              side: BorderSide(
+                color: live
+                    ? (dark
+                          ? accent.withValues(alpha: 0.35)
+                          : textAccent.withValues(alpha: 0.32))
+                    : (dark
+                          ? Colors.white.withValues(alpha: 0.12)
+                          : scheme.border),
+              ),
+              rimColor: scheme.cardTopRim,
+            ),
             gradient: LinearGradient(
               begin: Alignment.topLeft,
               end: Alignment.bottomRight,
               colors: gradColors,
             ),
-            border: Border.all(
-              color: live
-                  ? (dark
-                        ? accent.withValues(alpha: 0.35)
-                        : textAccent.withValues(alpha: 0.32))
-                  : (dark
-                        ? Colors.white.withValues(alpha: 0.10)
-                        : scheme.border),
-            ),
-            boxShadow: [
+            shadows: [
               scheme.shadowBox,
               if (s == StreakStatus.active)
                 BoxShadow(
@@ -765,8 +1020,20 @@ class StreakCard extends StatelessWidget {
                 ),
             ],
           ),
-          child: Stack(
-            children: [
+          child: ClipPath.shape(
+            shape: const PacerSquircleBorder(PacerRadii.hero),
+            child: Stack(
+              children: [
+                Positioned.fill(
+                  child: IgnorePointer(
+                    child: CustomPaint(
+                      painter: PacerTrackLinesPainter(
+                        color: textAccent.withValues(alpha: live ? 0.08 : 0.04),
+                        count: 4,
+                      ),
+                    ),
+                  ),
+                ),
               // Oversized ghost flame, clipped at the card edge.
               Positioned(
                 right: -32,
@@ -950,6 +1217,7 @@ class StreakCard extends StatelessWidget {
               ),
             ],
           ),
+          ),
         ),
       ),
     );
@@ -1110,30 +1378,35 @@ class BottomNavPill extends StatelessWidget {
                 },
                 radius: 28,
                 child: SizedBox(
-                  width: 58,
                   height: 58,
-                  child: Column(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(
-                        selected ? tabs[i].$2 : tabs[i].$1,
-                        size: 24,
-                        color: selected ? selectedFg : scheme.navIcon,
-                      ),
-                      const SizedBox(height: 3),
-                      Text(
-                        tabs[i].$3,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: TextStyle(
-                          fontSize: 10,
-                          fontWeight:
-                              selected ? FontWeight.w700 : FontWeight.w500,
+                  child: Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 2),
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(
+                          selected ? tabs[i].$2 : tabs[i].$1,
+                          size: 23,
                           color: selected ? selectedFg : scheme.navIcon,
-                          letterSpacing: 0.2,
                         ),
-                      ),
-                    ],
+                        const SizedBox(height: 3),
+                        FittedBox(
+                          fit: BoxFit.scaleDown,
+                          child: Text(
+                            tabs[i].$3,
+                            maxLines: 1,
+                            softWrap: false,
+                            style: TextStyle(
+                              fontSize: 10,
+                              fontWeight:
+                                  selected ? FontWeight.w700 : FontWeight.w500,
+                              color: selected ? selectedFg : scheme.navIcon,
+                              letterSpacing: 0.1,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
               ),
@@ -1557,9 +1830,27 @@ class SummaryLimeCard extends StatelessWidget {
         return Container(
           height: fluid(c.maxWidth, 92, 120),
           padding: const EdgeInsets.fromLTRB(24, 16, 24, 16),
-          decoration: BoxDecoration(
-            color: PacerColors.lime,
-            borderRadius: BorderRadius.circular(30),
+          decoration: ShapeDecoration(
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [
+                PacerColors.lime,
+                Color.lerp(PacerColors.lime, PacerColors.neon, 0.22)!,
+              ],
+            ),
+            shape: PacerSquircleBorder(
+              PacerRadii.hero,
+              side: BorderSide(color: Colors.black.withValues(alpha: 0.08)),
+              rimColor: Colors.white.withValues(alpha: 0.65),
+            ),
+            shadows: [
+              BoxShadow(
+                color: PacerColors.lime.withValues(alpha: 0.24),
+                blurRadius: 18,
+                offset: const Offset(0, 6),
+              ),
+            ],
           ),
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -1606,57 +1897,66 @@ class MetricCard extends StatelessWidget {
     final scheme = PacerScheme.of(context);
     return LayoutBuilder(
       builder: (context, c) {
-        return Container(
-          constraints: BoxConstraints(minHeight: fluid(c.maxWidth, 75, 96)),
-          padding: const EdgeInsets.fromLTRB(24, 16, 24, 16),
-          decoration: BoxDecoration(
-            color: scheme.card,
-            borderRadius: BorderRadius.circular(30),
-            boxShadow: [scheme.shadowBox],
-          ),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      title,
-                      style: TextStyle(fontSize: 15, color: scheme.ink),
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      sub,
-                      style: TextStyle(
-                        fontWeight: FontWeight.w400,
-                        fontSize: 12,
-                        color: scheme.soft,
+        return PacerSurface(
+          radius: PacerRadii.lg,
+          padding: const EdgeInsets.fromLTRB(20, 16, 20, 16),
+          child: ConstrainedBox(
+            constraints: BoxConstraints(
+              minHeight: fluid(c.maxWidth, 64, 84),
+            ),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        title,
+                        style: TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w600,
+                          color: scheme.ink,
+                        ),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
                       ),
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
-                    ),
-                  ],
-                ),
-              ),
-              if (value != null)
-                Column(
-                  crossAxisAlignment: CrossAxisAlignment.end,
-                  children: [
-                    Text(value!, style: PacerText.statValueOf(context)),
-                    Text(
-                      unit ?? '',
-                      style: TextStyle(
-                        fontWeight: FontWeight.w400,
-                        fontSize: 12,
-                        color: scheme.soft,
+                      const SizedBox(height: 6),
+                      Text(
+                        sub,
+                        style: TextStyle(
+                          fontWeight: FontWeight.w400,
+                          fontSize: 12,
+                          color: scheme.soft,
+                        ),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
-            ],
+                if (value != null)
+                  Column(
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      Text(
+                        value!,
+                        style: PacerText.statValueOf(context).copyWith(
+                          fontFeatures: const [FontFeature.tabularFigures()],
+                        ),
+                      ),
+                      Text(
+                        unit ?? '',
+                        style: TextStyle(
+                          fontWeight: FontWeight.w400,
+                          fontSize: 12,
+                          color: scheme.soft,
+                        ),
+                      ),
+                    ],
+                  ),
+              ],
+            ),
           ),
         );
       },
@@ -1664,39 +1964,72 @@ class MetricCard extends StatelessWidget {
   }
 }
 
-/// Session-goal chip h32 r8 (setup screen).
+/// Interactive pill/squircle filter & goal chip with 48dp accessible hit area.
 class GoalChip extends StatelessWidget {
   final String label;
   final bool selected;
-  const GoalChip({super.key, required this.label, this.selected = false});
+  final IconData? icon;
+  final bool useBrandAccent;
+  const GoalChip({
+    super.key,
+    required this.label,
+    this.selected = false,
+    this.icon,
+    this.useBrandAccent = false,
+  });
 
   @override
   Widget build(BuildContext context) {
     final scheme = PacerScheme.of(context);
-    // Visual stays a 32-tall chip; the 48-tall box guarantees a 48px
-    // touch target without changing the setup screen's look.
-    // Selected chip is ink-on-light, lime-on-dark (brand in both modes).
+    final selBg = useBrandAccent ? scheme.brandAccent : scheme.chipSelBg;
+    final selFg = useBrandAccent ? scheme.onBrandAccent : scheme.chipSelFg;
     return SizedBox(
       height: 48,
       child: Center(
-        child: Container(
-          height: 32,
-          padding: const EdgeInsets.symmetric(horizontal: 23),
+        child: AnimatedContainer(
+          duration: const Duration(milliseconds: 160),
+          curve: Curves.easeOutCubic,
+          height: 36,
+          padding: EdgeInsets.symmetric(horizontal: icon != null ? 14 : 20),
           alignment: Alignment.center,
-          decoration: BoxDecoration(
-            color: selected ? scheme.chipSelBg : scheme.card,
-            borderRadius: BorderRadius.circular(8),
-            border: Border.all(
-              color: selected ? scheme.chipSelBg : scheme.chipBorder,
+          decoration: ShapeDecoration(
+            color: selected ? selBg : scheme.card,
+            shadows: selected
+                ? [
+                    BoxShadow(
+                      color: selBg.withValues(alpha: scheme.isDark ? 0.24 : 0.18),
+                      blurRadius: 10,
+                      offset: const Offset(0, 3),
+                    ),
+                  ]
+                : null,
+            shape: PacerSquircleBorder(
+              PacerRadii.sm,
+              side: BorderSide(
+                color: selected ? selBg : scheme.chipBorder,
+                width: selected ? 1.4 : 1,
+              ),
+              rimColor: selected
+                  ? Colors.white.withValues(alpha: 0.28)
+                  : scheme.cardTopRim,
             ),
           ),
-          child: Text(
-            label,
-            style: TextStyle(
-              fontSize: 12,
-              fontWeight: FontWeight.w600,
-              color: selected ? scheme.chipSelFg : scheme.chipFg,
-            ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (icon != null) ...[
+                Icon(icon, size: 15, color: selected ? selFg : scheme.ink),
+                const SizedBox(width: 6),
+              ],
+              Text(
+                label,
+                style: GoogleFonts.spaceGrotesk(
+                  fontSize: 12.5,
+                  fontWeight: selected ? FontWeight.w700 : FontWeight.w600,
+                  color: selected ? selFg : scheme.chipFg,
+                ),
+              ),
+            ],
           ),
         ),
       ),
@@ -1704,7 +2037,7 @@ class GoalChip extends StatelessWidget {
   }
 }
 
-/// Lime action bar. Fills parent width, 48 tall, r10.
+/// Lime action bar. Fills parent width, 52 tall, squircle r16.
 class LimeActionBar extends StatelessWidget {
   final String label;
   final VoidCallback? onPressed;
@@ -1717,7 +2050,7 @@ class LimeActionBar extends StatelessWidget {
       enabled: onPressed != null,
       child: SizedBox(
         width: double.infinity,
-        height: 48,
+        height: 52,
         child: ElevatedButton(
           onPressed: onPressed == null
               ? null
@@ -1728,15 +2061,16 @@ class LimeActionBar extends StatelessWidget {
           style: ElevatedButton.styleFrom(
             backgroundColor: scheme.brandAccent,
             foregroundColor: scheme.onBrandAccent,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(10),
+            shape: PacerSquircleBorder(
+              PacerRadii.md,
+              rimColor: Colors.white.withValues(alpha: 0.45),
             ),
           ),
           child: Text(
             label,
-            style: TextStyle(
+            style: GoogleFonts.spaceGrotesk(
               fontWeight: FontWeight.w700,
-              fontSize: 20,
+              fontSize: 17,
               color: scheme.onBrandAccent,
             ),
           ),
@@ -1746,7 +2080,7 @@ class LimeActionBar extends StatelessWidget {
   }
 }
 
-/// Clubs search field. Fills parent width, r12 #F8FAFC.
+/// Clubs search field. Fills parent width, squircle r14.
 class SearchField extends StatelessWidget {
   final String? hint;
   final TextEditingController? controller;
@@ -1772,15 +2106,19 @@ class SearchField extends StatelessWidget {
         fillColor: scheme.searchBg,
         contentPadding: const EdgeInsets.symmetric(
           horizontal: 16,
-          vertical: 16,
+          vertical: 15,
         ),
         border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(14),
           borderSide: BorderSide(color: scheme.softBorder),
         ),
         enabledBorder: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(12),
+          borderRadius: BorderRadius.circular(14),
           borderSide: BorderSide(color: scheme.softBorder),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(14),
+          borderSide: BorderSide(color: scheme.accent, width: 1.5),
         ),
       ),
     );
