@@ -191,6 +191,94 @@ String periodeKey(DateTime d) {
   return '${thursday.year}-W${week.toString().padLeft(2, '0')}';
 }
 
+/// Minimum daily effort and integrity gates required to earn or extend a streak.
+class StreakRules {
+  StreakRules._();
+
+  static const int minDurationS = 300; // 5 minutes active exercise
+  static const double minFootDistanceM = 500.0; // 0.50 km walk / jog / run
+  static const double minCyclingDistanceM = 1000.0; // 1.00 km cycling
+
+  static double minDistanceForSport(String jenis) =>
+      jenis.trim().toLowerCase() == 'bersepeda'
+      ? minCyclingDistanceM
+      : minFootDistanceM;
+
+  /// Checks single-session totals without requiring an [Activity] wrapper.
+  static bool isActivityValuesQualified({
+    required String jenis,
+    required int durasiS,
+    required double jarakM,
+    bool isFlagged = false,
+  }) {
+    if (isFlagged) return false;
+    return durasiS >= minDurationS && jarakM >= minDistanceForSport(jenis);
+  }
+
+  /// True when a finished, unflagged workout alone clears the streak floor.
+  static bool isActivityQualified(Activity a) {
+    if (a.selesaiAt == null || a.isFlagged) return false;
+    return isActivityValuesQualified(
+      jenis: a.jenis,
+      durasiS: a.durasiS ?? 0,
+      jarakM: a.jarakM ?? 0.0,
+    );
+  }
+
+  /// Aggregates valid (`selesaiAt != null && !isFlagged`) effort on one day.
+  /// Handles mixed foot + cycling sessions via normalized distance quota.
+  static ({
+    int durasiS,
+    double jarakM,
+    double distanceQuota,
+    bool qualified,
+  })
+  summarizeDay(Iterable<Activity> dayActivities) {
+    var totalDur = 0;
+    var totalDist = 0.0;
+    var quota = 0.0;
+    for (final a in dayActivities) {
+      if (a.selesaiAt == null || a.isFlagged) continue;
+      final dur = a.durasiS ?? 0;
+      final dist = a.jarakM ?? 0.0;
+      if (dur > 0) totalDur += dur;
+      if (dist > 0) {
+        totalDist += dist;
+        quota += dist / minDistanceForSport(a.jenis);
+      }
+    }
+    return (
+      durasiS: totalDur,
+      jarakM: totalDist,
+      distanceQuota: quota,
+      qualified: totalDur >= minDurationS && quota >= 1.0,
+    );
+  }
+
+  static bool dayQualifiesForStreak(Iterable<Activity> dayActivities) =>
+      summarizeDay(dayActivities).qualified;
+
+  /// Filters [activities] to today's local calendar day and summarizes progress.
+  static ({
+    int durasiS,
+    double jarakM,
+    double distanceQuota,
+    bool qualified,
+  })
+  summarizeTodayProgress(Iterable<Activity> activities, {DateTime? now}) {
+    final ref = (now ?? DateTime.now()).toLocal();
+    final todayKey = DateTime(ref.year, ref.month, ref.day);
+    final sameDay = activities.where((a) {
+      final ts = (a.mulaiAt ?? a.selesaiAt)?.toLocal();
+      if (ts == null) return false;
+      return ts.year == todayKey.year &&
+          ts.month == todayKey.month &&
+          ts.day == todayKey.day;
+    });
+    return summarizeDay(sameDay);
+  }
+}
+
 /// Streak transition: same day no change, yesterday +1, gap resets, first ever = 1.
 int streakNext({
   DateTime? terakhirTgl,

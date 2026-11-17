@@ -876,6 +876,16 @@ class HomeScreenState extends State<HomeScreen> {
     final last = _data?.streakLast;
     final raw = _data?.streak ?? 0;
     final count = effectiveStreak(count: raw, last: last, now: now);
+    final status = streakStatusOf(count: raw, last: last, now: now);
+    final today = StreakRules.summarizeTodayProgress([
+      for (final item in _data?.activities ?? const <LocalActivity>[])
+        item.activity,
+    ], now: now);
+    final String? reqNotice = status == StreakStatus.active
+        ? null
+        : (!today.qualified && (today.durasiS > 0 || today.distanceQuota > 0)
+              ? S.streakTodayProgress(today.durasiS, today.distanceQuota)
+              : S.streakRuleSummary);
     return GestureDetector(
       onTap: _openStreaks,
       behavior: HitTestBehavior.opaque,
@@ -884,7 +894,8 @@ class HomeScreenState extends State<HomeScreen> {
           count: count,
           done: streakWeek(count: count, last: last, now: now),
           todayIndex: now.weekday - 1,
-          status: streakStatusOf(count: raw, last: last, now: now),
+          status: status,
+          requirementNotice: reqNotice,
         ),
       ),
     );

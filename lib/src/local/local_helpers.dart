@@ -16,6 +16,7 @@ import 'package:pacer/src/local/local_models.dart';
 
   for (final item in activities) {
     if (item.status != RunStatus.finished) continue;
+    if (item.activity.validationStatus == 'flagged_vehicle') continue;
     final mulai = item.activity.mulaiAt;
     if (mulai == null || periodeKey(mulai.toLocal()) != periode) continue;
 
@@ -33,7 +34,8 @@ import 'package:pacer/src/local/local_models.dart';
   return foundAny ? (jarakM: totalJarak, waktuS: totalWaktu) : null;
 }
 
-/// Computes current effective streak from server baseline + queued offline runs.
+/// Computes current effective streak from server baseline + qualifying queued runs.
+/// Days whose cumulative valid (`!isFlagged`) effort fails [StreakRules] are ignored.
 ({int berjalan, DateTime? terakhir})? computeEffectiveStreak({
   required ({int berjalan, DateTime? terakhir})? baseline,
   required List<LocalActivity> activities,
@@ -41,28 +43,32 @@ import 'package:pacer/src/local/local_models.dart';
   var count = baseline?.berjalan ?? 0;
   var last = baseline?.terakhir;
 
-  final pending =
-      activities
-          .where(
-            (a) =>
-                a.status == RunStatus.finished &&
-                a.syncState != SyncState.synced &&
-                a.activity.mulaiAt != null,
-          )
-          .toList()
-        ..sort((a, b) => a.activity.mulaiAt!.compareTo(b.activity.mulaiAt!));
+  final byDay = <DateTime, List<Activity>>{};
+  for (final item in activities) {
+    if (item.status != RunStatus.finished) continue;
+    if (item.activity.isFlagged) continue;
+    final start = item.activity.mulaiAt;
+    if (start == null) continue;
+    final dayLocal = start.toLocal();
+    final key = DateTime.utc(dayLocal.year, dayLocal.month, dayLocal.day);
+    byDay.putIfAbsent(key, () => <Activity>[]).add(item.activity);
+  }
 
-  for (final item in pending) {
-    final dayLocal = item.activity.mulaiAt!.toLocal();
-    final dayDate = DateTime.utc(dayLocal.year, dayLocal.month, dayLocal.day);
-    final lastDate = last == null
-        ? null
-        : DateTime.utc(last.year, last.month, last.day);
-    if (lastDate != null && !dayDate.isAfter(lastDate)) {
+  final sortedDays = byDay.keys.toList()..sort();
+  final baseLastUtc = last == null
+      ? null
+      : DateTime.utc(last.year, last.month, last.day);
+
+  for (final dayUtc in sortedDays) {
+    if (baseLastUtc != null && !dayUtc.isAfter(baseLastUtc)) {
       continue;
     }
-    count = streakNext(terakhirTgl: last, today: dayLocal, current: count);
-    last = DateTime(dayLocal.year, dayLocal.month, dayLocal.day);
+    if (!StreakRules.dayQualifiesForStreak(byDay[dayUtc]!)) {
+      continue;
+    }
+    final localDay = DateTime(dayUtc.year, dayUtc.month, dayUtc.day);
+    count = streakNext(terakhirTgl: last, today: localDay, current: count);
+    last = localDay;
   }
 
   if (baseline == null && last == null) return null;

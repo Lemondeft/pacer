@@ -88,8 +88,10 @@ class _FakeGateway implements RemoteSyncGateway {
     required double jarakM,
     required int waktuS,
     required DateTime activityLocalDate,
+    bool applyStats = true,
+    bool applyStreak = true,
   }) async {
-    fallbackCalls.add('$periode:$jarakM:$waktuS');
+    fallbackCalls.add('$periode:$jarakM:$waktuS:$applyStreak');
     ops.add('fallback:$periode');
   }
 
@@ -549,6 +551,24 @@ void main() {
 
       final parts = await store.getParticipations('user-sync-1');
       expect(parts.single.progressNilai, closeTo(0.0, 0.01));
+    });
+
+    test('fallback sync skips streak increment for under-minimum short activity', () async {
+      gateway.returnNullFromRpc = true;
+      await store.finalizeRunAtomic(
+        id: 'run-too-short-1',
+        userId: 'user-sync-1',
+        jenis: 'lari',
+        mulaiAt: DateTime.utc(2026, 11, 14, 6),
+        selesaiAt: DateTime.utc(2026, 11, 14, 6, 1),
+        durasiS: 60,
+        jarakM: 120.0,
+        allPoints: const [],
+      );
+
+      await engine.syncNow(userId: 'user-sync-1');
+
+      expect(gateway.fallbackCalls.single.endsWith(':false'), isTrue);
     });
   });
 }

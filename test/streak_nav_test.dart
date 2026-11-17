@@ -144,6 +144,7 @@ void main() {
       );
       expect(find.text('STREAK AT RISK'), findsOneWidget);
       expect(find.text('Run today to keep your 4-day streak'), findsOneWidget);
+      expect(find.text(S.streakRuleSummary), findsOneWidget);
       expect(
         pillColor(tester),
         PacerColors.streakAmber.withValues(alpha: 0.14),

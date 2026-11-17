@@ -652,5 +652,53 @@ void main() {
       final unflaggedParts = await store.getParticipations('u3');
       expect(unflaggedParts.single.progressNilai, closeTo(2500.0, 0.01));
     });
+
+    test('streak ignores 0m/short idle workouts and advances only once cumulative day meets minimum rules', () async {
+      final monday = DateTime(2026, 11, 9, 7, 0);
+      final tuesday = DateTime(2026, 11, 10, 7, 0);
+      await store.saveStreakBaseline('u-streak', 2, monday);
+
+      // Doing nothing / 10s tap-and-finish does NOT extend streak.
+      await store.finalizeRunAtomic(
+        id: 'short-idle-1',
+        userId: 'u-streak',
+        jenis: 'lari',
+        mulaiAt: tuesday.toUtc(),
+        selesaiAt: tuesday.add(const Duration(seconds: 10)).toUtc(),
+        durasiS: 10,
+        jarakM: 0.0,
+        allPoints: const [],
+      );
+
+      final afterIdle = await store.getStreakEffective('u-streak');
+      expect(afterIdle?.berjalan, 2);
+
+      // Partial session (< 5m / < 500m) still does not extend streak yet.
+      await store.finalizeRunAtomic(
+        id: 'short-leg-1',
+        userId: 'u-streak',
+        jenis: 'berjalan',
+        mulaiAt: tuesday.add(const Duration(minutes: 5)).toUtc(),
+        selesaiAt: tuesday.add(const Duration(minutes: 8)).toUtc(),
+        durasiS: 180,
+        jarakM: 260.0,
+        allPoints: const [],
+      );
+      expect((await store.getStreakEffective('u-streak'))?.berjalan, 2);
+
+      // Second leg on Tuesday clears 300s + 500m combined quota -> advances to 3!
+      await store.finalizeRunAtomic(
+        id: 'short-leg-2',
+        userId: 'u-streak',
+        jenis: 'berjalan',
+        mulaiAt: tuesday.add(const Duration(hours: 2)).toUtc(),
+        selesaiAt: tuesday.add(const Duration(hours: 2, minutes: 3)).toUtc(),
+        durasiS: 180,
+        jarakM: 280.0,
+        allPoints: const [],
+      );
+      final afterQualified = await store.getStreakEffective('u-streak');
+      expect(afterQualified?.berjalan, 3);
+    });
   });
 }

@@ -802,4 +802,67 @@ class S {
       : 'Aktivitas akan dihapus dari riwayat dan sinkronisasi.';
   static String get flaggedActivityDeletedNotice =>
       _en ? 'Activity deleted' : 'Aktivitas dihapus';
+
+  static String get streakRuleSummary => _en
+      ? 'Daily minimum: 5 min & 0.50 km (1.00 km cycling)'
+      : 'Syarat harian: min. 5 mnt & 0,50 km (1,00 km bersepeda)';
+
+  static String streakTodayProgress(int durasiS, double quotaRatio) {
+    final pct = (quotaRatio.clamp(0.0, 1.0) * 100).round();
+    final mins = durasiS ~/ 60;
+    final secs = durasiS % 60;
+    return _en
+        ? 'Today: ${mins}m ${secs}s / 5m • Distance quota $pct%'
+        : 'Hari ini: ${mins}m ${secs}d / 5m • Kuota jarak $pct%';
+  }
+
+  static String get streakRequirementsTitle =>
+      _en ? 'Streak Requirements' : 'Syarat Streak';
+  static String get streakReqDuration => _en
+      ? 'Complete at least 5 minutes of active workout per day'
+      : 'Minimal 5 menit olahraga aktif per hari';
+  static String get streakReqDistance => _en
+      ? 'Cover at least 0.50 km (Walk / Jog / Run) or 1.00 km (Cycling)'
+      : 'Minimal 0,50 km (Jalan / Joging / Lari) atau 1,00 km (Bersepeda)';
+  static String get streakReqIntegrity => _en
+      ? 'Valid sessions only (vehicle & unresolved mismatch activities excluded)'
+      : 'Hanya aktivitas valid (kendaraan & ketidaksesuaian dikecualikan)';
+  static String get streakTodayCompleted => _en
+      ? 'Today\'s streak requirement completed'
+      : 'Syarat streak hari ini terpenuhi';
+
+  static String get streakShortConfirmTitle =>
+      _en ? 'Too short for today\'s streak' : 'Belum memenuhi syarat streak';
+  static String streakShortConfirmBody(
+    String jenis,
+    int elapsedS,
+    double distM,
+  ) {
+    final minKm = (jenis == 'bersepeda' ? 1.00 : 0.50).toStringAsFixed(2);
+    final kmDone = (distM / 1000).toStringAsFixed(2);
+    final minsDone = elapsedS ~/ 60;
+    final secsDone = elapsedS % 60;
+    return _en
+        ? 'Current: ${minsDone}m ${secsDone}s & $kmDone km. Streak requires at least 5m & $minKm km (${sportName(jenis)}). Keep going to count today, or save anyway without extending your streak.'
+        : 'Saat ini: ${minsDone}m ${secsDone}d & $kmDone km. Streak butuh min. 5m & $minKm km (${sportName(jenis)}). Lanjutkan agar dihitung hari ini, atau tetap simpan tanpa menambah streak.';
+  }
+
+  static String get keepGoingCta => _en ? 'Keep Going' : 'Lanjutkan';
+  static String get finishAnywayCta => _en ? 'Finish Anyway' : 'Tetap Selesai';
+
+  static String get finishStreakNotExtendedTitle =>
+      _en ? 'Streak Not Extended' : 'Streak Belum Bertambah';
+  static String finishStreakNotExtendedBody(
+    String jenis,
+    int durasiS,
+    double jarakM,
+  ) {
+    final minKm = (jenis == 'bersepeda' ? 1.00 : 0.50).toStringAsFixed(2);
+    final kmDone = (jarakM / 1000).toStringAsFixed(2);
+    final minsDone = durasiS ~/ 60;
+    final secsDone = durasiS % 60;
+    return _en
+        ? 'Recorded ${minsDone}m ${secsDone}s & $kmDone km. A valid session (or combined daily total) needs at least 5m & $minKm km (${sportName(jenis)}) to extend today\'s streak.'
+        : 'Tercatat ${minsDone}m ${secsDone}d & $kmDone km. Minimal butuh 5m & $minKm km (${sportName(jenis)}) untuk menambah streak hari ini.';
+  }
 }

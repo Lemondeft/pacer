@@ -807,12 +807,41 @@ class _RunTrackerScreenState extends State<RunTrackerScreen> {
     // Offline at finish is the expected failure mode: stay on the tracker
     // with the recording intact instead of red-screening.
     try {
+      final activeSport = _recorder.started
+          ? _recorder.jenis
+          : widget.sportType;
+      final elapsedS = _recorder.elapsed.inSeconds;
+      final distM = _recorder.distanceM;
+      if (_recorder.started &&
+          !StreakRules.isActivityValuesQualified(
+            jenis: activeSport,
+            durasiS: elapsedS,
+            jarakM: distM,
+          )) {
+        if (!mounted) return;
+        final finishAnyway = await showDialog<bool>(
+          context: context,
+          builder: (ctx) => AlertDialog(
+            title: Text(S.streakShortConfirmTitle),
+            content: Text(S.streakShortConfirmBody(activeSport, elapsedS, distM)),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(ctx).pop(true),
+                child: Text(S.finishAnywayCta),
+              ),
+              FilledButton(
+                onPressed: () => Navigator.of(ctx).pop(false),
+                child: Text(S.keepGoingCta),
+              ),
+            ],
+          ),
+        );
+        if (finishAnyway != true || !mounted) return;
+      }
+
       List<({Challenge challenge, PartisipasiChallenge participation})>
       eligible = const [];
       try {
-        final activeSport = _recorder.started
-            ? _recorder.jenis
-            : widget.sportType;
         eligible = await ChallengeRepository().eligibleActiveChallengesForSport(
           activeSport,
         );
@@ -1827,6 +1856,103 @@ class _RunFinishScreenState extends State<RunFinishScreen> {
     );
   }
 
+  Widget _buildStreakNoticeBanner(
+    BuildContext context,
+    PacerScheme scheme, {
+    required RunSummary? summary,
+    required String jenis,
+    required String? status,
+  }) {
+    if (summary == null) return const SizedBox.shrink();
+    final isFlagged =
+        status == 'flagged_vehicle' ||
+        status == 'flagged_ride' ||
+        status == 'flagged_mismatch';
+    if (isFlagged) return const SizedBox.shrink();
+
+    final qualified = StreakRules.isActivityValuesQualified(
+      jenis: jenis,
+      durasiS: summary.durasiS,
+      jarakM: summary.jarakM,
+    );
+    if (qualified) {
+      return Padding(
+        padding: const EdgeInsets.only(top: 12),
+        child: PacerSurface(
+          radius: PacerRadii.md,
+          color: PacerColors.chipGreen.withValues(alpha: 0.09),
+          borderColor: PacerColors.chipGreen.withValues(alpha: 0.4),
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+          child: Row(
+            children: [
+              const Icon(
+                Icons.local_fire_department,
+                size: 18,
+                color: PacerColors.chipGreen,
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  S.streakTodayCompleted,
+                  style: TextStyle(
+                    fontSize: 12.5,
+                    fontWeight: FontWeight.w600,
+                    color: scheme.ink,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    return Padding(
+      padding: const EdgeInsets.only(top: 12),
+      child: PacerSurface(
+        radius: PacerRadii.lg,
+        color: PacerColors.streakAmber.withValues(alpha: 0.1),
+        borderColor: PacerColors.streakAmber.withValues(alpha: 0.55),
+        padding: const EdgeInsets.all(14),
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const Icon(
+              Icons.local_fire_department_outlined,
+              size: 20,
+              color: PacerColors.streakAmber,
+            ),
+            const SizedBox(width: 10),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    S.finishStreakNotExtendedTitle,
+                    style: TextStyle(
+                      fontSize: 13.5,
+                      fontWeight: FontWeight.w700,
+                      color: scheme.ink,
+                    ),
+                  ),
+                  const SizedBox(height: 3),
+                  Text(
+                    S.finishStreakNotExtendedBody(
+                      jenis,
+                      summary.durasiS,
+                      summary.jarakM,
+                    ),
+                    style: TextStyle(fontSize: 12, color: scheme.soft),
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final scheme = PacerScheme.of(context);
@@ -2018,6 +2144,13 @@ class _RunFinishScreenState extends State<RunFinishScreen> {
                           jenis: effectiveJenis,
                           status: effectiveStatus,
                           suggestedSport: effectiveSuggested,
+                        ),
+                        _buildStreakNoticeBanner(
+                          context,
+                          scheme,
+                          summary: summary,
+                          jenis: effectiveJenis,
+                          status: effectiveStatus,
                         ),
                         const SizedBox(height: 18),
                         FutureBuilder<UserProfile?>(
@@ -6204,7 +6337,17 @@ class StreaksScreen extends StatefulWidget {
 }
 
 class _StreaksScreenState extends State<StreaksScreen> {
-  Future<({int count, DateTime? terakhir, double totalKm})?>? _future;
+  Future<
+    ({
+      int count,
+      DateTime? terakhir,
+      double totalKm,
+      int todayDurasiS,
+      double todayQuota,
+      bool todayQualified,
+    })?
+  >?
+  _future;
 
   @override
   void initState() {
@@ -6212,12 +6355,25 @@ class _StreaksScreenState extends State<StreaksScreen> {
     _future = _load();
   }
 
-  Future<({int count, DateTime? terakhir, double totalKm})?> _load() async {
+  Future<
+    ({
+      int count,
+      DateTime? terakhir,
+      double totalKm,
+      int todayDurasiS,
+      double todayQuota,
+      bool todayQualified,
+    })?
+  >
+  _load() async {
     if (await isDemoAccount()) {
       return (
         count: 5,
         terakhir: DateTime.now().subtract(const Duration(hours: 4)),
         totalKm: 45.2,
+        todayDurasiS: 1500,
+        todayQuota: 1.0,
+        todayQualified: true,
       );
     }
     try {
@@ -6225,14 +6381,33 @@ class _StreaksScreenState extends State<StreaksScreen> {
       final streak = await repo.getStreak();
       final activities = await repo.listActivities(limit: 100);
       final totalKm =
-          activities.fold<double>(0, (s, a) => s + (a.jarakM ?? 0)) / 1000;
+          activities
+              .where((a) => a.validationStatus != 'flagged_vehicle')
+              .fold<double>(0, (s, a) => s + (a.jarakM ?? 0)) /
+          1000;
+      final today = StreakRules.summarizeTodayProgress(activities);
+      final now = DateTime.now();
       return (
-        count: streak?.berjalan ?? 0,
+        count: effectiveStreak(
+          count: streak?.berjalan ?? 0,
+          last: streak?.terakhir,
+          now: now,
+        ),
         terakhir: streak?.terakhir,
         totalKm: totalKm,
+        todayDurasiS: today.durasiS,
+        todayQuota: today.distanceQuota,
+        todayQualified: today.qualified,
       );
     } catch (_) {
-      return (count: 0, terakhir: null, totalKm: 0.0);
+      return (
+        count: 0,
+        terakhir: null,
+        totalKm: 0.0,
+        todayDurasiS: 0,
+        todayQuota: 0.0,
+        todayQualified: false,
+      );
     }
   }
 
@@ -6261,6 +6436,84 @@ class _StreaksScreenState extends State<StreaksScreen> {
   /// the card now — the strip lives in [StreakCard]).
   static const _emptyWeek = [false, false, false, false, false, false, false];
 
+  Widget _buildRequirementsCard(
+    BuildContext context, {
+    required int todayDurasiS,
+    required double todayQuota,
+    required bool todayQualified,
+  }) {
+    final scheme = PacerScheme.of(context);
+    final timeRatio = (todayDurasiS / StreakRules.minDurationS).clamp(0.0, 1.0);
+    final distRatio = todayQuota.clamp(0.0, 1.0);
+    final accent = todayQualified ? PacerColors.chipGreen : PacerColors.streakAmber;
+    return PacerSurface(
+      radius: PacerRadii.lg,
+      padding: const EdgeInsets.all(16),
+      borderColor: accent.withValues(alpha: 0.4),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(
+                todayQualified ? Icons.verified_outlined : Icons.rule_rounded,
+                size: 18,
+                color: accent,
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  S.streakRequirementsTitle,
+                  style: TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w700,
+                    color: scheme.ink,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+          Text(
+            '• ${S.streakReqDuration}',
+            style: TextStyle(fontSize: 12.5, color: scheme.soft),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            '• ${S.streakReqDistance}',
+            style: TextStyle(fontSize: 12.5, color: scheme.soft),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            '• ${S.streakReqIntegrity}',
+            style: TextStyle(fontSize: 12.5, color: scheme.soft),
+          ),
+          const SizedBox(height: 12),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(999),
+            child: LinearProgressIndicator(
+              value: todayQualified ? 1.0 : ((timeRatio + distRatio) / 2.0),
+              minHeight: 6,
+              backgroundColor: scheme.border,
+              valueColor: AlwaysStoppedAnimation<Color>(accent),
+            ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            todayQualified
+                ? S.streakTodayCompleted
+                : S.streakTodayProgress(todayDurasiS, todayQuota),
+            style: TextStyle(
+              fontSize: 12,
+              fontWeight: FontWeight.w600,
+              color: todayQualified ? PacerColors.chipGreen : scheme.ink,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   /// Figma mock strip (demo mode or no streak yet).
   @override
   Widget build(BuildContext context) {
@@ -6277,7 +6530,16 @@ class _StreaksScreenState extends State<StreaksScreen> {
               const SizedBox(height: 16),
               Text(S.streaks, style: PacerText.pageTitleOf(context)),
               const SizedBox(height: 12),
-              FutureBuilder<({int count, DateTime? terakhir, double totalKm})?>(
+              FutureBuilder<
+                ({
+                  int count,
+                  DateTime? terakhir,
+                  double totalKm,
+                  int todayDurasiS,
+                  double todayQuota,
+                  bool todayQualified,
+                })?
+              >(
                 future: _future,
                 builder: (context, snap) {
                   final d = snap.data;
@@ -6300,11 +6562,32 @@ class _StreaksScreenState extends State<StreaksScreen> {
                           done: _emptyWeek,
                           todayIndex: DateTime.now().weekday - 1,
                         ),
+                        const SizedBox(height: 12),
+                        _buildRequirementsCard(
+                          context,
+                          todayDurasiS: 0,
+                          todayQuota: 0,
+                          todayQualified: false,
+                        ),
                       ],
                     );
                   }
+                  final now = DateTime.now();
                   final done = _doneWeek(d.count, d.terakhir);
-                  final todayIdx = DateTime.now().weekday - 1;
+                  final todayIdx = now.weekday - 1;
+                  final status = streakStatusOf(
+                    count: d.count,
+                    last: d.terakhir,
+                    now: now,
+                  );
+                  final String? reqNotice = d.todayQualified
+                      ? null
+                      : ((d.todayDurasiS > 0 || d.todayQuota > 0)
+                            ? S.streakTodayProgress(
+                                d.todayDurasiS,
+                                d.todayQuota,
+                              )
+                            : S.streakRuleSummary);
                   final doneThisWeek = [
                     for (var i = 0; i < 7; i++)
                       if (done[i]) i,
@@ -6325,6 +6608,15 @@ class _StreaksScreenState extends State<StreaksScreen> {
                         count: d.count,
                         done: done,
                         todayIndex: todayIdx,
+                        status: status,
+                        requirementNotice: reqNotice,
+                      ),
+                      const SizedBox(height: 12),
+                      _buildRequirementsCard(
+                        context,
+                        todayDurasiS: d.todayDurasiS,
+                        todayQuota: d.todayQuota,
+                        todayQualified: d.todayQualified,
                       ),
                     ],
                   );

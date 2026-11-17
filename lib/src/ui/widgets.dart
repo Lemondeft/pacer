@@ -969,12 +969,14 @@ class StreakCard extends StatelessWidget {
   final List<bool>? done;
   final int? todayIndex;
   final StreakStatus? status;
+  final String? requirementNotice;
   const StreakCard({
     super.key,
     this.count,
     this.done,
     this.todayIndex,
     this.status,
+    this.requirementNotice,
   });
 
   static const _dayLabelsId = ['Sen', 'Sel', 'Rab', 'Kam', 'Jum', 'Sab', 'Min'];
@@ -1267,6 +1269,33 @@ class StreakCard extends StatelessWidget {
                         ),
                       ],
                     ),
+                    if (s != StreakStatus.active ||
+                        (requirementNotice != null &&
+                            requirementNotice!.isNotEmpty)) ...[
+                      const SizedBox(height: 6),
+                      Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Icon(
+                            Icons.info_outline_rounded,
+                            size: 13,
+                            color: textAccent.withValues(alpha: 0.85),
+                          ),
+                          const SizedBox(width: 6),
+                          Expanded(
+                            child: Text(
+                              requirementNotice ?? S.streakRuleSummary,
+                              maxLines: 2,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                fontSize: 11,
+                                color: msgColor.withValues(alpha: 0.85),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ],
                   ],
                 ),
               ),

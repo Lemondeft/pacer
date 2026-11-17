@@ -238,4 +238,75 @@ void main() {
       );
     });
   });
+
+  group('StreakRules minimum requirements', () {
+    final dayStart = DateTime.utc(2026, 11, 17, 7, 0);
+
+    Activity makeRun({
+      required String id,
+      String jenis = 'lari',
+      required int durasiS,
+      required double jarakM,
+      String? validationStatus,
+    }) => Activity(
+      id: id,
+      userId: 'u1',
+      jenis: jenis,
+      mulaiAt: dayStart,
+      selesaiAt: dayStart.add(Duration(seconds: durasiS)),
+      durasiS: durasiS,
+      jarakM: jarakM,
+      validationStatus: validationStatus,
+    );
+
+    test('rejects idle/zero-distance and too-short sessions across sports', () {
+      expect(
+        StreakRules.isActivityQualified(makeRun(id: 'zero', durasiS: 5, jarakM: 0)),
+        isFalse,
+      );
+      expect(
+        StreakRules.isActivityQualified(makeRun(id: 'idle', durasiS: 600, jarakM: 0)),
+        isFalse,
+      );
+      expect(
+        StreakRules.isActivityQualified(makeRun(id: 'too-fast-short', durasiS: 90, jarakM: 700)),
+        isFalse,
+      );
+      expect(
+        StreakRules.isActivityQualified(makeRun(id: 'walk-short', jenis: 'berjalan', durasiS: 400, jarakM: 350)),
+        isFalse,
+      );
+      expect(
+        StreakRules.isActivityQualified(makeRun(id: 'bike-short', jenis: 'bersepeda', durasiS: 400, jarakM: 800)),
+        isFalse,
+      );
+    });
+
+    test('accepts meeting foot and cycling thresholds, multi-leg days, and excludes flagged trips', () {
+      expect(
+        StreakRules.isActivityQualified(makeRun(id: 'walk-ok', jenis: 'berjalan', durasiS: 300, jarakM: 500)),
+        isTrue,
+      );
+      expect(
+        StreakRules.isActivityQualified(makeRun(id: 'bike-ok', jenis: 'bersepeda', durasiS: 300, jarakM: 1000)),
+        isTrue,
+      );
+
+      // Multi-leg same-day foot workouts combine cleanly.
+      final leg1 = makeRun(id: 'l1', jenis: 'berjalan', durasiS: 180, jarakM: 260);
+      final leg2 = makeRun(id: 'l2', jenis: 'berjalan', durasiS: 150, jarakM: 260);
+      expect(StreakRules.dayQualifiesForStreak([leg1]), isFalse);
+      expect(StreakRules.dayQualifiesForStreak([leg1, leg2]), isTrue);
+
+      // Flagged vehicle / mismatch excluded even at high distance & time.
+      final car = makeRun(
+        id: 'car',
+        jenis: 'lari',
+        durasiS: 900,
+        jarakM: 12000,
+        validationStatus: 'flagged_vehicle',
+      );
+      expect(StreakRules.dayQualifiesForStreak([car]), isFalse);
+    });
+  });
 }

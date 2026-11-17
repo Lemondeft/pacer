@@ -80,6 +80,8 @@ abstract class RemoteSyncGateway {
     required double jarakM,
     required int waktuS,
     required DateTime activityLocalDate,
+    bool applyStats = true,
+    bool applyStreak = true,
   });
   Future<void> updateProfile(String userId, Map<String, dynamic> patch);
   Future<void> updateLanguage(String userId, String langCode);
@@ -182,16 +184,29 @@ class SupabaseSyncGateway implements RemoteSyncGateway {
     required String activityDay,
   }) async {
     final c = _client!;
+    final baseParams = {
+      'p_periode': periode,
+      'p_week_start': weekStartUtc.toUtc().toIso8601String(),
+      'p_week_end': weekEndUtc.toUtc().toIso8601String(),
+      'p_activity_day': activityDay,
+    };
     try {
-      final raw = await c.rpc(
-        'sync_recompute_user_stats',
-        params: {
-          'p_periode': periode,
-          'p_week_start': weekStartUtc.toUtc().toIso8601String(),
-          'p_week_end': weekEndUtc.toUtc().toIso8601String(),
-          'p_activity_day': activityDay,
-        },
-      );
+      dynamic raw;
+      try {
+        raw = await c.rpc(
+          'sync_recompute_user_stats',
+          params: {
+            ...baseParams,
+            'p_tz_offset_minutes': DateTime.now().timeZoneOffset.inMinutes,
+          },
+        );
+      } on PostgrestException catch (e) {
+        if ((e.code ?? '').toUpperCase() == 'PGRST202') {
+          raw = await c.rpc('sync_recompute_user_stats', params: baseParams);
+        } else {
+          rethrow;
+        }
+      }
       final list = raw is List ? raw : [raw];
       if (list.isEmpty || list.first == null) return null;
       final row = Map<String, dynamic>.from(list.first as Map);
@@ -218,36 +233,44 @@ class SupabaseSyncGateway implements RemoteSyncGateway {
     required double jarakM,
     required int waktuS,
     required DateTime activityLocalDate,
+    bool applyStats = true,
+    bool applyStreak = true,
   }) async {
     final c = _client!;
     final uid = c.auth.currentUser?.id;
     if (uid == null) throw const AuthException('Not signed in');
+    if (!applyStats && !applyStreak) return;
 
-    final existingStat = await c
-        .from('statistik')
-        .select('id, total_jarak_m, total_waktu_s')
-        .eq('user_id', uid)
-        .eq('periode', periode)
-        .maybeSingle();
-    if (existingStat == null) {
-      await c.from('statistik').insert({
-        'user_id': uid,
-        'periode': periode,
-        'total_jarak_m': jarakM,
-        'total_waktu_s': waktuS,
-      });
-    } else {
-      await c
+    if (applyStats) {
+      final existingStat = await c
           .from('statistik')
-          .update({
-            'total_jarak_m':
-                (jsonToDouble(existingStat['total_jarak_m']) ?? 0) + jarakM,
-            'total_waktu_s':
-                ((existingStat['total_waktu_s'] as num?)?.toInt() ?? 0) + waktuS,
-            'updated_at': DateTime.now().toUtc().toIso8601String(),
-          })
-          .eq('id', existingStat['id'] as String);
+          .select('id, total_jarak_m, total_waktu_s')
+          .eq('user_id', uid)
+          .eq('periode', periode)
+          .maybeSingle();
+      if (existingStat == null) {
+        await c.from('statistik').insert({
+          'user_id': uid,
+          'periode': periode,
+          'total_jarak_m': jarakM,
+          'total_waktu_s': waktuS,
+        });
+      } else {
+        await c
+            .from('statistik')
+            .update({
+              'total_jarak_m':
+                  (jsonToDouble(existingStat['total_jarak_m']) ?? 0) + jarakM,
+              'total_waktu_s':
+                  ((existingStat['total_waktu_s'] as num?)?.toInt() ?? 0) +
+                  waktuS,
+              'updated_at': DateTime.now().toUtc().toIso8601String(),
+            })
+            .eq('id', existingStat['id'] as String);
+      }
     }
+
+    if (!applyStreak) return;
 
     final streakRow = await c
         .from('streak')
@@ -834,20 +857,38 @@ class SyncEngine extends ChangeNotifier {
     final localList = await _store.listActivities(item.userId, limit: 200);
     final match = localList.where((a) => a.activity.id == effectiveActivity.id);
     final alreadyApplied = match.isNotEmpty && match.first.statistikApplied;
+    final applyStats = effectiveActivity.validationStatus != 'flagged_vehicle';
+    final mulaiLocal = mulai.toLocal();
+    final sameDayActivities = <Activity>[
+      for (final a in localList)
+        if (a.activity.id == effectiveActivity.id)
+          effectiveActivity
+        else if (a.activity.mulaiAt != null &&
+            a.activity.mulaiAt!.toLocal().year == mulaiLocal.year &&
+            a.activity.mulaiAt!.toLocal().month == mulaiLocal.month &&
+            a.activity.mulaiAt!.toLocal().day == mulaiLocal.day)
+          a.activity,
+    ];
+    if (!sameDayActivities.any((a) => a.id == effectiveActivity.id)) {
+      sameDayActivities.add(effectiveActivity);
+    }
+    final dayQualified = StreakRules.dayQualifiesForStreak(sameDayActivities);
     if (!alreadyApplied) {
       await _gateway.fallbackApplyStatistikAndStreak(
         periode: bounds.periode,
-        jarakM: effectiveActivity.jarakM ?? 0,
-        waktuS: effectiveActivity.durasiS ?? 0,
-        activityLocalDate: mulai.toLocal(),
+        jarakM: applyStats ? (effectiveActivity.jarakM ?? 0) : 0,
+        waktuS: applyStats ? (effectiveActivity.durasiS ?? 0) : 0,
+        activityLocalDate: mulaiLocal,
+        applyStats: applyStats,
+        applyStreak: dayQualified,
       );
       await _store.markOutboxSynced(
         item.id,
         syncedActivityId: effectiveActivity.id,
         periode: bounds.periode,
         markStatistikAppliedOnly: true,
-        deltaJarakM: effectiveActivity.jarakM ?? 0,
-        deltaWaktuS: effectiveActivity.durasiS ?? 0,
+        deltaJarakM: applyStats ? (effectiveActivity.jarakM ?? 0) : 0,
+        deltaWaktuS: applyStats ? (effectiveActivity.durasiS ?? 0) : 0,
       );
     }
     await _store.markOutboxSynced(

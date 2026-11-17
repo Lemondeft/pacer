@@ -121,12 +121,17 @@ create trigger aktivitas_challenge_progress_trigger
   on public.aktivitas
   for each row execute function public.aktivitas_challenge_progress_trigger();
 
--- 4. Exclude motorized-vehicle flagged trips from weekly statistik rollup.
+-- 4. Exclude motorized-vehicle flagged trips from weekly statistik rollup and
+-- enforce daily streak minimums (>= 5 min AND >= 500 m foot / >= 1000 m cycling)
+-- over unflagged finished activities on p_activity_day.
+drop function if exists public.sync_recompute_user_stats(text, timestamptz, timestamptz, date);
+
 create or replace function public.sync_recompute_user_stats(
   p_periode text,
   p_week_start timestamptz,
   p_week_end timestamptz,
-  p_activity_day date
+  p_activity_day date,
+  p_tz_offset_minutes integer default 0
 )
 returns table (
   total_jarak_m numeric,
@@ -142,10 +147,13 @@ declare
   v_uid uuid := auth.uid();
   v_jarak numeric := 0;
   v_waktu integer := 0;
+  v_day_dur_s integer := 0;
+  v_day_ratio numeric := 0;
   v_cur_streak integer := 0;
   v_last_day date := null;
   v_next_streak integer := 0;
   v_next_day date := null;
+  v_tz_mins integer := coalesce(p_tz_offset_minutes, 0);
 begin
   if v_uid is null then
     raise exception 'Authentication required' using errcode = '42501';
@@ -180,10 +188,35 @@ begin
         total_waktu_s = excluded.total_waktu_s,
         updated_at = now();
 
+  -- Verify daily effort minimums over valid non-flagged activities on p_activity_day:
+  -- cumulative duration >= 300s (5 min) AND normalized distance quota >= 1.0
+  -- (500 m foot sports / 1000 m cycling).
+  select
+    coalesce(sum(greatest(coalesce(a.durasi_s, 0), 0)), 0)::integer,
+    coalesce(sum(
+      greatest(coalesce(a.jarak_m, 0), 0)
+      / case when a.jenis = 'bersepeda' then 1000.0 else 500.0 end
+    ), 0)
+  into v_day_dur_s, v_day_ratio
+  from public.aktivitas a
+  where a.user_id = v_uid
+    and a.selesai_at is not null
+    and coalesce(a.validation_status, 'unverified') not in (
+      'flagged_ride',
+      'flagged_mismatch',
+      'flagged_vehicle'
+    )
+    and ((coalesce(a.mulai_at, a.selesai_at) + make_interval(mins => v_tz_mins))::date = p_activity_day);
+
   select s.streak_berjalan, s.terakhir_olahraga_tgl
   into v_cur_streak, v_last_day
   from public.streak s
   where s.user_id = v_uid;
+
+  if v_day_dur_s < 300 or v_day_ratio < 1.0 then
+    return query select v_jarak, v_waktu, coalesce(v_cur_streak, 0), v_last_day;
+    return;
+  end if;
 
   if v_last_day is null then
     v_next_streak := 1;
@@ -214,3 +247,6 @@ begin
   return query select v_jarak, v_waktu, v_next_streak, v_next_day;
 end;
 $$;
+
+revoke all on function public.sync_recompute_user_stats(text, timestamptz, timestamptz, date, integer) from public, anon;
+grant execute on function public.sync_recompute_user_stats(text, timestamptz, timestamptz, date, integer) to authenticated;

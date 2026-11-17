@@ -810,6 +810,36 @@ void main() {
       expect(poppedResult, isTrue);
       expect(await store.getActivity('act-vehicle-1'), isNull);
     });
+
+    testWidgets('RunFinishScreen shows streak-not-extended notice for short sessions and StreaksScreen renders rule card', (tester) async {
+      langNotifier.value = Lang.en;
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: PacerTheme.light(),
+          home: const RunFinishScreen(
+            isHistoryDetail: true,
+            aktivitasId: 'short-walk-1',
+            summary: RunSummary(
+              aktivitasId: 'short-walk-1',
+              jenis: 'berjalan',
+              jarakM: 120,
+              durasiS: 90,
+              pointCount: 0,
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text(S.finishStreakNotExtendedTitle), findsOneWidget);
+
+      await tester.pumpWidget(
+        MaterialApp(theme: PacerTheme.light(), home: const StreaksScreen()),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text(S.streakRequirementsTitle), findsOneWidget);
+    });
   });
 }
 
