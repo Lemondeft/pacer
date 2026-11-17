@@ -8,6 +8,8 @@ import 'package:liquid_glass_easy/liquid_glass_easy.dart';
 export 'package:liquid_glass_easy/liquid_glass_easy.dart'
     show
         LiquidGlassBatch,
+        LiquidGlassLensMotion,
+        LiquidGlassLensMotionSpec,
         LiquidGlassRefreshRate,
         LiquidGlassView,
         LiquidGlassViewController;
@@ -453,6 +455,10 @@ class PacerGlass extends StatelessWidget {
   @visibleForTesting
   static bool? debugShaderFilterSupport;
 
+  /// Effective runtime support for GPU backdrop shader filters (Impeller).
+  static bool get isShaderBackdropSupported =>
+      debugShaderFilterSupport ?? ImageFilter.isShaderFilterSupported;
+
   final Widget child;
   final bool blurEnabled;
   final double radius;
@@ -537,9 +543,7 @@ class PacerGlass extends StatelessWidget {
         clarity > blurThreshold;
 
     final hasBackdropView = PacerGlassTheme.hasBackdropViewOf(context);
-    final shaderSupported =
-        debugShaderFilterSupport ??
-        (ImageFilter.isShaderFilterSupported || hasBackdropView);
+    final shaderSupported = isShaderBackdropSupported || hasBackdropView;
     final useLens =
         sampleBackdrop &&
         firstInGroup &&
@@ -862,4 +866,150 @@ class _GlassLightPainter extends CustomPainter {
       center != oldDelegate.center ||
       strength != oldDelegate.strength ||
       radius != oldDelegate.radius;
+}
+
+/// Interactive refractive droplet lens for the navbar scrubber slider.
+///
+/// Sits above the nav bar's icon strip inside [LiquidGlassBatch.exclude] so it
+/// takes its own backdrop read, bends icons/capsule edges underneath via
+/// [LiquidGlassLens] (`magnification = 1.0`, `blur = 0.0` for edge-only
+/// refraction matching [PacerGlass.navigation]), and blends seamlessly with the
+/// active tab cube's translucent fill and rim glow.
+class PacerScrubberDroplet extends StatelessWidget {
+  const PacerScrubberDroplet({
+    super.key,
+    required this.center,
+    this.coordinateOffset = Offset.zero,
+    required this.size,
+    required this.cornerRadius,
+    required this.tintColor,
+    required this.rimColor,
+    this.borderColor,
+    this.borderWidth,
+    this.cubeShadowColor,
+    this.glowColor,
+    this.glassPresence = 1.0,
+    this.cubePresence = 1.0,
+    this.blur = 0.0,
+    this.refractionIndex = 1.05,
+    this.refractionWidth = 10.5,
+    this.magnification = 1.0,
+    this.dispersion = 1.32,
+  });
+
+  final Offset center;
+  final Offset coordinateOffset;
+  final Size size;
+  final double cornerRadius;
+  final Color tintColor;
+  final Color rimColor;
+  final Color? borderColor;
+  final double? borderWidth;
+  final Color? cubeShadowColor;
+  final Color? glowColor;
+  final double glassPresence;
+  final double cubePresence;
+  final double blur;
+  final double refractionIndex;
+  final double refractionWidth;
+  final double magnification;
+  final double dispersion;
+
+  @override
+  Widget build(BuildContext context) {
+    final presence = glassPresence.clamp(0.0, 1.0);
+    final cubeAlpha = cubePresence.clamp(0.0, 1.0);
+    final glowStrength = (glowColor?.a ?? 0.0).clamp(0.0, 1.0);
+    final w = math.max(1.0, size.width);
+    final h = math.max(1.0, size.height);
+    final r = cornerRadius.clamp(0.0, h / 2);
+    final shadowOpacity = 0.18 * presence;
+    final effectiveBorder = borderColor ?? rimColor;
+
+    return Positioned(
+      left: center.dx + coordinateOffset.dx - w / 2,
+      top: center.dy + coordinateOffset.dy - h / 2,
+      width: w,
+      height: h,
+      child: IgnorePointer(
+        child: DecoratedBox(
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(r),
+            boxShadow: [
+              if (cubeShadowColor != null)
+                BoxShadow(
+                  color: cubeShadowColor!,
+                  blurRadius: 12.0 + 4.0 * presence,
+                  spreadRadius: -2.0 + 1.0 * presence,
+                ),
+            ],
+          ),
+          child: LiquidGlassShadow(
+            blur: 10,
+            opacity: shadowOpacity,
+            offset: const Offset(0, 4),
+            cornerRadius: r,
+            insideGlass: false,
+            child: LiquidGlassBatch.exclude(
+              child: SizedBox(
+                width: w,
+                height: h,
+                child: LiquidGlassLens(
+                  // Fold captured alpha into coverage on Skia so transparent gaps
+                  // inside the icon strip stay crystal clear over Layer 0 glass.
+                  honorBackdropAlpha: true,
+                  style: LiquidGlassStyle(
+                    shape: LiquidGlassShape(
+                      cornerStyle:
+                          LiquidGlassCornerStyle.continuousRoundedRectangle,
+                      clipQuality: LiquidGlassClipQuality.exact,
+                      cornerRadius: r,
+                    ),
+                    specular: LiquidGlassLight.specular(
+                      thickness: 2.2,
+                      sharpness: 0.88,
+                      angle: 39,
+                      spread: 0.56,
+                      intensity: 1.0 * presence,
+                    ),
+                    glow: LiquidGlassLight.glow(
+                      thickness: 7.0,
+                      angle: 90,
+                      spread: 0.46,
+                      intensity: (0.24 + 0.28 * glowStrength) * presence,
+                    ),
+                    // Keep shader body tint ultra-clear; only subtle edge gloss
+                    // and the active-cube handoff fade live inside the child.
+                    color: Colors.transparent,
+                    blur: blur,
+                    saturation: 1.0 + 0.10 * presence,
+                    magnification: magnification,
+                    refractionIndex: 1.0 + (refractionIndex - 1.0) * presence,
+                    refractionWidth: refractionWidth * presence,
+                    dispersion: dispersion * presence,
+                  ),
+                  child: DecoratedBox(
+                    decoration: BoxDecoration(
+                      borderRadius: BorderRadius.circular(r),
+                      color: cubeAlpha > 0
+                          ? tintColor.withValues(
+                              alpha: (tintColor.a * cubeAlpha).clamp(0.0, 1.0),
+                            )
+                          : Colors.transparent,
+                      border: Border.all(
+                        color: effectiveBorder,
+                        width:
+                            borderWidth ??
+                            (0.95 + 0.45 * glowStrength * presence),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
 }

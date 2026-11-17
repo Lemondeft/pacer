@@ -269,7 +269,7 @@ void main() {
       await pumpPill(tester, index: 2);
       expect(find.byIcon(Icons.groups), findsOneWidget);
       expect(find.byIcon(Icons.home_outlined), findsOneWidget);
-      expect(find.byIcon(Icons.directions_run_outlined), findsOneWidget);
+      expect(find.byIcon(Icons.history_outlined), findsOneWidget);
       expect(find.byIcon(Icons.leaderboard_outlined), findsOneWidget);
       expect(find.byIcon(Icons.groups_outlined), findsNothing);
     });
@@ -279,7 +279,7 @@ void main() {
       var started = 0;
       await pumpPill(tester, onTap: taps.add, onStart: () => started++);
       await tester.tap(find.byIcon(Icons.home));
-      await tester.tap(find.byIcon(Icons.directions_run_outlined));
+      await tester.tap(find.byIcon(Icons.history_outlined));
       await tester.tap(find.byIcon(Icons.groups_outlined));
       await tester.tap(find.byIcon(Icons.leaderboard_outlined));
       await tester.tap(find.text('START'));

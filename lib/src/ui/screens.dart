@@ -1970,12 +1970,10 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
   int _index = 0;
   final List<int> _tabHistory = [];
   DateTime? _lastBackAt;
-  String _activeSport = 'lari';
-  String? _activeGoal;
-  List<String>? _activeChallengeIds;
-  ActiveDraftRun? _resumedDraft;
   bool _draftPrompted = false;
   final GlobalKey<HomeScreenState> _homeKey = GlobalKey<HomeScreenState>();
+  final GlobalKey<HistoryScreenState> _historyKey =
+      GlobalKey<HistoryScreenState>();
   final LiquidGlassViewController _glassController =
       LiquidGlassViewController();
   Timer? _glassScrollTimer;
@@ -2022,21 +2020,19 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
   void _scheduleGlassCapture() {
     // When Impeller shader filters are available, LiquidGlassLens reads the
     // live backdrop via BackdropFilter and never needs RepaintBoundary capture.
-    if (ImageFilter.isShaderFilterSupported ||
-        _index == 1 ||
-        _glassCaptureScheduled) {
+    if (ImageFilter.isShaderFilterSupported || _glassCaptureScheduled) {
       return;
     }
     _glassCaptureScheduled = true;
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _glassCaptureScheduled = false;
-      if (!mounted || _index == 1) return;
+      if (!mounted) return;
       _glassController.captureOnce();
     });
   }
 
   void _startGlassRealtime() {
-    if (ImageFilter.isShaderFilterSupported || _index == 1) return;
+    if (ImageFilter.isShaderFilterSupported) return;
     _glassScrollTimer?.cancel();
     if (!_glassRealtime) {
       _glassRealtime = true;
@@ -2059,7 +2055,6 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
   }
 
   bool _handleGlassScroll(ScrollNotification notification) {
-    if (_index == 1) return false;
     if (notification is ScrollStartNotification ||
         notification is ScrollUpdateNotification) {
       _startGlassRealtime();
@@ -2119,13 +2114,7 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
     if (!mounted) return true;
     switch (choice) {
       case 'resume':
-        setState(() {
-          _resumedDraft = draft;
-          _activeSport = draft.jenis;
-          _activeGoal = null;
-          _activeChallengeIds = null;
-          _index = 1;
-        });
+        await _openTracker(sport: draft.jenis, initialDraft: draft);
         break;
       case 'save':
         final rec = RunRecorder();
@@ -2160,50 +2149,41 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
   void _onPillTap(int i) {
     if (i == _index) {
       if (i == 0) {
-        _resumedDraft = null;
         _homeKey.currentState?.reload();
+      } else if (i == 1) {
+        _historyKey.currentState?.reload();
       }
       return;
     }
-    if (i == 1) _stopGlassRealtime();
     setState(() {
-      if (_index != 1 && (_tabHistory.isEmpty || _tabHistory.last != _index)) {
+      if (_tabHistory.isEmpty || _tabHistory.last != _index) {
         _tabHistory.add(_index);
         if (_tabHistory.length > 12) _tabHistory.removeAt(0);
       }
-      if (_index == 1 && i != 1) {
-        _activeChallengeIds = null;
-      }
-      if (i == 0) {
-        _resumedDraft = null;
-        _homeKey.currentState?.reload();
-      }
       _index = i;
     });
-    if (i != 1) _scheduleGlassCapture();
+    if (i == 0) {
+      _homeKey.currentState?.reload();
+    } else if (i == 1) {
+      _historyKey.currentState?.reload();
+    }
+    _scheduleGlassCapture();
   }
 
   void _goBackFromTab() {
     if (_tabHistory.isNotEmpty) {
       final prev = _tabHistory.removeLast();
-      if (prev == 1) _stopGlassRealtime();
-      setState(() {
-        if (_index == 1 && prev != 1) _activeChallengeIds = null;
-        _resumedDraft = null;
-        _index = prev;
-      });
+      setState(() => _index = prev);
       if (prev == 0) {
         _homeKey.currentState?.reload();
+      } else if (prev == 1) {
+        _historyKey.currentState?.reload();
       }
-      if (prev != 1) _scheduleGlassCapture();
+      _scheduleGlassCapture();
       return;
     }
     if (_index != 0) {
-      setState(() {
-        if (_index == 1) _activeChallengeIds = null;
-        _resumedDraft = null;
-        _index = 0;
-      });
+      setState(() => _index = 0);
       _homeKey.currentState?.reload();
       _scheduleGlassCapture();
     }
@@ -2234,68 +2214,67 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
     SystemNavigator.pop();
   }
 
-  void _goHistory() => Navigator.of(context)
-      .push(MaterialPageRoute(builder: (_) => const HistoryScreen()))
-      .then((_) {
-        _homeKey.currentState?.reload();
-        _scheduleGlassCapture();
-      });
+  Future<void> _openTracker({
+    required String sport,
+    String? goal,
+    ActiveDraftRun? initialDraft,
+    List<String>? challengeIds,
+    NavigatorState? navigator,
+    bool replaceCurrent = false,
+  }) async {
+    _stopGlassRealtime();
+    final nav = navigator ?? Navigator.of(context);
+    final route = MaterialPageRoute<void>(
+      builder: (_) => RunTrackerScreen(
+        sportType: sport,
+        goal: goal,
+        initialDraft: initialDraft,
+        initialChallengeIds: challengeIds,
+      ),
+    );
+    if (replaceCurrent) {
+      await nav.pushReplacement(route);
+    } else {
+      await nav.push(route);
+    }
+    if (!mounted) return;
+    _homeKey.currentState?.reload();
+    _historyKey.currentState?.reload();
+    _scheduleGlassCapture();
+  }
 
   void _goSetup({String? initialSport}) => Navigator.of(context)
-      .push(
+      .push<void>(
         MaterialPageRoute(
-          builder: (_) => RunSetupScreen(
+          builder: (setupCtx) => RunSetupScreen(
             initialSport: initialSport,
-            onStartWithChallenges: (sport, goal, challengeIds) {
-              Navigator.of(context).pop();
-              _stopGlassRealtime();
-              setState(() {
-                if (_index != 1 &&
-                    (_tabHistory.isEmpty || _tabHistory.last != _index)) {
-                  _tabHistory.add(_index);
-                  if (_tabHistory.length > 12) _tabHistory.removeAt(0);
-                }
-                _resumedDraft = null;
-                _activeSport = sport;
-                _activeGoal = goal;
-                _activeChallengeIds = challengeIds;
-                _index = 1;
-              });
-            },
-            onStartWithConfig: (sport, goal) {
-              Navigator.of(context).pop();
-              _stopGlassRealtime();
-              setState(() {
-                if (_index != 1 &&
-                    (_tabHistory.isEmpty || _tabHistory.last != _index)) {
-                  _tabHistory.add(_index);
-                  if (_tabHistory.length > 12) _tabHistory.removeAt(0);
-                }
-                _resumedDraft = null;
-                _activeSport = sport;
-                _activeGoal = goal;
-                _activeChallengeIds = null;
-                _index = 1;
-              });
-            },
-            onStart: () {
-              Navigator.of(context).pop();
-              _stopGlassRealtime();
-              setState(() {
-                if (_index != 1 &&
-                    (_tabHistory.isEmpty || _tabHistory.last != _index)) {
-                  _tabHistory.add(_index);
-                  if (_tabHistory.length > 12) _tabHistory.removeAt(0);
-                }
-                _resumedDraft = null;
-                _activeChallengeIds = null;
-                _index = 1;
-              });
-            },
+            onStartWithChallenges: (sport, goal, challengeIds) => _openTracker(
+              sport: sport,
+              goal: goal,
+              challengeIds: challengeIds,
+              navigator: Navigator.of(setupCtx),
+              replaceCurrent: true,
+            ),
+            onStartWithConfig: (sport, goal) => _openTracker(
+              sport: sport,
+              goal: goal,
+              navigator: Navigator.of(setupCtx),
+              replaceCurrent: true,
+            ),
+            onStart: () => _openTracker(
+              sport: initialSport ?? 'lari',
+              navigator: Navigator.of(setupCtx),
+              replaceCurrent: true,
+            ),
           ),
         ),
       )
-      .then((_) => _scheduleGlassCapture());
+      .then((_) {
+        if (!mounted) return;
+        _homeKey.currentState?.reload();
+        _historyKey.currentState?.reload();
+        _scheduleGlassCapture();
+      });
 
   @override
   Widget build(BuildContext context) {
@@ -2309,23 +2288,12 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
       HomeScreen(
         key: _homeKey,
         onSeeTeams: () => _onPillTap(2),
-        onSeeHistory: _goHistory,
+        onSeeHistory: () => _onPillTap(1),
         onSeeLeaderboard: () => _onPillTap(3),
         onStartSport: (sport) => _goSetup(initialSport: sport),
         onContentUpdated: _scheduleGlassCapture,
       ),
-      // Tracker gets the full screen: nav pill hidden (it covered PAUSE),
-      // back button returns to the previous tab instead. Mounted only when active.
-      if (_index == 1)
-        RunTrackerScreen(
-          onBack: _goBackFromTab,
-          sportType: _activeSport,
-          goal: _activeGoal,
-          initialDraft: _resumedDraft,
-          initialChallengeIds: _activeChallengeIds,
-        )
-      else
-        const SizedBox.shrink(),
+      HistoryScreen(key: _historyKey, showBack: false),
       TeamsScreen(onBack: _goBackFromTab),
       LeaderboardScreen(onBack: _goBackFromTab),
     ];
@@ -2373,39 +2341,37 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
       child: Scaffold(
         body: LiquidGlassView(
           controller: _glassController,
-          pixelRatio: _index == 1 ? 0.5 : 0.85,
+          pixelRatio: 0.85,
           realTimeCapture: false,
           refreshRate: LiquidGlassRefreshRate.high,
           useSync: false,
           batch: false,
           backgroundWidget: tabBackdrop,
-          child: _index == 1
-              ? null
-              : Align(
-                  alignment: Alignment.bottomCenter,
-                  child: Padding(
-                    padding: const EdgeInsets.only(bottom: 16),
-                    child: SizedBox(
-                      width: pillW,
-                      height: 80.7 * pillScale,
-                      // Pill is authored at fixed 377x80.7 design size; the
-                      // FittedBox scales it uniformly (aspect ratios match, so
-                      // contain == exact proportional scale).
-                      child: FittedBox(
-                        fit: BoxFit.contain,
-                        child: PacerGlassScope(
-                          hasBackdropView: true,
-                          clarity: 0.85,
-                          child: BottomNavPill(
-                            index: _index,
-                            onTap: _onPillTap,
-                            onStart: () => _goSetup(),
-                          ),
-                        ),
-                      ),
+          child: Align(
+            alignment: Alignment.bottomCenter,
+            child: Padding(
+              padding: const EdgeInsets.only(bottom: 16),
+              child: SizedBox(
+                width: pillW,
+                height: 80.7 * pillScale,
+                // Pill is authored at fixed 377x80.7 design size; the
+                // FittedBox scales it uniformly (aspect ratios match, so
+                // contain == exact proportional scale).
+                child: FittedBox(
+                  fit: BoxFit.contain,
+                  child: PacerGlassScope(
+                    hasBackdropView: true,
+                    clarity: 0.85,
+                    child: BottomNavPill(
+                      index: _index,
+                      onTap: _onPillTap,
+                      onStart: () => _goSetup(),
                     ),
                   ),
                 ),
+              ),
+            ),
+          ),
         ),
       ),
     );
@@ -2565,9 +2531,9 @@ class _PacerNavRail extends StatelessWidget {
             label: Text(S.home),
           ),
           NavigationRailDestination(
-            icon: const Icon(Icons.directions_run_outlined),
-            selectedIcon: Icon(Icons.directions_run, color: selFg),
-            label: Text(S.running),
+            icon: const Icon(Icons.history_outlined),
+            selectedIcon: Icon(Icons.history, color: selFg),
+            label: Text(S.history),
           ),
           NavigationRailDestination(
             icon: const Icon(Icons.groups_outlined),

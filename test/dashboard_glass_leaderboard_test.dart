@@ -150,7 +150,13 @@ void main() {
 
         expect(tester.takeException(), isNull);
         expect(find.text(S.leaderboardSnapshotTitle), findsOneWidget);
-        expect(find.text(S.history), findsOneWidget);
+        expect(
+          find.descendant(
+            of: find.byType(HomeScreen),
+            matching: find.text(S.history),
+          ),
+          findsOneWidget,
+        );
       },
     );
   }

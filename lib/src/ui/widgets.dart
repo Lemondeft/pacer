@@ -1,6 +1,10 @@
+import 'dart:async' show unawaited;
 import 'dart:math' as math;
+import 'dart:ui' as ui;
 
+import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/scheduler.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:pacer/core/responsive/responsive.dart';
@@ -1315,14 +1319,16 @@ class _StreakDay extends StatelessWidget {
   }
 }
 
-/// Floating frosted-glass nav pill + central START circle. Authored at the
-/// fixed 377x80.7 design size; MainShell scales it via fluid(w, 377, 480)
+/// Interactive frosted-glass nav pill + central START circle. Authored at
+/// the fixed 377x80.7 design size; MainShell scales it via fluid(w, 377, 480)
 /// (capped at ~480 and centered on wide screens per the nav rules).
 ///
 /// Glass: strong backdrop blur over the scrolling page, a translucent tint
 /// with a top-light gradient, a hairline highlight border, and a soft drop
-/// shadow outside the clip.
-class BottomNavPill extends StatelessWidget {
+/// shadow outside the clip. Holding or horizontally dragging expands a
+/// dedicated refractive [PacerScrubberDroplet] lens that magnifies underlying
+/// icons and morphs smoothly into a circle over the `START` button.
+class BottomNavPill extends StatefulWidget {
   final int index;
   final ValueChanged<int> onTap;
   final VoidCallback onStart;
@@ -1336,94 +1342,544 @@ class BottomNavPill extends StatelessWidget {
   static const blurSigma = 18.0;
 
   @override
+  State<BottomNavPill> createState() => _BottomNavPillState();
+}
+
+class _BottomNavPillState extends State<BottomNavPill>
+    with TickerProviderStateMixin {
+  static const double _barWidth = 377.0;
+  static const double _barHeight = 80.7;
+  static const double _padH = 10.0;
+  static const double _padV = 8.0;
+  static const double _slotW = (_barWidth - 2 * _padH) / 5.0; // 71.4
+  static const double _centerY = _barHeight / 2.0; // 40.35
+
+  static const List<int?> _slotToTab = [0, 1, null, 2, 3];
+  static double _tabToSlot(int idx) =>
+      idx < 2 ? idx.toDouble() : (idx + 1).toDouble();
+
+  static Future<ui.FragmentProgram>? _selectionMaskProgram;
+  static ui.FragmentProgram? _loadedSelectionMaskProgram;
+
+  late double _slot = _tabToSlot(widget.index);
+  late double _dragTargetSlot = _slot;
+  double _slotVel = 0;
+  late double _targetSlot = _slot;
+
+  double _lift = 0;
+  double _liftVel = 0;
+  double _targetLift = 0;
+
+  bool _scrubbing = false;
+  String? _scrubOwner;
+  int? _lastDetentSlot;
+
+  ui.FragmentProgram? _maskProgram = _loadedSelectionMaskProgram;
+  ui.FragmentShader? _maskShader;
+
+  Ticker? _ticker;
+  Duration? _lastTick;
+
+  bool get _scrubberGlassActive =>
+      _scrubbing || _lift > 0.002 || (_slot - _targetSlot).abs() > 0.002;
+
+  @override
+  void initState() {
+    super.initState();
+    _maskShader = _maskProgram?.fragmentShader();
+    if (_maskProgram == null) {
+      unawaited(_loadMaskProgram());
+    }
+  }
+
+  Future<void> _loadMaskProgram() async {
+    try {
+      final program = _loadedSelectionMaskProgram ??
+          await (_selectionMaskProgram ??= ui.FragmentProgram.fromAsset(
+            'assets/shaders/pacer_selection_mask.frag',
+          ));
+      _loadedSelectionMaskProgram = program;
+      if (!mounted) return;
+      final shader = program.fragmentShader();
+      setState(() {
+        _maskProgram = program;
+        _maskShader?.dispose();
+        _maskShader = shader;
+      });
+    } catch (_) {
+      // Headless widget tests without shader bundle keep gradient fallback.
+    }
+  }
+
+  @override
+  void didUpdateWidget(covariant BottomNavPill oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.index != widget.index && !_scrubbing) {
+      final newTarget = _tabToSlot(widget.index);
+      if ((newTarget - _targetSlot).abs() > 0.01) {
+        _targetSlot = newTarget;
+        _dragTargetSlot = newTarget;
+        if (MediaQuery.disableAnimationsOf(context)) {
+          _slot = newTarget;
+          _slotVel = 0;
+        } else {
+          _ensureTicking();
+        }
+      }
+    }
+  }
+
+  @override
+  void dispose() {
+    _maskShader?.dispose();
+    _ticker?.dispose();
+    super.dispose();
+  }
+
+  static (double, double) _stepSpring({
+    required double x,
+    required double vel,
+    required double target,
+    required double dt,
+    required double stiffness,
+    required double damping,
+  }) {
+    var rem = dt;
+    var px = x;
+    var pv = vel;
+    while (rem > 0) {
+      final step = rem > 1 / 240.0 ? 1 / 240.0 : rem;
+      final accel = -stiffness * (px - target) - damping * pv;
+      pv += accel * step;
+      px += pv * step;
+      rem -= step;
+    }
+    return (px, pv);
+  }
+
+  void _ensureTicking() {
+    final t = _ticker ??= createTicker(_onTick);
+    if (!t.isActive) {
+      _lastTick = null;
+      t.start();
+    }
+  }
+
+  double _centerXForSlot(double slot) => _padH + (slot + 0.5) * _slotW;
+
+  void _onTick(Duration elapsed) {
+    final prev = _lastTick ?? elapsed;
+    final dt = ((elapsed - prev).inMicroseconds / 1e6).clamp(0.0, 0.05);
+    _lastTick = elapsed;
+    if (dt <= 0) return;
+
+    var busy = false;
+
+    if (_scrubbing) {
+      // Exponentially chase raw pointer slot so discrete desktop mouse/touchpad
+      // quantization never feeds sawtooth acceleration spikes into motion tilt.
+      const followTau = 0.038;
+      final prevSlot = _slot;
+      final alpha = 1.0 - math.exp(-dt / followTau);
+      _slot += (_dragTargetSlot - _slot) * alpha;
+      _slotVel = (_slot - prevSlot) / dt;
+      if ((_dragTargetSlot - _slot).abs() < 0.001) {
+        _slot = _dragTargetSlot;
+        _slotVel = 0;
+      } else {
+        busy = true;
+      }
+    } else {
+      final (ns, nsv) = _stepSpring(
+        x: _slot,
+        vel: _slotVel,
+        target: _targetSlot,
+        dt: dt,
+        stiffness: 290,
+        damping: 27,
+      );
+      _slot = ns;
+      _slotVel = nsv;
+      if ((_slot - _targetSlot).abs() < 0.002 && _slotVel.abs() < 0.01) {
+        _slot = _targetSlot;
+        _slotVel = 0;
+      } else {
+        busy = true;
+      }
+    }
+
+    final expanding = _targetLift > _lift;
+    final (nl, nlv) = _stepSpring(
+      x: _lift,
+      vel: _liftVel,
+      target: _targetLift,
+      dt: dt,
+      stiffness: expanding ? 360 : 220,
+      damping: expanding ? 30 : 25,
+    );
+    _lift = nl.clamp(0.0, 1.35);
+    _liftVel = nlv;
+    if ((_lift - _targetLift).abs() < 0.002 && _liftVel.abs() < 0.01) {
+      _lift = _targetLift;
+      _liftVel = 0;
+    } else {
+      busy = true;
+    }
+
+    if (!busy && !_scrubbing) {
+      _ticker?.stop();
+    }
+    if (mounted) setState(() {});
+  }
+
+  double _rawSlotFromDx(double dx) {
+    final raw = ((dx - _padH) / _slotW) - 0.5;
+    if (raw < 0) return math.max(-0.14, raw * 0.35);
+    if (raw > 4) return math.min(4.14, 4 + (raw - 4) * 0.35);
+    return raw;
+  }
+
+  int _snappedSlot(double slot) => slot.round().clamp(0, 4);
+
+  void _triggerSlotDetent(int slot) {
+    if (_lastDetentSlot == slot) return;
+    _lastDetentSlot = slot;
+    if (slot == 2) {
+      HapticFeedback.mediumImpact();
+    } else {
+      HapticFeedback.selectionClick();
+    }
+  }
+
+  void _beginScrub(String owner, double localDx) {
+    if (_scrubbing && _scrubOwner != owner) return;
+    final reduceMotion = MediaQuery.disableAnimationsOf(context);
+    final slot = _rawSlotFromDx(localDx);
+    _scrubbing = true;
+    _scrubOwner = owner;
+    _dragTargetSlot = slot;
+    _targetSlot = slot;
+    _targetLift = 1.0;
+    _lastDetentSlot = _snappedSlot(slot);
+    HapticFeedback.selectionClick();
+    if (reduceMotion) {
+      _slot = slot;
+      _slotVel = 0;
+      _lift = 1.0;
+      _liftVel = 0;
+      setState(() {});
+    } else {
+      _ensureTicking();
+      setState(() {});
+    }
+  }
+
+  void _updateScrub(String owner, double localDx) {
+    if (!_scrubbing || _scrubOwner != owner) return;
+    final slot = _rawSlotFromDx(localDx);
+    _dragTargetSlot = slot;
+    _targetSlot = slot;
+    _triggerSlotDetent(_snappedSlot(slot));
+    if (MediaQuery.disableAnimationsOf(context)) {
+      _slot = slot;
+      _slotVel = 0;
+      if (mounted) setState(() {});
+    } else {
+      _ensureTicking();
+    }
+  }
+
+  void _endScrub(String owner, {required bool commit}) {
+    if (!_scrubbing || _scrubOwner != owner) return;
+    final landedSlot = _snappedSlot(_dragTargetSlot);
+    final reduceMotion = MediaQuery.disableAnimationsOf(context);
+    _scrubbing = false;
+    _scrubOwner = null;
+    _lastDetentSlot = null;
+    _targetLift = 0.0;
+
+    if (commit) {
+      final tabIdx = _slotToTab[landedSlot];
+      if (tabIdx != null) {
+        _targetSlot = landedSlot.toDouble();
+        _dragTargetSlot = _targetSlot;
+        widget.onTap(tabIdx);
+      } else {
+        // Released over center START orb: launch Start & return resting pill
+        // smoothly back to the currently selected tab.
+        _targetSlot = _tabToSlot(widget.index);
+        _dragTargetSlot = _targetSlot;
+        HapticFeedback.mediumImpact();
+        widget.onStart();
+      }
+    } else {
+      _targetSlot = _tabToSlot(widget.index);
+      _dragTargetSlot = _targetSlot;
+    }
+
+    if (reduceMotion) {
+      _slot = _targetSlot;
+      _slotVel = 0;
+      _lift = 0;
+      _liftVel = 0;
+      setState(() {});
+    } else {
+      _ensureTicking();
+      setState(() {});
+    }
+  }
+
+  void _onTapUp(TapUpDetails details) {
+    if (_scrubbing) return;
+    final slot = _snappedSlot(_rawSlotFromDx(details.localPosition.dx));
+    final tabIdx = _slotToTab[slot];
+    if (tabIdx == null) {
+      HapticFeedback.mediumImpact();
+      widget.onStart();
+      return;
+    }
+    HapticFeedback.selectionClick();
+    widget.onTap(tabIdx);
+    final newSlot = _tabToSlot(tabIdx);
+    if (!MediaQuery.disableAnimationsOf(context) &&
+        (newSlot - _slot).abs() > 0.01) {
+      _targetSlot = newSlot;
+      _dragTargetSlot = newSlot;
+      _ensureTicking();
+    } else {
+      setState(() {
+        _slot = newSlot;
+        _targetSlot = newSlot;
+        _dragTargetSlot = newSlot;
+      });
+    }
+  }
+
+  /// Continuous pill -> circle morph progress near the center START orb (slot 2).
+  double get _circleMorph {
+    final dist = (_slot - 2.0).abs();
+    final t = (1.0 - dist / 0.52).clamp(0.0, 1.0);
+    return t * t * (3.0 - 2.0 * t);
+  }
+
+  @override
   Widget build(BuildContext context) {
     final scheme = PacerScheme.of(context);
     final dark = Theme.of(context).brightness == Brightness.dark;
     // Per-tab glyphs matching the nav rail: outlined idle, filled selected.
     final tabs = [
       (Icons.home_outlined, Icons.home, S.home),
-      (Icons.directions_run_outlined, Icons.directions_run, S.running),
+      (Icons.history_outlined, Icons.history, S.history),
       (Icons.groups_outlined, Icons.groups, S.teams),
       (Icons.leaderboard_outlined, Icons.leaderboard, S.leaderboard),
     ];
     final tint = dark ? scheme.card : scheme.navBar;
     final pillAccent = dark ? scheme.accent : scheme.brandAccent;
+    final selectedFg = dark ? scheme.accent : const Color(0xFF102A43);
+    final circleMorph = _circleMorph;
+    final liftClamped = _lift.clamp(0.0, 1.25);
 
-    // Slot index mapping across 5 slots: [0: Home, 1: Run, 2: START, 3: Teams, 4: Rank]
-    final slotIndex = index < 2 ? index : index + 1;
-    final alignX = -1.0 + (slotIndex * 0.5);
+    Widget tab(
+      int tabIdx, {
+      bool baseOnly = false,
+      bool includeSemantics = true,
+    }) {
+      final selected = widget.index == tabIdx;
+      final highlighted = !baseOnly && selected;
+      final Color tabColor = highlighted ? selectedFg : scheme.navIcon;
+      final IconData iconGlyph = selected ? tabs[tabIdx].$2 : tabs[tabIdx].$1;
 
-    Widget tab(int i) {
-      final selected = index == i;
-      final selectedFg = dark ? scheme.accent : const Color(0xFF102A43);
-      return PacerGlassPress(
-        radius: 24,
-        child: Semantics(
-          selected: selected,
-          button: true,
-          label: tabs[i].$3,
-          // Tap lives here (not on the excluded InkResponse) so screen
-          // readers can still activate the tab.
-          onTap: () {
-            HapticFeedback.selectionClick();
-            onTap(i);
-          },
-          child: ExcludeSemantics(
-            child: Tooltip(
-              message: tabs[i].$3,
-              child: InkResponse(
-                onTap: () {
-                  HapticFeedback.selectionClick();
-                  onTap(i);
-                },
-                radius: 28,
-                child: SizedBox(
-                  height: 58,
-                  child: Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 2),
-                    child: Column(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Icon(
-                          selected ? tabs[i].$2 : tabs[i].$1,
-                          size: 23,
-                          color: selected ? selectedFg : scheme.navIcon,
-                        ),
-                        const SizedBox(height: 3),
-                        FittedBox(
-                          fit: BoxFit.scaleDown,
-                          child: Text(
-                            tabs[i].$3,
-                            maxLines: 1,
-                            softWrap: false,
-                            style: TextStyle(
-                              fontSize: 10,
-                              fontWeight:
-                                  selected ? FontWeight.w700 : FontWeight.w500,
-                              color: selected ? selectedFg : scheme.navIcon,
-                              letterSpacing: 0.1,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
+      final Widget visualTab = SizedBox(
+        height: 58,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 2),
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(
+                iconGlyph,
+                size: 23,
+                color: tabColor,
+              ),
+              const SizedBox(height: 3),
+              FittedBox(
+                fit: BoxFit.scaleDown,
+                child: Text(
+                  tabs[tabIdx].$3,
+                  maxLines: 1,
+                  softWrap: false,
+                  style: TextStyle(
+                    fontSize: 10,
+                    fontWeight: FontWeight.w600,
+                    color: tabColor,
+                    letterSpacing: 0.1,
                   ),
                 ),
               ),
-            ),
+            ],
           ),
         ),
       );
+
+      if (!includeSemantics) return visualTab;
+
+      return Semantics(
+        selected: selected,
+        button: true,
+        label: tabs[tabIdx].$3,
+        onTap: () {
+          HapticFeedback.selectionClick();
+          widget.onTap(tabIdx);
+        },
+        child: ExcludeSemantics(child: visualTab),
+      );
     }
 
-    return SizedBox(
-      width: 377,
-      height: 80.7,
+    final startBoost = circleMorph * liftClamped.clamp(0.0, 1.0);
+    final startButton = Semantics(
+      button: true,
+      label: 'START',
+      onTap: () {
+        HapticFeedback.mediumImpact();
+        widget.onStart();
+      },
+      excludeSemantics: true,
+      child: Container(
+        width: 64,
+        height: 64,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          gradient: const LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [
+              Color(0xFF5CE7FF),
+              PacerColors.primary,
+              Color(0xFF00A6CE),
+            ],
+          ),
+          border: Border.all(
+            color: Colors.white.withValues(alpha: 0.45 + 0.35 * startBoost),
+            width: 1.5,
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: PacerColors.primary.withValues(
+                alpha: 0.50 + 0.25 * startBoost,
+              ),
+              blurRadius: 18 + 8 * startBoost,
+              offset: const Offset(0, 4),
+            ),
+            const BoxShadow(
+              color: Color(0x33000000),
+              blurRadius: 8,
+              offset: Offset(0, 2),
+            ),
+          ],
+        ),
+        alignment: Alignment.center,
+        padding: const EdgeInsets.all(8),
+        child: FittedBox(
+          fit: BoxFit.scaleDown,
+          child: Text(
+            'START',
+            style: PacerText.fugazBrand.copyWith(
+              fontSize: 18,
+              letterSpacing: 0.8,
+              color: const Color(0xFF0B132B),
+            ),
+          ),
+        ),
+      ),
+    );
+
+    Widget buildIconRow({
+      bool baseOnly = false,
+      bool includeStart = true,
+      bool includeSemantics = true,
+    }) =>
+        SizedBox(
+          width: _barWidth,
+          height: _barHeight,
+          child: Padding(
+            padding: const EdgeInsets.symmetric(
+              horizontal: _padH,
+              vertical: _padV,
+            ),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.center,
+              children: [
+                Expanded(
+                  child: Center(
+                    child: tab(
+                      0,
+                      baseOnly: baseOnly,
+                      includeSemantics: includeSemantics,
+                    ),
+                  ),
+                ),
+                Expanded(
+                  child: Center(
+                    child: tab(
+                      1,
+                      baseOnly: baseOnly,
+                      includeSemantics: includeSemantics,
+                    ),
+                  ),
+                ),
+                Expanded(
+                  child: Center(
+                    child: includeStart
+                        ? startButton
+                        : const SizedBox(width: 64, height: 64),
+                  ),
+                ),
+                Expanded(
+                  child: Center(
+                    child: tab(
+                      2,
+                      baseOnly: baseOnly,
+                      includeSemantics: includeSemantics,
+                    ),
+                  ),
+                ),
+                Expanded(
+                  child: Center(
+                    child: tab(
+                      3,
+                      baseOnly: baseOnly,
+                      includeSemantics: includeSemantics,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+
+    const restCubeW = _slotW - 4.0; // 67.4
+    const restCubeH = _barHeight - 2 * _padV - 4.0; // 60.7
+    const restCubeR = 22.0;
+    const overflowPadX = 28.0;
+    const overflowPadY = 20.0;
+
+    final restCubeFill = pillAccent.withValues(alpha: dark ? 0.18 : 0.54);
+    final restCubeBorder = dark
+        ? pillAccent.withValues(alpha: 0.42)
+        : const Color(0xFF82B800).withValues(alpha: 0.65);
+    final restCubeShadow = pillAccent.withValues(alpha: dark ? 0.20 : 0.26);
+
+    // Layer 0 stays mounted in MainShell directly (never reparented into an
+    // inner LiquidGlassView.backgroundWidget) so Skia/Impeller refraction over
+    // the scrolling page stays sharp with zero offscreen crop artifacts.
+    final Widget barCapsule = SizedBox(
+      width: _barWidth,
+      height: _barHeight,
       child: PacerGlass.navigation(
         radius: 36,
         tintColor: tint,
         tintOpacity: PacerGlassTheme.navigationOpacity(context),
-        blurSigmaOverride: blurSigma,
+        blurSigmaOverride: BottomNavPill.blurSigma,
         lensBlurSigma: 2.8,
         refractionWidth: 12.0,
         refractionIndexOverride: 1.18,
@@ -1431,144 +1887,318 @@ class BottomNavPill extends StatelessWidget {
         dispersionOverride: 1.2,
         saturation: 1.08,
         continuousCorners: true,
-        child: SizedBox(
-          width: 377,
-          height: 80.7,
-          child: Padding(
-            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
-            child: Stack(
-              alignment: Alignment.center,
-              children: [
-                // Sliding illuminated selection pill (Mornye specification)
-                // Shares the exact same 5-slot coordinate system as the Expanded Row items.
-                Positioned.fill(
-                  child: IgnorePointer(
-                    child: AnimatedAlign(
-                      duration: const Duration(milliseconds: 250),
-                      curve: Curves.easeOutCubic,
-                      alignment: Alignment(alignX, 0),
-                      child: FractionallySizedBox(
-                        widthFactor: 1 / 5,
-                        heightFactor: 1.0,
-                        child: Padding(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 2,
-                            vertical: 2,
-                          ),
-                          child: DecoratedBox(
-                            decoration: BoxDecoration(
-                              color: pillAccent.withValues(
-                                alpha: dark ? 0.18 : 0.58,
-                              ),
-                              borderRadius: BorderRadius.circular(22),
-                              border: Border.all(
-                                color: dark
-                                    ? pillAccent.withValues(alpha: 0.40)
-                                    : const Color(0xFF82B800).withValues(
-                                        alpha: 0.65,
-                                      ),
-                                width: dark ? 0.75 : 1.0,
-                              ),
-                              boxShadow: [
-                                BoxShadow(
-                                  color: pillAccent.withValues(
-                                    alpha: dark ? 0.20 : 0.26,
-                                  ),
-                                  blurRadius: 12,
-                                  spreadRadius: -2,
-                                ),
-                              ],
-                            ),
-                          ),
-                        ),
-                      ),
-                    ),
+        child: const SizedBox.expand(),
+      ),
+    );
+
+    final Widget restLayer = SizedBox(
+      width: _barWidth,
+      height: _barHeight,
+      child: Stack(
+        alignment: Alignment.center,
+        children: [
+          Positioned(
+            left: _padH + _slot * _slotW + 2,
+            top: _padV + 2,
+            width: restCubeW,
+            height: restCubeH,
+            child: IgnorePointer(
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  color: restCubeFill,
+                  borderRadius: BorderRadius.circular(restCubeR),
+                  border: Border.all(
+                    color: restCubeBorder,
+                    width: dark ? 0.75 : 1.0,
                   ),
-                ),
-                // Navigation items + prominent center START action in 5 equal slots
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.center,
-                  children: [
-                    Expanded(child: Center(child: tab(0))),
-                    Expanded(child: Center(child: tab(1))),
-                    Expanded(
-                      child: Center(
-                        child: PacerGlassPress(
-                          radius: 33,
-                          child: Semantics(
-                            button: true,
-                            label: 'START',
-                            onTap: () {
-                              HapticFeedback.mediumImpact();
-                              onStart();
-                            },
-                            excludeSemantics: true,
-                            child: GestureDetector(
-                              onTap: () {
-                                HapticFeedback.mediumImpact();
-                                onStart();
-                              },
-                              child: Container(
-                                width: 64,
-                                height: 64,
-                                decoration: BoxDecoration(
-                                  shape: BoxShape.circle,
-                                  gradient: const LinearGradient(
-                                    begin: Alignment.topLeft,
-                                    end: Alignment.bottomRight,
-                                    colors: [
-                                      Color(0xFF5CE7FF),
-                                      PacerColors.primary,
-                                      Color(0xFF00A6CE),
-                                    ],
-                                  ),
-                                  border: Border.all(
-                                    color: Colors.white.withValues(alpha: 0.45),
-                                    width: 1.5,
-                                  ),
-                                  boxShadow: [
-                                    BoxShadow(
-                                      color: PacerColors.primary.withValues(
-                                        alpha: 0.50,
-                                      ),
-                                      blurRadius: 18,
-                                      offset: const Offset(0, 4),
-                                    ),
-                                    const BoxShadow(
-                                      color: Color(0x33000000),
-                                      blurRadius: 8,
-                                      offset: Offset(0, 2),
-                                    ),
-                                  ],
-                                ),
-                                alignment: Alignment.center,
-                                padding: const EdgeInsets.all(8),
-                                child: FittedBox(
-                                  fit: BoxFit.scaleDown,
-                                  child: Text(
-                                    'START',
-                                    style: PacerText.fugazBrand.copyWith(
-                                      fontSize: 18,
-                                      letterSpacing: 0.8,
-                                      color: const Color(0xFF0B132B),
-                                    ),
-                                  ),
-                                ),
-                              ),
-                            ),
-                          ),
-                        ),
-                      ),
+                  boxShadow: [
+                    BoxShadow(
+                      color: restCubeShadow,
+                      blurRadius: 12,
+                      spreadRadius: -2,
                     ),
-                    Expanded(child: Center(child: tab(2))),
-                    Expanded(child: Center(child: tab(3))),
                   ],
                 ),
-              ],
+              ),
+            ),
+          ),
+          buildIconRow(),
+        ],
+      ),
+    );
+
+    Widget visual;
+    if (!_scrubberGlassActive) {
+      visual = Stack(
+        clipBehavior: Clip.none,
+        children: [barCapsule, restLayer],
+      );
+    } else {
+      final liftFrac = _lift.clamp(0.0, 1.25);
+      // Expand into a crystal-clear water-drop capsule (108x94, r47) taller
+      // than the 80.7px navbar so top/bottom overhang is clear, morphing into
+      // a true 94x94 circle (r47) over the START orb.
+      final activeW = ui.lerpDouble(108.0, 94.0, circleMorph)!;
+      final activeH = ui.lerpDouble(94.0, 94.0, circleMorph)!;
+      final activeR = ui.lerpDouble(47.0, 47.0, circleMorph)!;
+      final dropW = ui.lerpDouble(restCubeW, activeW, liftFrac)!.clamp(restCubeW, 124.0);
+      final dropH = ui.lerpDouble(restCubeH, activeH, liftFrac)!.clamp(restCubeH, 108.0);
+      final cornerR = ui.lerpDouble(
+        restCubeR,
+        activeR,
+        liftFrac,
+      )!.clamp(8.0, dropH / 2);
+
+      final liftUnit = liftFrac.clamp(0.0, 1.0);
+      final travelFrac = ((_slot - _targetSlot).abs() / 0.25).clamp(0.0, 1.0);
+      final dropPresence = math.max(liftUnit, travelFrac * 0.55);
+      final glassPresence = math.pow(dropPresence, 1.25).toDouble();
+
+      // Smoothly shed the rest active fill into near-clear crystal glass when
+      // lifted, then blend back to exact restCubeFill/Border/Width on release
+      // so handover to restLayer has zero alpha/color flash.
+      final colorBlendT = Curves.easeOut.transform(liftUnit);
+      final liftedCrystalFill = Colors.white.withValues(alpha: dark ? 0.04 : 0.14);
+      final startCircleFill = PacerColors.primary.withValues(
+        alpha: dark ? 0.06 : 0.12,
+      );
+      final cubeOrCircleFill = Color.lerp(
+        Color.lerp(restCubeFill, liftedCrystalFill, colorBlendT)!,
+        startCircleFill,
+        circleMorph,
+      )!;
+
+      final restBorderWidth = dark ? 0.75 : 1.0;
+      final liftedGlassRim = Colors.white.withValues(alpha: dark ? 0.36 : 0.72);
+      final dropBorder = Color.lerp(
+        Color.lerp(restCubeBorder, liftedGlassRim, colorBlendT)!,
+        PacerColors.primary.withValues(alpha: 0.90),
+        circleMorph,
+      )!;
+      final dropBorderWidth = ui.lerpDouble(
+        ui.lerpDouble(restBorderWidth, 0.95, colorBlendT)!,
+        1.4,
+        circleMorph,
+      )!;
+      final dropRim = Color.lerp(
+        liftedGlassRim,
+        PacerColors.primary.withValues(alpha: 0.92),
+        circleMorph,
+      )!;
+      final liftedContactShadow = Colors.black.withValues(
+        alpha: dark ? 0.22 : 0.12,
+      );
+      final dropShadow = Color.lerp(
+        Color.lerp(restCubeShadow, liftedContactShadow, colorBlendT)!,
+        PacerColors.primary.withValues(alpha: 0.42 * liftUnit),
+        circleMorph,
+      )!;
+      final glowAlpha = (circleMorph * liftUnit).clamp(0.0, 1.0);
+      final dropGlow = glowAlpha > 0.005
+          ? PacerColors.primary.withValues(alpha: glowAlpha)
+          : null;
+
+      final dropCenter = Offset(_centerXForSlot(_slot), _centerY);
+      final dropRectInBar = Rect.fromCenter(
+        center: dropCenter,
+        width: dropW,
+        height: dropH,
+      );
+
+      final droplet = PacerScrubberDroplet(
+        key: const ValueKey('pacer_nav_scrubber_droplet'),
+        center: dropCenter,
+        coordinateOffset: const Offset(overflowPadX, overflowPadY),
+        size: Size(dropW, dropH),
+        cornerRadius: cornerR,
+        tintColor: cubeOrCircleFill,
+        rimColor: dropRim,
+        borderColor: dropBorder,
+        borderWidth: dropBorderWidth,
+        cubeShadowColor: dropShadow,
+        glowColor: dropGlow,
+        glassPresence: glassPresence,
+        cubePresence: 1.0 - 0.15 * circleMorph * liftUnit,
+        blur: 0.0,
+        refractionIndex: 1.022,
+        refractionWidth: 14.0,
+        magnification: 1.0,
+        dispersion: 1.32,
+      );
+
+      final bool shaderNative = PacerGlass.isShaderBackdropSupported;
+
+      // Hairline rim proxy inside the Skia background strip lets the droplet's
+      // edge refraction bend the navbar border cleanly while keeping fill clear.
+      final Widget capsuleRimProxy = IgnorePointer(
+        child: DecoratedBox(
+          decoration: BoxDecoration(
+            borderRadius: BorderRadius.circular(36),
+            border: Border.all(
+              color: Colors.white.withValues(alpha: dark ? 0.16 : 0.38),
+              width: 1.0,
             ),
           ),
         ),
+      );
+
+      // Single fixed-geometry tab row recolored under the lens by an SDF
+      // ShaderMask (matching MornyeSelectionPill): zero size/weight/ClipPath
+      // jumps while sliding across icons. START sits outside the mask.
+      final Widget iconStrip = Stack(
+        fit: StackFit.expand,
+        children: [
+          _NavSelectionMask(
+            maskRect: dropRectInBar,
+            cornerRadius: cornerR,
+            color: selectedFg,
+            shader: _maskShader,
+            child: buildIconRow(
+              baseOnly: true,
+              includeStart: false,
+              includeSemantics: true,
+            ),
+          ),
+          Center(child: startButton),
+        ],
+      );
+
+      final Widget foregroundInCanvas = SizedBox(
+        width: _barWidth + 2 * overflowPadX,
+        height: _barHeight + 2 * overflowPadY,
+        child: Stack(
+          clipBehavior: Clip.none,
+          children: [
+            Positioned(
+              left: overflowPadX,
+              top: overflowPadY,
+              width: _barWidth,
+              height: _barHeight,
+              child: shaderNative
+                  ? iconStrip
+                  : Stack(children: [capsuleRimProxy, iconStrip]),
+            ),
+          ],
+        ),
+      );
+
+      final Widget scrubberOverlay = Positioned(
+        left: -overflowPadX,
+        top: -overflowPadY,
+        width: _barWidth + 2 * overflowPadX,
+        height: _barHeight + 2 * overflowPadY,
+        child: shaderNative
+            ? Stack(
+                clipBehavior: Clip.none,
+                children: [foregroundInCanvas, droplet],
+              )
+            : LiquidGlassView(
+                pixelRatio: MediaQuery.devicePixelRatioOf(
+                  context,
+                ).clamp(1.0, 2.0),
+                realTimeCapture: true,
+                refreshRate: LiquidGlassRefreshRate.deviceRefreshRate,
+                useSync: true,
+                batch: false,
+                backgroundWidget: foregroundInCanvas,
+                child: Stack(
+                  fit: StackFit.expand,
+                  clipBehavior: Clip.none,
+                  children: [droplet],
+                ),
+              ),
+      );
+
+      visual = Stack(
+        clipBehavior: Clip.none,
+        children: [barCapsule, scrubberOverlay],
+      );
+    }
+
+    return SizedBox(
+      width: _barWidth,
+      height: _barHeight,
+      child: RawGestureDetector(
+        behavior: HitTestBehavior.opaque,
+        gestures: {
+          TapGestureRecognizer:
+              GestureRecognizerFactoryWithHandlers<TapGestureRecognizer>(
+            () => TapGestureRecognizer(),
+            (instance) => instance.onTapUp = _onTapUp,
+          ),
+          LongPressGestureRecognizer:
+              GestureRecognizerFactoryWithHandlers<LongPressGestureRecognizer>(
+            () => LongPressGestureRecognizer(
+              duration: const Duration(milliseconds: 140),
+            ),
+            (instance) => instance
+              ..onLongPressStart = ((d) => _beginScrub('long', d.localPosition.dx))
+              ..onLongPressMoveUpdate = ((d) => _updateScrub('long', d.localPosition.dx))
+              ..onLongPressEnd = ((_) => _endScrub('long', commit: true))
+              ..onLongPressCancel = (() => _endScrub('long', commit: false)),
+          ),
+          HorizontalDragGestureRecognizer:
+              GestureRecognizerFactoryWithHandlers<
+                  HorizontalDragGestureRecognizer>(
+            () => HorizontalDragGestureRecognizer(),
+            (instance) => instance
+              ..onStart = ((d) => _beginScrub('drag', d.localPosition.dx))
+              ..onUpdate = ((d) => _updateScrub('drag', d.localPosition.dx))
+              ..onEnd = ((_) => _endScrub('drag', commit: true))
+              ..onCancel = (() => _endScrub('drag', commit: false)),
+          ),
+        },
+        child: visual,
       ),
+    );
+  }
+}
+
+class _NavSelectionMask extends StatelessWidget {
+  const _NavSelectionMask({
+    required this.maskRect,
+    required this.cornerRadius,
+    required this.color,
+    required this.shader,
+    required this.child,
+  });
+
+  final Rect maskRect;
+  final double cornerRadius;
+  final Color color;
+  final ui.FragmentShader? shader;
+  final Widget child;
+
+  @override
+  Widget build(BuildContext context) {
+    return ShaderMask(
+      blendMode: BlendMode.srcATop,
+      shaderCallback: (_) {
+        final s = shader;
+        if (s != null) {
+          s
+            ..setFloat(0, maskRect.left)
+            ..setFloat(1, maskRect.top)
+            ..setFloat(2, maskRect.width)
+            ..setFloat(3, maskRect.height)
+            ..setFloat(4, 1.0)
+            ..setFloat(5, 1.0)
+            ..setFloat(6, cornerRadius.clamp(0.0, maskRect.height / 2))
+            ..setFloat(7, color.r)
+            ..setFloat(8, color.g)
+            ..setFloat(9, color.b)
+            ..setFloat(10, color.a);
+          return s;
+        }
+        return ui.Gradient.linear(
+          Offset(maskRect.left, 0),
+          Offset(maskRect.right, 0),
+          [color.withValues(alpha: 0), color, color, color.withValues(alpha: 0)],
+          const [0.0, 0.015, 0.985, 1.0],
+          ui.TileMode.decal,
+        );
+      },
+      child: child,
     );
   }
 }

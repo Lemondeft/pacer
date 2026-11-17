@@ -3808,7 +3808,9 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
       body: SafeArea(
         child: ResponsiveScroll(
           onRefresh: () async {
-            setState(() => _future = _load(forceRefresh: true));
+            setState(() {
+              _future = _load(forceRefresh: true);
+            });
             await _future;
           },
           padding: const EdgeInsets.fromLTRB(24, 16, 24, 120),
@@ -4193,16 +4195,25 @@ class _LeaderboardScreenState extends State<LeaderboardScreen> {
 /// Figma HISTORY: "46,00" Fugaz 88 + desc row + Monday cards.
 /// Live activity list when signed in; Figma mock cards in demo mode.
 class HistoryScreen extends StatefulWidget {
-  const HistoryScreen({super.key});
+  final VoidCallback? onBack;
+  final bool showBack;
+  const HistoryScreen({super.key, this.onBack, this.showBack = true});
 
   @override
-  State<HistoryScreen> createState() => _HistoryScreenState();
+  State<HistoryScreen> createState() => HistoryScreenState();
 }
 
-class _HistoryScreenState extends State<HistoryScreen> {
+class HistoryScreenState extends State<HistoryScreen> {
   Future<List<LocalActivity>>? _future;
   bool _isDemo = false;
   bool _wasSyncing = false;
+
+  void reload() {
+    if (!mounted) return;
+    setState(() {
+      _future = _load();
+    });
+  }
 
   @override
   void initState() {
@@ -4220,7 +4231,9 @@ class _HistoryScreenState extends State<HistoryScreen> {
   void _onSyncChanged() {
     final syncing = SyncEngine.instance.status.isSyncing;
     if (_wasSyncing && !syncing && mounted) {
-      setState(() => _future = _load());
+      setState(() {
+        _future = _load();
+      });
     }
     _wasSyncing = syncing;
   }
@@ -4303,15 +4316,19 @@ class _HistoryScreenState extends State<HistoryScreen> {
       body: SafeArea(
         child: ResponsiveScroll(
           onRefresh: () async {
-            setState(() => _future = _load(forceRefresh: true));
+            setState(() {
+              _future = _load(forceRefresh: true);
+            });
             await _future;
           },
           padding: const EdgeInsets.only(top: 16, bottom: 120),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              const PageHeader(),
-              const SizedBox(height: 16),
+              if (widget.showBack) ...[
+                PageHeader(onBack: widget.onBack),
+                const SizedBox(height: 16),
+              ],
               Text(S.history, style: PacerText.pageTitleOf(context)),
               if (!_isDemo) const SizedBox(height: 8),
               if (!_isDemo) const SyncStatusBanner(),

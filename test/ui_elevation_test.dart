@@ -159,5 +159,50 @@ void main() {
         await tester.binding.setSurfaceSize(null);
       },
     );
+
+    testWidgets(
+      'BottomNavPill replaces Running with History seamlessly in MainShell and keeps START opening setup',
+      (tester) async {
+        await tester.binding.setSurfaceSize(const Size(390, 844));
+        addTearDown(() => tester.binding.setSurfaceSize(null));
+
+        await tester.pumpWidget(wrapThemed(const MainShell()));
+        await tester.pumpAndSettle();
+
+        expect(find.text(S.history), findsWidgets);
+        expect(
+          find.descendant(
+            of: find.byType(BottomNavPill),
+            matching: find.text(S.running),
+          ),
+          findsNothing,
+        );
+        expect(
+          find.descendant(
+            of: find.byType(BottomNavPill),
+            matching: find.byIcon(Icons.directions_run_outlined),
+          ),
+          findsNothing,
+        );
+
+        await tester.tap(
+          find.descendant(
+            of: find.byType(BottomNavPill),
+            matching: find.text(S.history),
+          ),
+        );
+        await tester.pumpAndSettle();
+
+        expect(tester.widget<BottomNavPill>(find.byType(BottomNavPill)).index, 1);
+        expect(find.byType(HistoryScreen), findsOneWidget);
+        expect(find.byType(RunTrackerScreen), findsNothing);
+        expect(find.byType(BottomNavPill), findsOneWidget);
+
+        await tester.tap(find.text('START'));
+        await tester.pumpAndSettle();
+        expect(find.byType(RunSetupScreen), findsOneWidget);
+        expect(find.byType(RunTrackerScreen), findsNothing);
+      },
+    );
   });
 }
