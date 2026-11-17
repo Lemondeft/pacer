@@ -79,10 +79,12 @@ void main() {
       expect(dropletFinder, findsOneWidget);
 
       final expandedOnTab = tester.widget<PacerScrubberDroplet>(dropletFinder);
-      expect(expandedOnTab.size.width, greaterThanOrEqualTo(95));
-      expect(expandedOnTab.size.height, greaterThanOrEqualTo(72));
-      expect(expandedOnTab.size.width, greaterThan(expandedOnTab.size.height));
-      expect(expandedOnTab.refractionIndex, greaterThan(1.015));
+      expect(expandedOnTab.size.width, greaterThanOrEqualTo(105));
+      expect(expandedOnTab.size.height, greaterThanOrEqualTo(80));
+      expect(expandedOnTab.size.width, greaterThan(expandedOnTab.size.height + 16));
+      expect(expandedOnTab.cornerRadius, lessThan(expandedOnTab.size.height / 2 - 4));
+      expect(expandedOnTab.refractionIndex, greaterThanOrEqualTo(1.10));
+      expect(expandedOnTab.refractionWidth, greaterThanOrEqualTo(18.0));
       expect(expandedOnTab.magnification, 1.0);
       expect(expandedOnTab.blur, 0.0);
       expect(expandedOnTab.glowColor, isNull);

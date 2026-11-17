@@ -5,6 +5,8 @@ import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:latlong2/latlong.dart' hide Path;
 import 'package:pacer/core/responsive/responsive.dart';
+import 'package:pacer/src/admin/admin_repository.dart';
+import 'package:pacer/src/admin/ui/admin_console_screen.dart';
 import 'package:pacer/src/aktivitas/activity_model.dart';
 import 'package:pacer/src/aktivitas/activity_repository.dart';
 import 'package:pacer/src/auth/auth_repository.dart';
@@ -5808,32 +5810,92 @@ class AccountScreen extends StatefulWidget {
 class _AccountScreenState extends State<AccountScreen> {
   ({String? nama, String? email})? _profile;
   bool _isDemo = true;
+  String _peran = 'user';
   bool _checkingUpdates = false;
 
   @override
   void initState() {
     super.initState();
-    _load().then((p) {
-      if (mounted) {
-        setState(() {
-          _profile = (nama: p.nama, email: p.email);
-          _isDemo = p.isDemo;
-        });
-      }
-    });
+    _refreshProfile();
   }
 
-  Future<({String? nama, String? email, bool isDemo})> _load() async {
+  Future<void> _refreshProfile() async {
+    final p = await _load();
+    if (mounted) {
+      setState(() {
+        _profile = (nama: p.nama, email: p.email);
+        _isDemo = p.isDemo;
+        _peran = p.peran;
+      });
+    }
+  }
+
+  Future<({String? nama, String? email, bool isDemo, String peran})>
+  _load() async {
     try {
       if (await isDemoAccount()) {
-        return (nama: null, email: null, isDemo: true);
+        return (nama: null, email: null, isDemo: true, peran: 'user');
       }
       final auth = AuthRepository();
       final profile = await auth.getProfile();
       final email = await auth.getSavedEmail();
-      return (nama: profile?.nama, email: email, isDemo: false);
+      return (
+        nama: profile?.nama,
+        email: email,
+        isDemo: false,
+        peran: profile?.peran ?? 'user',
+      );
     } catch (_) {
-      return (nama: null, email: null, isDemo: await isDemoAccount());
+      return (
+        nama: null,
+        email: null,
+        isDemo: await isDemoAccount(),
+        peran: 'user',
+      );
+    }
+  }
+
+  Future<void> _promptRedeemCoachCode(BuildContext context) async {
+    final ctrl = TextEditingController();
+    final code = await showDialog<String>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(S.redeemCoachCode),
+        content: TextField(
+          controller: ctrl,
+          autofocus: true,
+          textCapitalization: TextCapitalization.characters,
+          decoration: InputDecoration(
+            hintText: S.redeemCoachCodeHint,
+            border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: Text(MaterialLocalizations.of(ctx).cancelButtonLabel),
+          ),
+          FilledButton(
+            onPressed: () => Navigator.of(ctx).pop(ctrl.text.trim()),
+            child: Text(S.redeemCoachSubmit),
+          ),
+        ],
+      ),
+    );
+    ctrl.dispose();
+    if (code == null || code.isEmpty || !context.mounted) return;
+    try {
+      await AdminRepository().claimCoachInvite(code);
+      await _refreshProfile();
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(SnackBar(content: Text(S.redeemCoachSuccess)));
+    } catch (e) {
+      if (!context.mounted) return;
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(SnackBar(content: Text(e.toString())));
     }
   }
 
@@ -5887,7 +5949,7 @@ class _AccountScreenState extends State<AccountScreen> {
     return InkWell(
       onTap: onTap,
       child: Padding(
-        padding: const EdgeInsets.symmetric(vertical: 15, horizontal: 16),
+        padding: const EdgeInsets.symmetric(vertical: 13, horizontal: 16),
         child: Row(
           children: [
             Icon(icon, size: 20, color: destructive ? dangerColor : scheme.muted),
@@ -5955,14 +6017,14 @@ class _AccountScreenState extends State<AccountScreen> {
                     width: 2,
                   ),
                 ),
-                child: InitialAvatar(initialsOf(_profile?.nama), size: 96),
+                child: InitialAvatar(initialsOf(_profile?.nama), size: 80),
               ),
-              const SizedBox(height: 10),
+              const SizedBox(height: 8),
               Text(
                 _profile?.nama ?? '–',
                 style: PacerText.cardTitleOf(context),
               ),
-              const SizedBox(height: 16),
+              const SizedBox(height: 12),
               PacerGroupedPanel(
                 children: [
                   _menuRow(
@@ -5991,6 +6053,24 @@ class _AccountScreenState extends State<AccountScreen> {
                       MaterialPageRoute(builder: (_) => const FiturScreen()),
                     ),
                   ),
+                  if (!_isDemo && _peran == 'admin')
+                    _menuRow(
+                      context,
+                      icon: Icons.admin_panel_settings_outlined,
+                      label: S.adminConsole,
+                      onTap: () => Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (_) => const AdminConsoleScreen(),
+                        ),
+                      ),
+                    ),
+                  if (!_isDemo && _peran == 'user')
+                    _menuRow(
+                      context,
+                      icon: Icons.vpn_key_outlined,
+                      label: S.redeemCoachCode,
+                      onTap: () => _promptRedeemCoachCode(context),
+                    ),
                   _menuRow(
                     context,
                     icon: Icons.translate_rounded,

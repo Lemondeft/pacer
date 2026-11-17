@@ -865,4 +865,42 @@ class S {
         ? 'Recorded ${minsDone}m ${secsDone}s & $kmDone km. A valid session (or combined daily total) needs at least 5m & $minKm km (${sportName(jenis)}) to extend today\'s streak.'
         : 'Tercatat ${minsDone}m ${secsDone}d & $kmDone km. Minimal butuh 5m & $minKm km (${sportName(jenis)}) untuk menambah streak hari ini.';
   }
+
+  // Super Admin & Coach Invite
+  static String get adminConsole =>
+      _en ? 'Super Admin Console' : 'Konsol Super Admin';
+  static String get redeemCoachCode =>
+      _en ? 'Redeem Coach Code' : 'Klaim Kode Coach';
+  static String get redeemCoachCodeHint =>
+      _en ? 'Enter invite code (e.g. COACH-...)' : 'Masukkan kode undangan';
+  static String get redeemCoachSuccess => _en
+      ? 'Your account is now upgraded to Coach.'
+      : 'Akun Anda kini ditingkatkan menjadi Coach.';
+  static String get redeemCoachSubmit => _en ? 'Activate' : 'Aktifkan';
+  static String get adminOverviewTab => _en ? 'Overview' : 'Ringkasan';
+  static String get adminUsersTab => _en ? 'Users' : 'Pengguna';
+  static String get adminFlaggedTab => _en ? 'Flagged' : 'Ditandai';
+  static String get adminAuditTab => _en ? 'Audit' : 'Audit';
+  static String get adminSearchUsersHint =>
+      _en ? 'Search name, region, or ID…' : 'Cari nama, wilayah, atau ID…';
+  static String get adminCoachInvitesTitle =>
+      _en ? 'Coach Invite Codes' : 'Kode Undangan Coach';
+  static String get adminGenerateCodeCta =>
+      _en ? 'Generate Code' : 'Buat Kode';
+  static String get adminCodeCopied =>
+      _en ? 'Invite code copied' : 'Kode undangan disalin';
+  static String get adminChangeRoleTitle =>
+      _en ? 'Change Account Role' : 'Ubah Peran Akun';
+  static String get adminRoleUpdatedNotice =>
+      _en ? 'Role updated' : 'Peran diperbarui';
+  static String get adminNoFlaggedRuns => _en
+      ? 'No flagged activities awaiting review.'
+      : 'Tidak ada aktivitas ditandai saat ini.';
+  static String get adminNoAuditEntries =>
+      _en ? 'No admin actions recorded yet.' : 'Belum ada catatan audit.';
+  static String get adminVerifyCta => _en ? 'Verify' : 'Verifikasi';
+  static String get adminReclassifyCta => _en ? 'Reclassify' : 'Ubah Jenis';
+  static String get adminExcludeCta => _en ? 'Exclude' : 'Kecualikan';
+  static String get adminSaveRoleCta => _en ? 'Save Role' : 'Simpan Peran';
+  static String get adminRetryCta => _en ? 'Retry' : 'Coba Lagi';
 }

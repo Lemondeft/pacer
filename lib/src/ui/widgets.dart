@@ -2015,12 +2015,12 @@ class _BottomNavPillState extends State<BottomNavPill>
       );
     } else {
       final liftFrac = _lift.clamp(0.0, 1.25);
-      // Expand into a crystal-clear water-drop capsule (108x94, r47) taller
-      // than the 80.7px navbar so top/bottom overhang is clear, morphing into
+      // Expand into a crystal-clear squircle capsule (114x86, r32) matching the
+      // navbar/active-cube silhouette rather than a round egg, morphing into
       // a true 94x94 circle (r47) over the START orb.
-      final activeW = ui.lerpDouble(108.0, 94.0, circleMorph)!;
-      final activeH = ui.lerpDouble(94.0, 94.0, circleMorph)!;
-      final activeR = ui.lerpDouble(47.0, 47.0, circleMorph)!;
+      final activeW = ui.lerpDouble(114.0, 94.0, circleMorph)!;
+      final activeH = ui.lerpDouble(86.0, 94.0, circleMorph)!;
+      final activeR = ui.lerpDouble(32.0, 47.0, circleMorph)!;
       final dropW = ui.lerpDouble(restCubeW, activeW, liftFrac)!.clamp(restCubeW, 124.0);
       final dropH = ui.lerpDouble(restCubeH, activeH, liftFrac)!.clamp(restCubeH, 108.0);
       final cornerR = ui.lerpDouble(
@@ -2100,23 +2100,23 @@ class _BottomNavPillState extends State<BottomNavPill>
         glassPresence: glassPresence,
         cubePresence: 1.0 - 0.15 * circleMorph * liftUnit,
         blur: 0.0,
-        refractionIndex: 1.022,
-        refractionWidth: 14.0,
+        refractionIndex: 1.14,
+        refractionWidth: 20.0,
         magnification: 1.0,
-        dispersion: 1.32,
+        dispersion: 2.0,
       );
 
       final bool shaderNative = PacerGlass.isShaderBackdropSupported;
 
       // Hairline rim proxy inside the Skia background strip lets the droplet's
-      // edge refraction bend the navbar border cleanly while keeping fill clear.
+      // edge refraction visibly bend the navbar border while keeping fill clear.
       final Widget capsuleRimProxy = IgnorePointer(
         child: DecoratedBox(
           decoration: BoxDecoration(
             borderRadius: BorderRadius.circular(36),
             border: Border.all(
-              color: Colors.white.withValues(alpha: dark ? 0.16 : 0.38),
-              width: 1.0,
+              color: Colors.white.withValues(alpha: dark ? 0.24 : 0.52),
+              width: 1.25,
             ),
           ),
         ),
