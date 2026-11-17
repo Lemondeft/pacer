@@ -133,6 +133,7 @@ double challengeActivityDelta({
 }) {
   final finishedAt = activity.selesaiAt?.toUtc();
   if (finishedAt == null) return 0;
+  if (activity.isFlagged) return 0;
   if (activity.jenis != challenge.jenis) return 0;
 
   final startedAt = (activity.mulaiAt ?? finishedAt).toUtc();

@@ -61,6 +61,8 @@
 	</array>
 	<key>NSLocationWhenInUseUsageDescription</key>
 	<string>Pacer needs your location to record GPS tracks while you run.</string>
+	<key>NSMotionUsageDescription</key>
+	<string>Pacer uses motion and step activity data to verify sport mode and track cadence.</string>
 	<key>UISupportedInterfaceOrientations~ipad</key>
 	<array>
 		<string>UIInterfaceOrientationPortrait</string>

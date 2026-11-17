@@ -326,6 +326,8 @@ class RunSessionCard extends StatelessWidget {
   final String distance;
   final bool limePill;
   final SyncState? syncState;
+  final String? validationStatus;
+  final String? suggestedSport;
   final VoidCallback? onTap;
   const RunSessionCard({
     super.key,
@@ -336,6 +338,8 @@ class RunSessionCard extends StatelessWidget {
     this.distance = '3,00 Km',
     this.limePill = false,
     this.syncState,
+    this.validationStatus,
+    this.suggestedSport,
     this.onTap,
   });
 
@@ -486,6 +490,19 @@ class RunSessionCard extends StatelessWidget {
                     borderRadius: BorderRadius.circular(999),
                   ),
                 ),
+                if (S.validationBadgeLabel(
+                  validationStatus,
+                  suggestedSport: suggestedSport,
+                ).isNotEmpty) ...[
+                  const SizedBox(height: 6),
+                  _ValidationStatusBadge(
+                    label: S.validationBadgeLabel(
+                      validationStatus,
+                      suggestedSport: suggestedSport,
+                    ),
+                    status: validationStatus,
+                  ),
+                ],
               ],
             ),
           ),
@@ -500,6 +517,40 @@ class RunSessionCard extends StatelessWidget {
           onTap!();
         },
         child: card,
+      ),
+    );
+  }
+}
+
+class _ValidationStatusBadge extends StatelessWidget {
+  final String label;
+  final String? status;
+  const _ValidationStatusBadge({required this.label, required this.status});
+
+  @override
+  Widget build(BuildContext context) {
+    final Color accent = switch (status) {
+      'flagged_vehicle' => PacerColors.errorRed,
+      'flagged_ride' || 'flagged_mismatch' => PacerColors.streakAmber,
+      _ => PacerColors.chipGreen,
+    };
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+      decoration: BoxDecoration(
+        color: accent.withValues(alpha: 0.14),
+        borderRadius: BorderRadius.circular(999),
+        border: Border.all(color: accent.withValues(alpha: 0.45), width: 1),
+      ),
+      child: Text(
+        label,
+        maxLines: 1,
+        overflow: TextOverflow.ellipsis,
+        style: TextStyle(
+          fontSize: 10,
+          fontWeight: FontWeight.w700,
+          color: accent,
+          letterSpacing: 0.2,
+        ),
       ),
     );
   }

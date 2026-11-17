@@ -155,6 +155,57 @@ class ActivityRepository {
     }
   }
 
+  /// Reclassifies a recorded activity's sport locally and remotely, clearing any
+  /// server mismatch suggestion and triggering challenge recomputation.
+  Future<LocalActivity?> reclassifySport({
+    required String aktivitasId,
+    required String newJenis,
+  }) async {
+    if (!aktivitasJenis.contains(newJenis)) {
+      throw ArgumentError.value(
+        newJenis,
+        'newJenis',
+        'must be one of $aktivitasJenis',
+      );
+    }
+    await _store.updateActivityValidation(
+      aktivitasId,
+      jenis: newJenis,
+      clearSuggestedSport: true,
+      validationStatus: 'reclassified',
+    );
+    final c = _client;
+    final uid = c?.auth.currentUser?.id;
+    if (c != null && uid != null && ConnectivityService.instance.value) {
+      try {
+        await c
+            .from('aktivitas')
+            .update({
+              'jenis': newJenis,
+              'suggested_sport': null,
+              'validation_status': 'reclassified',
+            })
+            .eq('id', aktivitasId)
+            .eq('user_id', uid);
+        try {
+          await c.rpc('sync_recompute_challenge_progress');
+        } catch (_) {}
+      } catch (e) {
+        if (!isTransientNetworkError(e)) rethrow;
+      }
+    }
+    PacerCache.instance.invalidatePrefix('activities_');
+    PacerCache.instance.invalidatePrefix('streak_');
+    PacerCache.instance.invalidatePrefix('leaderboard_');
+    if (uid != null) {
+      await _store.setSyncTimestamp(
+        'challenge_parts_$uid',
+        DateTime.fromMillisecondsSinceEpoch(0),
+      );
+    }
+    return _store.getActivity(aktivitasId);
+  }
+
   /// Returns locally stored finished workouts (synced + pending) with SWR sync.
   Future<List<LocalActivity>> listLocalActivities({
     int limit = 20,

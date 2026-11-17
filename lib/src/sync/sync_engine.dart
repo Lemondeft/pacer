@@ -93,6 +93,8 @@ abstract class RemoteSyncGateway {
   Future<void> leaveChallenge(String userId, String challengeId);
   Future<List<PartisipasiChallenge>?> recomputeChallengeProgressRpc();
   Future<List<PartisipasiChallenge>> fallbackSyncChallengeProgress(String userId);
+  Future<({String? validationStatus, String? suggestedSport})?>
+  validateActivityFunction(String aktivitasId);
   Future<ChatMessage> sendChatMessage({
     required String id,
     required String teamId,
@@ -432,6 +434,28 @@ class SupabaseSyncGateway implements RemoteSyncGateway {
   }
 
   @override
+  Future<({String? validationStatus, String? suggestedSport})?>
+  validateActivityFunction(String aktivitasId) async {
+    final c = _client;
+    if (c == null) return null;
+    try {
+      final res = await c.functions.invoke(
+        'validate-activity',
+        body: {'aktivitas_id': aktivitasId},
+      );
+      if (res.data is! Map) return null;
+      final data = Map<String, dynamic>.from(res.data as Map);
+      return (
+        validationStatus: data['validation_status'] as String?,
+        suggestedSport: data['suggested_sport'] as String?,
+      );
+    } catch (_) {
+      // Non-fatal when function is undeployed, offline, or OSRM/Valhalla times out.
+      return null;
+    }
+  }
+
+  @override
   Future<ChatMessage> sendChatMessage({
     required String id,
     required String teamId,
@@ -765,7 +789,23 @@ class SyncEngine extends ChangeNotifier {
       await _gateway.upsertRoutePoints(activity.id, points);
     }
 
-    final mulai = activity.mulaiAt ?? _now();
+    var effectiveActivity = activity;
+    final verdict = await _gateway.validateActivityFunction(activity.id);
+    if (verdict != null && verdict.validationStatus != null) {
+      await _store.updateActivityValidation(
+        activity.id,
+        validationStatus: verdict.validationStatus,
+        suggestedSport: verdict.suggestedSport,
+        clearSuggestedSport: verdict.suggestedSport == null,
+      );
+      effectiveActivity = activity.copyWith(
+        validationStatus: verdict.validationStatus,
+        suggestedSport: verdict.suggestedSport,
+        clearSuggestedSport: verdict.suggestedSport == null,
+      );
+    }
+
+    final mulai = effectiveActivity.mulaiAt ?? _now();
     final bounds = isoWeekBounds(mulai);
     final rpcResult = await _gateway.recomputeStatsRpc(
       periode: bounds.periode,
@@ -777,14 +817,14 @@ class SyncEngine extends ChangeNotifier {
     if (rpcResult != null) {
       await _store.markOutboxSynced(
         item.id,
-        syncedActivityId: activity.id,
+        syncedActivityId: effectiveActivity.id,
         periode: bounds.periode,
         baselineJarakM: rpcResult.jarakM,
         baselineWaktuS: rpcResult.waktuS,
         baselineStreak: rpcResult.streakBerjalan,
         baselineStreakLast: rpcResult.streakLast,
       );
-      await _syncChallengeProgressAfterActivity(item.userId, activity);
+      await _syncChallengeProgressAfterActivity(item.userId, effectiveActivity);
       return;
     }
 
@@ -792,31 +832,31 @@ class SyncEngine extends ChangeNotifier {
     // local statistikApplied flag so delta add can happen at most once.
     final effStreak = await _store.getStreakEffective(item.userId);
     final localList = await _store.listActivities(item.userId, limit: 200);
-    final match = localList.where((a) => a.activity.id == activity.id);
+    final match = localList.where((a) => a.activity.id == effectiveActivity.id);
     final alreadyApplied = match.isNotEmpty && match.first.statistikApplied;
     if (!alreadyApplied) {
       await _gateway.fallbackApplyStatistikAndStreak(
         periode: bounds.periode,
-        jarakM: activity.jarakM ?? 0,
-        waktuS: activity.durasiS ?? 0,
+        jarakM: effectiveActivity.jarakM ?? 0,
+        waktuS: effectiveActivity.durasiS ?? 0,
         activityLocalDate: mulai.toLocal(),
       );
       await _store.markOutboxSynced(
         item.id,
-        syncedActivityId: activity.id,
+        syncedActivityId: effectiveActivity.id,
         periode: bounds.periode,
         markStatistikAppliedOnly: true,
-        deltaJarakM: activity.jarakM ?? 0,
-        deltaWaktuS: activity.durasiS ?? 0,
+        deltaJarakM: effectiveActivity.jarakM ?? 0,
+        deltaWaktuS: effectiveActivity.durasiS ?? 0,
       );
     }
     await _store.markOutboxSynced(
       item.id,
-      syncedActivityId: activity.id,
+      syncedActivityId: effectiveActivity.id,
       baselineStreak: effStreak?.berjalan,
       baselineStreakLast: effStreak?.terakhir,
     );
-    await _syncChallengeProgressAfterActivity(item.userId, activity);
+    await _syncChallengeProgressAfterActivity(item.userId, effectiveActivity);
   }
 
   Future<void> _syncChallengeProgressAfterActivity(

@@ -149,6 +149,16 @@ class _FakeGateway implements RemoteSyncGateway {
     return challengeFallbackResult;
   }
 
+  final List<String> validateActivityCalls = <String>[];
+  ({String? validationStatus, String? suggestedSport})? validateActivityResult;
+
+  @override
+  Future<({String? validationStatus, String? suggestedSport})?>
+  validateActivityFunction(String aktivitasId) async {
+    validateActivityCalls.add(aktivitasId);
+    return validateActivityResult;
+  }
+
   @override
   Future<ChatMessage> sendChatMessage({
     required String id,
@@ -488,6 +498,57 @@ void main() {
 
       expect(engine.status.pendingCount, 0);
       expect(gateway.ops, contains('activate:${t2.id}'));
+    });
+
+    test('persists server validate-activity verdict and excludes flagged activity from offline challenge rollup', () async {
+      final challenge = Challenge(
+        id: 'chal-val-1',
+        jenis: 'lari',
+        targetNilai: 5000,
+        targetSatuan: 'jarak_m',
+        diumumkan: true,
+      );
+      await store.saveChallenges('user-sync-1', [challenge]);
+      final join = await store.queueJoinChallenge('user-sync-1', challenge.id);
+
+      final start = join.createdAt!.toUtc().add(const Duration(seconds: 5));
+      await store.finalizeRunAtomic(
+        id: 'run-val-1',
+        userId: 'user-sync-1',
+        jenis: 'lari',
+        mulaiAt: start,
+        selesaiAt: start.add(const Duration(minutes: 10)),
+        durasiS: 600,
+        jarakM: 3200.0,
+        allPoints: const [],
+        challengeIds: const ['chal-val-1'],
+        cadenceSpm: 44,
+      );
+
+      gateway.validateActivityResult = (
+        validationStatus: 'flagged_vehicle',
+        suggestedSport: null,
+      );
+      gateway.challengeRpcResult = [
+        PartisipasiChallenge(
+          id: join.id,
+          challengeId: challenge.id,
+          userId: 'user-sync-1',
+          progressNilai: 0.0,
+          berhasil: false,
+          createdAt: join.createdAt,
+        ),
+      ];
+
+      await engine.syncNow(userId: 'user-sync-1');
+
+      expect(gateway.validateActivityCalls, ['run-val-1']);
+      final stored = await store.getActivity('run-val-1');
+      expect(stored?.activity.validationStatus, 'flagged_vehicle');
+      expect(stored?.activity.isFlagged, isTrue);
+
+      final parts = await store.getParticipations('user-sync-1');
+      expect(parts.single.progressNilai, closeTo(0.0, 0.01));
     });
   });
 }

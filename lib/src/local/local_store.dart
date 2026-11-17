@@ -61,6 +61,7 @@ abstract class LocalStore {
     required double distanceM,
     required List<RutePoint> newPoints,
   });
+  Future<void> updateDraftSport(String id, String jenis);
   Future<ActiveDraftRun?> loadActiveDraft(String userId);
   Future<void> discardDraft(String id);
   Future<Activity> finalizeRunAtomic({
@@ -73,10 +74,22 @@ abstract class LocalStore {
     required double jarakM,
     required List<RutePoint> allPoints,
     List<String>? challengeIds,
+    String? suggestedSport,
+    String? validationStatus,
+    int? cadenceSpm,
   });
 
   // ---- Activities, Routes, Statistik & Streaks ----
   Future<List<LocalActivity>> listActivities(String userId, {int limit = 50});
+  Future<LocalActivity?> getActivity(String id);
+  Future<void> updateActivityValidation(
+    String id, {
+    String? jenis,
+    String? suggestedSport,
+    bool clearSuggestedSport = false,
+    String? validationStatus,
+    int? cadenceSpm,
+  });
   Future<void> mergeRemoteActivities(String userId, List<Activity> remote);
   Future<void> deleteActivityLocal(String id);
   Future<List<RutePoint>> getRoutePoints(String aktivitasId);

@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_map/flutter_map.dart';
 import 'package:flutter_map_vector_tiles/flutter_map_vector_tiles.dart' as vt;
@@ -10,6 +12,9 @@ import 'package:pacer/src/auth/user_model.dart';
 import 'package:pacer/src/local/local_store.dart';
 import 'package:pacer/src/local/memory_local_store.dart';
 import 'package:pacer/src/sync/connectivity_service.dart';
+import 'package:pacer/src/sync/sync_engine.dart';
+import 'package:pacer/src/tracking/activity_classifier.dart';
+import 'package:pacer/src/tracking/motion_sensors.dart';
 import 'package:pacer/src/tracking/recorder.dart';
 import 'package:pacer/src/tracking/route_map.dart';
 import 'package:pacer/src/ui/app_strings.dart';
@@ -599,4 +604,260 @@ void main() {
       expect(find.byType(MarkerLayer), findsOneWidget);
     });
   });
+
+  group('Multi-Activity Classification UI & Reclassification UX', () {
+    testWidgets('RunTrackerScreen displays non-blocking mismatch banner and switches sport live on tap', (tester) async {
+      final prevStore = LocalStore.instance;
+      final store = MemoryLocalStore();
+      await store.setLastUserId('ui-user-1');
+      LocalStore.instance = store;
+      final connectivity = ConnectivityService()..setTestOverride(false);
+      final sync = SyncEngine(storeProvider: () => store, connectivity: connectivity);
+      final motionCtrl = StreamController<OsMotionEvent>.broadcast();
+      final sensors = _WidgetFakeMotionSensors(motionCtrl.stream);
+      final recorder = RunRecorder(
+        store: store,
+        sync: sync,
+        userIdProvider: () async => 'ui-user-1',
+        sensors: sensors,
+        enableGpsStream: false,
+      );
+      addTearDown(() async {
+        recorder.dispose();
+        await motionCtrl.close();
+        sync.dispose();
+        connectivity.dispose();
+        LocalStore.instance = prevStore;
+      });
+
+      await recorder.start('berjalan');
+      await tester.pump();
+      await tester.pump();
+      final t0 = DateTime.utc(2026, 11, 17, 7, 0);
+      recorder.recordPositionForTest(
+        _gpsAt(lat: -6.20000, lng: 106.80000, at: t0, speed: 5.5),
+        enforceKinematics: true,
+      );
+      recorder.recordPositionForTest(
+        _gpsAt(lat: -6.20050, lng: 106.80000, at: t0.add(const Duration(seconds: 10)), speed: 5.5),
+        enforceKinematics: true,
+      );
+      motionCtrl.add(
+        OsMotionEvent(
+          label: OsMotionLabel.onBicycle,
+          confidence: 92,
+          timestamp: t0.add(const Duration(seconds: 11)),
+        ),
+      );
+      await tester.pump();
+      await recorder.evaluateWindowForTest(now: t0.add(const Duration(seconds: 11)));
+      await recorder.evaluateWindowForTest(now: t0.add(const Duration(seconds: 12)));
+      expect(recorder.activeMismatch?.suggestedJenis, 'bersepeda');
+
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: PacerTheme.dark(),
+          home: Scaffold(
+            body: RunTrackerScreen(
+              sportType: 'berjalan',
+              recorder: recorder,
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      expect(find.text('BERJALAN'), findsOneWidget);
+      final switchChip = find.text(S.switchToSportCta('bersepeda'));
+      expect(switchChip, findsOneWidget);
+
+      await tester.ensureVisible(switchChip);
+      await tester.tap(switchChip);
+      await tester.pumpAndSettle();
+
+      expect(recorder.jenis, 'bersepeda');
+      expect(recorder.activeMismatch, isNull);
+      expect(find.text('BERSEPEDA'), findsOneWidget);
+      expect(find.text(S.switchToSportCta('bersepeda')), findsNothing);
+
+      // Unmount widget tree and finish recorder cleanly before tearDown checks timers.
+      await tester.pumpWidget(const SizedBox.shrink());
+      await tester.pump();
+      await recorder.discard();
+    });
+
+    testWidgets('RunFinishScreen shows hardware cadence, reclassifies flagged mismatch, and deletes flagged vehicle', (tester) async {
+      final prevStore = LocalStore.instance;
+      final store = MemoryLocalStore();
+      await store.setLastUserId('finish-user-1');
+      LocalStore.instance = store;
+      addTearDown(() {
+        LocalStore.instance = prevStore;
+      });
+
+      final now = DateTime.utc(2026, 11, 17, 7, 0);
+      await store.finalizeRunAtomic(
+        id: 'act-mismatch-1',
+        userId: 'finish-user-1',
+        jenis: 'berjalan',
+        mulaiAt: now,
+        selesaiAt: now.add(const Duration(minutes: 10)),
+        durasiS: 600,
+        jarakM: 3200,
+        allPoints: const [],
+        suggestedSport: 'bersepeda',
+        validationStatus: 'flagged_ride',
+        cadenceSpm: 174,
+      );
+
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: PacerTheme.light(),
+          home: RunFinishScreen(
+            title: S.sportName('berjalan'),
+            isHistoryDetail: true,
+            aktivitasId: 'act-mismatch-1',
+            summary: const RunSummary(
+              aktivitasId: 'act-mismatch-1',
+              jenis: 'berjalan',
+              jarakM: 3200,
+              durasiS: 600,
+              pointCount: 0,
+              suggestedSport: 'bersepeda',
+              validationStatus: 'flagged_ride',
+              cadenceSpm: 174,
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      // Displays real hardware cadence and flagged mismatch CTA.
+      expect(find.text('174'), findsOneWidget);
+      final switchBtn = find.text(S.switchToSportCta('bersepeda'));
+      expect(switchBtn, findsOneWidget);
+
+      await tester.ensureVisible(switchBtn);
+      await tester.tap(switchBtn);
+      await tester.pumpAndSettle();
+
+      final reclassified = await store.getActivity('act-mismatch-1');
+      expect(reclassified?.activity.jenis, 'bersepeda');
+      expect(reclassified?.activity.validationStatus, 'reclassified');
+      expect(reclassified?.activity.suggestedSport, isNull);
+      expect(find.text(S.validationBadgeLabel('reclassified')), findsOneWidget);
+
+      // Now verify vehicle flagged deletion flow.
+      await store.finalizeRunAtomic(
+        id: 'act-vehicle-1',
+        userId: 'finish-user-1',
+        jenis: 'lari',
+        mulaiAt: now,
+        selesaiAt: now.add(const Duration(minutes: 5)),
+        durasiS: 300,
+        jarakM: 5000,
+        allPoints: const [],
+        validationStatus: 'flagged_vehicle',
+      );
+
+      bool? poppedResult;
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: PacerTheme.light(),
+          home: Builder(
+            builder: (ctx) => Scaffold(
+              body: Center(
+                child: ElevatedButton(
+                  onPressed: () async {
+                    poppedResult = await Navigator.of(ctx).push<bool>(
+                      MaterialPageRoute(
+                        builder: (_) => const RunFinishScreen(
+                          isHistoryDetail: true,
+                          aktivitasId: 'act-vehicle-1',
+                          summary: RunSummary(
+                            aktivitasId: 'act-vehicle-1',
+                            jenis: 'lari',
+                            jarakM: 5000,
+                            durasiS: 300,
+                            pointCount: 0,
+                            validationStatus: 'flagged_vehicle',
+                          ),
+                        ),
+                      ),
+                    );
+                  },
+                  child: const Text('Open'),
+                ),
+              ),
+            ),
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+      await tester.tap(find.text('Open'));
+      await tester.pumpAndSettle();
+
+      expect(find.text(S.finishVehicleTitle), findsOneWidget);
+      final deleteBtn = find.text(S.deleteFlaggedActivityCta);
+      await tester.ensureVisible(deleteBtn);
+      await tester.tap(deleteBtn);
+      await tester.pumpAndSettle();
+      expect(find.text(S.deleteFlaggedConfirmTitle), findsOneWidget);
+
+      await tester.tap(find.text(S.deleteFlaggedActivityCta).last);
+      await tester.pumpAndSettle();
+
+      expect(poppedResult, isTrue);
+      expect(await store.getActivity('act-vehicle-1'), isNull);
+    });
+  });
 }
+
+class _WidgetFakeMotionSensors implements MotionSensorProvider {
+  final Stream<OsMotionEvent> _osStream;
+  const _WidgetFakeMotionSensors(this._osStream);
+
+  @override
+  Future<bool> ensureMotionPermission() async => true;
+
+  @override
+  Future<void> startMonitoring() async {}
+
+  @override
+  Future<void> stopMonitoring() async {}
+
+  @override
+  Stream<OsMotionEvent> get osMotionStream => _osStream;
+
+  @override
+  Stream<int> get stepDeltaStream => const Stream.empty();
+
+  @override
+  Future<List<AccelSample>> sampleAccelBurst({
+    Duration duration = const Duration(
+      seconds: DetectionThresholds.accelBurstDurationSec,
+    ),
+    int sampleRateHz = DetectionThresholds.accelSampleRateHz,
+  }) async => const [];
+
+  @override
+  void dispose() {}
+}
+
+Position _gpsAt({
+  required double lat,
+  required double lng,
+  required DateTime at,
+  double speed = 0,
+}) => Position(
+  longitude: lng,
+  latitude: lat,
+  timestamp: at,
+  accuracy: 5,
+  altitude: 10,
+  altitudeAccuracy: 3,
+  heading: 0,
+  headingAccuracy: 1,
+  speed: speed,
+  speedAccuracy: 1,
+);

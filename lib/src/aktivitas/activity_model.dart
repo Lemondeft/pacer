@@ -24,6 +24,16 @@ class Activity {
   /// `null` preserves legacy time-window matching; empty list skips challenges.
   final List<String>? challengeIds;
 
+  /// Server/client classification hint when recorded under a mismatched sport.
+  final String? suggestedSport;
+
+  /// Integrity status (`unverified`, `verified`, `flagged_ride`, `flagged_mismatch`,
+  /// `flagged_vehicle`, `reclassified`).
+  final String? validationStatus;
+
+  /// Average hardware cadence recorded (steps/min), when available.
+  final int? cadenceSpm;
+
   const Activity({
     required this.id,
     required this.userId,
@@ -33,7 +43,48 @@ class Activity {
     this.durasiS,
     this.jarakM,
     this.challengeIds,
+    this.suggestedSport,
+    this.validationStatus,
+    this.cadenceSpm,
   });
+
+  bool get isFlagged =>
+      validationStatus == 'flagged_ride' ||
+      validationStatus == 'flagged_mismatch' ||
+      validationStatus == 'flagged_vehicle';
+
+  Activity copyWith({
+    String? id,
+    String? userId,
+    String? jenis,
+    DateTime? mulaiAt,
+    DateTime? selesaiAt,
+    int? durasiS,
+    double? jarakM,
+    List<String>? challengeIds,
+    String? suggestedSport,
+    bool clearSuggestedSport = false,
+    String? validationStatus,
+    bool clearValidationStatus = false,
+    int? cadenceSpm,
+    bool clearCadenceSpm = false,
+  }) => Activity(
+    id: id ?? this.id,
+    userId: userId ?? this.userId,
+    jenis: jenis ?? this.jenis,
+    mulaiAt: mulaiAt ?? this.mulaiAt,
+    selesaiAt: selesaiAt ?? this.selesaiAt,
+    durasiS: durasiS ?? this.durasiS,
+    jarakM: jarakM ?? this.jarakM,
+    challengeIds: challengeIds ?? this.challengeIds,
+    suggestedSport: clearSuggestedSport
+        ? null
+        : (suggestedSport ?? this.suggestedSport),
+    validationStatus: clearValidationStatus
+        ? null
+        : (validationStatus ?? this.validationStatus),
+    cadenceSpm: clearCadenceSpm ? null : (cadenceSpm ?? this.cadenceSpm),
+  );
 
   factory Activity.fromJson(Map<String, dynamic> json) => Activity(
     id: json['id'] as String,
@@ -44,6 +95,9 @@ class Activity {
     durasiS: (json['durasi_s'] as num?)?.toInt(),
     jarakM: jsonToDouble(json['jarak_m']),
     challengeIds: _parseIdList(json['challenge_ids']),
+    suggestedSport: json['suggested_sport'] as String?,
+    validationStatus: json['validation_status'] as String?,
+    cadenceSpm: (json['cadence_spm'] as num?)?.toInt(),
   );
 
   Map<String, dynamic> toJson() => {
@@ -55,6 +109,9 @@ class Activity {
     'durasi_s': durasiS,
     'jarak_m': jarakM,
     if (challengeIds != null) 'challenge_ids': challengeIds,
+    if (suggestedSport != null) 'suggested_sport': suggestedSport,
+    if (validationStatus != null) 'validation_status': validationStatus,
+    if (cadenceSpm != null) 'cadence_spm': cadenceSpm,
   };
 }
 
@@ -307,6 +364,7 @@ RunMetrics computeRunMetrics({
   List<RutePoint> points = const [],
   double? weightKg,
   double? heightCm,
+  int? measuredCadenceSpm,
 }) {
   final weight = (weightKg != null && weightKg > 0) ? weightKg : 65.0;
   final height = (heightCm != null && heightCm > 0) ? heightCm : 170.0;
@@ -326,7 +384,20 @@ RunMetrics computeRunMetrics({
       caloriesKcal: calories,
       elevationGainM: elevation,
       stepLengthCm: 0,
-      cadenceSpm: 0,
+      cadenceSpm: measuredCadenceSpm ?? 0,
+    );
+  }
+
+  if (measuredCadenceSpm != null && measuredCadenceSpm > 0) {
+    final totalSteps = measuredCadenceSpm * (durasiS / 60.0);
+    final stepCm = totalSteps > 0
+        ? ((jarakM * 100.0) / totalSteps).clamp(40.0, 210.0)
+        : 0.0;
+    return RunMetrics(
+      caloriesKcal: calories,
+      elevationGainM: elevation,
+      stepLengthCm: stepCm,
+      cadenceSpm: measuredCadenceSpm.clamp(30, 240),
     );
   }
 

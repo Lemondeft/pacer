@@ -467,5 +467,190 @@ void main() {
         await tmpDir.delete(recursive: true);
       }
     });
+
+    test('upgrades v3 database to schema v4 and supports draft sport switch, validation metadata, and flagged challenge exclusion', () async {
+      sqfliteFfiInit();
+      final tmpDir = await Directory.systemTemp.createTemp('pacer_v3_upgrade_');
+      final dbPath = p.join(tmpDir.path, 'legacy_v3.db');
+      try {
+        final v3Db = await databaseFactoryFfi.openDatabase(
+          dbPath,
+          options: OpenDatabaseOptions(
+            version: 3,
+            onCreate: (db, _) async {
+              await db.execute('''
+                CREATE TABLE activities (
+                  id TEXT PRIMARY KEY,
+                  user_id TEXT NOT NULL,
+                  jenis TEXT NOT NULL,
+                  mulai_at TEXT NOT NULL,
+                  selesai_at TEXT,
+                  durasi_s INTEGER,
+                  jarak_m REAL,
+                  status TEXT NOT NULL,
+                  sync_state TEXT NOT NULL,
+                  statistik_applied INTEGER NOT NULL DEFAULT 0,
+                  challenge_ids_json TEXT,
+                  updated_at TEXT NOT NULL
+                )
+              ''');
+              await db.execute('''
+                CREATE TABLE route_points (
+                  aktivitas_id TEXT NOT NULL,
+                  urutan INTEGER NOT NULL,
+                  lat REAL NOT NULL,
+                  lng REAL NOT NULL,
+                  elevasi_m REAL,
+                  kecepatan_ms REAL,
+                  direkam_at TEXT,
+                  PRIMARY KEY (aktivitas_id, urutan)
+                )
+              ''');
+              await db.execute('''
+                CREATE TABLE challenges (
+                  user_id TEXT NOT NULL,
+                  id TEXT NOT NULL,
+                  dibuat_oleh TEXT,
+                  team_id TEXT,
+                  judul TEXT,
+                  jenis TEXT NOT NULL,
+                  target_nilai REAL NOT NULL,
+                  target_satuan TEXT NOT NULL,
+                  waktu_mulai TEXT,
+                  waktu_selesai TEXT,
+                  diumumkan INTEGER NOT NULL DEFAULT 0,
+                  created_at TEXT,
+                  updated_at TEXT NOT NULL,
+                  PRIMARY KEY (user_id, id)
+                )
+              ''');
+              await db.execute('''
+                CREATE TABLE challenge_participations (
+                  user_id TEXT NOT NULL,
+                  challenge_id TEXT NOT NULL,
+                  id TEXT NOT NULL,
+                  progress_nilai REAL NOT NULL DEFAULT 0,
+                  berhasil INTEGER NOT NULL DEFAULT 0,
+                  is_active INTEGER NOT NULL DEFAULT 0,
+                  created_at TEXT,
+                  sync_state TEXT NOT NULL DEFAULT 'synced',
+                  PRIMARY KEY (user_id, challenge_id)
+                )
+              ''');
+              await db.execute('''
+                CREATE TABLE sync_outbox (
+                  id TEXT PRIMARY KEY,
+                  user_id TEXT NOT NULL,
+                  op_type TEXT NOT NULL,
+                  entity_id TEXT NOT NULL,
+                  payload_json TEXT NOT NULL,
+                  created_at TEXT NOT NULL,
+                  attempt_count INTEGER NOT NULL DEFAULT 0,
+                  next_retry_at TEXT,
+                  last_error TEXT,
+                  status TEXT NOT NULL DEFAULT 'pending'
+                )
+              ''');
+            },
+          ),
+        );
+        await v3Db.insert('activities', {
+          'id': 'legacy-act-v3',
+          'user_id': 'u3',
+          'jenis': 'lari',
+          'mulai_at': '2026-11-15T06:00:00Z',
+          'selesai_at': '2026-11-15T06:20:00Z',
+          'durasi_s': 1200,
+          'jarak_m': 3500.0,
+          'status': 'finished',
+          'sync_state': 'synced',
+          'statistik_applied': 1,
+          'updated_at': '2026-11-15T06:20:00Z',
+        });
+        await v3Db.close();
+
+        final upgraded = await SqliteLocalStore.open(
+          factory: databaseFactoryFfi,
+          path: dbPath,
+        );
+        try {
+          final existing = await upgraded.getActivity('legacy-act-v3');
+          expect(existing, isNotNull);
+          expect(existing!.activity.validationStatus, isNull);
+
+          await upgraded.updateActivityValidation(
+            'legacy-act-v3',
+            jenis: 'bersepeda',
+            suggestedSport: null,
+            clearSuggestedSport: true,
+            validationStatus: 'reclassified',
+            cadenceSpm: 72,
+          );
+          final updated = await upgraded.getActivity('legacy-act-v3');
+          expect(updated?.activity.jenis, 'bersepeda');
+          expect(updated?.activity.validationStatus, 'reclassified');
+          expect(updated?.activity.cadenceSpm, 72);
+        } finally {
+          await upgraded.close();
+        }
+      } finally {
+        await tmpDir.delete(recursive: true);
+      }
+    });
+
+    test('persists draft sport switch, validation metadata, and excludes flagged runs from challenge progress', () async {
+      await store.saveDraftStart(
+        id: 'draft-v4',
+        userId: 'u3',
+        jenis: 'berjalan',
+        mulaiAt: DateTime.utc(2026, 11, 17, 6),
+      );
+      await store.updateDraftSport('draft-v4', 'bersepeda');
+      final draft = await store.loadActiveDraft('u3');
+      expect(draft?.jenis, 'bersepeda');
+
+      final c = Challenge(
+        id: 'chal-v4',
+        jenis: 'lari',
+        targetNilai: 5000,
+        targetSatuan: 'jarak_m',
+        diumumkan: true,
+      );
+      await store.saveChallenges('u3', [c]);
+      await store.queueJoinChallenge('u3', 'chal-v4');
+
+      final runStart = DateTime.now().toUtc().add(const Duration(seconds: 1));
+      await store.finalizeRunAtomic(
+        id: 'run-flagged-v4',
+        userId: 'u3',
+        jenis: 'lari',
+        mulaiAt: runStart,
+        selesaiAt: runStart.add(const Duration(minutes: 10)),
+        durasiS: 600,
+        jarakM: 2500.0,
+        allPoints: const [],
+        challengeIds: const ['chal-v4'],
+        suggestedSport: 'bersepeda',
+        validationStatus: 'flagged_ride',
+        cadenceSpm: 88,
+      );
+
+      final flaggedParts = await store.getParticipations('u3');
+      expect(flaggedParts.single.progressNilai, closeTo(0.0, 0.01));
+
+      await store.updateActivityValidation(
+        'run-flagged-v4',
+        jenis: 'lari',
+        validationStatus: 'reclassified',
+        clearSuggestedSport: true,
+      );
+      final reclassified = await store.getActivity('run-flagged-v4');
+      expect(reclassified?.activity.validationStatus, 'reclassified');
+      expect(reclassified?.activity.suggestedSport, isNull);
+      expect(reclassified?.activity.cadenceSpm, 88);
+
+      final unflaggedParts = await store.getParticipations('u3');
+      expect(unflaggedParts.single.progressNilai, closeTo(2500.0, 0.01));
+    });
   });
 }

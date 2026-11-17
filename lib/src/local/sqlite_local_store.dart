@@ -21,7 +21,7 @@ class SqliteLocalStore implements LocalStore {
 
   SqliteLocalStore._(this._db);
 
-  static const int schemaVersion = 3;
+  static const int schemaVersion = 4;
 
   /// Opens or creates the offline SQLite database at [path] (or
   /// `inMemoryDatabasePath` in tests) using the supplied [factory].
@@ -61,6 +61,26 @@ class SqliteLocalStore implements LocalStore {
               'INTEGER NOT NULL DEFAULT 1',
             );
             await _createNotificationsTable(db);
+          }
+          if (oldVersion < 4) {
+            await _addColumnIfMissing(
+              db,
+              'activities',
+              'suggested_sport',
+              'TEXT',
+            );
+            await _addColumnIfMissing(
+              db,
+              'activities',
+              'validation_status',
+              'TEXT',
+            );
+            await _addColumnIfMissing(
+              db,
+              'activities',
+              'cadence_spm',
+              'INTEGER',
+            );
           }
         },
       ),
@@ -108,6 +128,9 @@ class SqliteLocalStore implements LocalStore {
         durasi_s INTEGER,
         jarak_m REAL,
         challenge_ids_json TEXT,
+        suggested_sport TEXT,
+        validation_status TEXT,
+        cadence_spm INTEGER,
         status TEXT NOT NULL,
         sync_state TEXT NOT NULL,
         statistik_applied INTEGER NOT NULL DEFAULT 0,
@@ -593,6 +616,16 @@ class SqliteLocalStore implements LocalStore {
   }
 
   @override
+  Future<void> updateDraftSport(String id, String jenis) async {
+    await _db.update(
+      'activities',
+      {'jenis': jenis, 'updated_at': _nowIso()},
+      where: 'id = ? AND status = ?',
+      whereArgs: [id, 'draft'],
+    );
+  }
+
+  @override
   Future<ActiveDraftRun?> loadActiveDraft(String userId) async {
     final rows = await _db.query(
       'activities',
@@ -642,6 +675,9 @@ class SqliteLocalStore implements LocalStore {
     required double jarakM,
     required List<RutePoint> allPoints,
     List<String>? challengeIds,
+    String? suggestedSport,
+    String? validationStatus,
+    int? cadenceSpm,
   }) async {
     final activity = Activity(
       id: id,
@@ -652,6 +688,9 @@ class SqliteLocalStore implements LocalStore {
       durasiS: durasiS,
       jarakM: jarakM,
       challengeIds: challengeIds,
+      suggestedSport: suggestedSport,
+      validationStatus: validationStatus,
+      cadenceSpm: cadenceSpm,
     );
     await _db.transaction((txn) async {
       await txn.insert('activities', {
@@ -690,6 +729,63 @@ class SqliteLocalStore implements LocalStore {
       });
     });
     return activity;
+  }
+
+  @override
+  Future<LocalActivity?> getActivity(String id) async {
+    final rows = await _db.query(
+      'activities',
+      where: 'id = ?',
+      whereArgs: [id],
+      limit: 1,
+    );
+    return rows.isEmpty ? null : _localActivityFromRow(rows.first);
+  }
+
+  @override
+  Future<void> updateActivityValidation(
+    String id, {
+    String? jenis,
+    String? suggestedSport,
+    bool clearSuggestedSport = false,
+    String? validationStatus,
+    int? cadenceSpm,
+  }) async {
+    await _db.transaction((txn) async {
+      final rows = await txn.query(
+        'activities',
+        where: 'id = ?',
+        whereArgs: [id],
+        limit: 1,
+      );
+      if (rows.isEmpty) return;
+      final existing = _localActivityFromRow(rows.first).activity;
+      final updated = existing.copyWith(
+        jenis: jenis,
+        suggestedSport: suggestedSport,
+        clearSuggestedSport: clearSuggestedSport,
+        validationStatus: validationStatus,
+        cadenceSpm: cadenceSpm,
+      );
+      final patch = <String, Object?>{'updated_at': _nowIso()};
+      if (jenis != null) patch['jenis'] = jenis;
+      if (clearSuggestedSport) {
+        patch['suggested_sport'] = null;
+      } else if (suggestedSport != null) {
+        patch['suggested_sport'] = suggestedSport;
+      }
+      if (validationStatus != null) {
+        patch['validation_status'] = validationStatus;
+      }
+      if (cadenceSpm != null) patch['cadence_spm'] = cadenceSpm;
+      await txn.update('activities', patch, where: 'id = ?', whereArgs: [id]);
+      await txn.update(
+        'sync_outbox',
+        {'payload_json': jsonEncode(updated.toJson())},
+        where: 'op_type = ? AND entity_id = ? AND status = ?',
+        whereArgs: [OutboxOp.syncActivity, id, 'pending'],
+      );
+    });
   }
 
   @override

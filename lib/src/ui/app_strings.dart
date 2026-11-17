@@ -726,4 +726,80 @@ class S {
   static String get skipVersionCta =>
       _en ? 'Skip This Version' : 'Lewati Versi Ini';
   static String get laterCta => _en ? 'Later' : 'Nanti';
+
+  static String mismatchTitle(String suggestedJenis) => _en
+      ? 'Looks like ${sportName(suggestedJenis)}?'
+      : 'Terdeteksi ${sportName(suggestedJenis)}?';
+  static String mismatchSubtitle(String currentJenis, String suggestedJenis) =>
+      _en
+      ? 'Motion matches ${sportName(suggestedJenis)} better than ${sportName(currentJenis)}.'
+      : 'Pergerakan lebih cocok ${sportName(suggestedJenis)} daripada ${sportName(currentJenis)}.';
+  static String switchToSportCta(String suggestedJenis) => _en
+      ? 'Switch to ${sportName(suggestedJenis)}'
+      : 'Ubah ke ${sportName(suggestedJenis)}';
+  static String keepSportCta(String currentJenis) => _en
+      ? 'Keep ${sportName(currentJenis)}'
+      : 'Tetap ${sportName(currentJenis)}';
+  static String sportSwitchedNotice(String newJenis) => _en
+      ? 'Switched activity to ${sportName(newJenis)}'
+      : 'Aktivitas diubah ke ${sportName(newJenis)}';
+
+  static String get vehicleDetectedTitle => _en
+      ? 'Vehicle Speed Detected'
+      : 'Kecepatan Kendaraan Terdeteksi';
+  static String get vehicleDetectedSubtitle => _en
+      ? 'Speed exceeds athletic pace. Pause tracking while in a vehicle.'
+      : 'Kecepatan melebihi batas olahraga. Jeda saat berkendara.';
+  static String get pauseTrackingCta => _en ? 'Pause' : 'Jeda';
+  static String get dismissPromptCta => _en ? 'Ignore' : 'Abaikan';
+
+  static String validationBadgeLabel(
+    String? status, {
+    String? suggestedSport,
+  }) => switch (status) {
+    'flagged_vehicle' => _en ? 'Vehicle Flagged' : 'Kendaraan',
+    'flagged_ride' || 'flagged_mismatch' =>
+      suggestedSport != null
+          ? (_en
+              ? 'Check: ${sportName(suggestedSport)}'
+              : 'Cek: ${sportName(suggestedSport)}')
+          : (_en ? 'Mismatch' : 'Tidak Sesuai'),
+    'reclassified' => _en ? 'Reclassified' : 'Diubah Jenis',
+    _ => '',
+  };
+
+  static String finishMismatchTitle(String? suggestedJenis) =>
+      suggestedJenis != null
+      ? (_en
+            ? 'Looks like ${sportName(suggestedJenis)}'
+            : 'Terlihat seperti ${sportName(suggestedJenis)}')
+      : (_en ? 'Activity check flagged' : 'Aktivitas perlu ditinjau');
+
+  static String finishMismatchBody(
+    String currentJenis,
+    String? suggestedJenis,
+  ) => suggestedJenis != null
+      ? (_en
+            ? 'Motion matched ${sportName(suggestedJenis)} instead of ${sportName(currentJenis)}. Reclassify so stats and challenges stay accurate.'
+            : 'Sinyal gerak lebih cocok ${sportName(suggestedJenis)} daripada ${sportName(currentJenis)}. Ubah jenis agar statistik & tantangan akurat.')
+      : (_en
+            ? 'Speed or cadence diverged from ${sportName(currentJenis)}.'
+            : 'Kecepatan atau kadensi tidak sesuai dengan ${sportName(currentJenis)}.');
+
+  static String get finishVehicleTitle => _en
+      ? 'Excluded: Vehicle Detected'
+      : 'Dikecualikan: Terdeteksi Kendaraan';
+  static String get finishVehicleBody => _en
+      ? 'Motorized vehicle speed was detected, so this session is excluded from challenge progress and streaks.'
+      : 'Terdeteksi kecepatan kendaraan bermotor sehingga sesi ini dikecualikan dari progres tantangan dan streak.';
+  static String get deleteFlaggedActivityCta =>
+      _en ? 'Delete Activity' : 'Hapus Aktivitas';
+  static String get deleteFlaggedConfirmTitle => _en
+      ? 'Delete this flagged activity?'
+      : 'Hapus aktivitas yang ditandai ini?';
+  static String get deleteFlaggedConfirmBody => _en
+      ? 'This removes the activity from history and syncs deletion.'
+      : 'Aktivitas akan dihapus dari riwayat dan sinkronisasi.';
+  static String get flaggedActivityDeletedNotice =>
+      _en ? 'Activity deleted' : 'Aktivitas dihapus';
 }

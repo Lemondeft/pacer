@@ -1,3 +1,5 @@
+import 'dart:async' show unawaited;
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
@@ -16,6 +18,7 @@ import 'package:pacer/src/demo/pacer_dummy_data.dart';
 import 'package:pacer/src/leaderboard/leaderboard_model.dart';
 import 'package:pacer/src/leaderboard/leaderboard_repository.dart';
 import 'package:pacer/src/local/local_models.dart';
+import 'package:pacer/src/local/local_store.dart';
 import 'package:pacer/src/local/swr_helper.dart';
 import 'package:pacer/src/notifications/notification_model.dart';
 import 'package:pacer/src/notifications/notification_repository.dart';
@@ -23,6 +26,8 @@ import 'package:pacer/src/sync/connectivity_service.dart';
 import 'package:pacer/src/sync/sync_engine.dart';
 import 'package:pacer/src/teams/team_model.dart';
 import 'package:pacer/src/teams/team_repository.dart';
+import 'package:pacer/src/tracking/activity_classifier.dart'
+    show ActivityMismatch;
 import 'package:pacer/src/tracking/recorder.dart';
 import 'package:pacer/src/tracking/route_map.dart';
 import 'package:pacer/src/update/github_update_service.dart';
@@ -629,6 +634,7 @@ class RunTrackerScreen extends StatefulWidget {
   final String? goal;
   final ActiveDraftRun? initialDraft;
   final List<String>? initialChallengeIds;
+  final RunRecorder? recorder;
   const RunTrackerScreen({
     super.key,
     this.onBack,
@@ -636,6 +642,7 @@ class RunTrackerScreen extends StatefulWidget {
     this.goal,
     this.initialDraft,
     this.initialChallengeIds,
+    this.recorder,
   });
 
   @override
@@ -645,7 +652,7 @@ class RunTrackerScreen extends StatefulWidget {
 class _RunTrackerScreenState extends State<RunTrackerScreen> {
   // _running == true means the session is paused (shows LANJUTKAN+SELESAI);
   // _started gates the initial MULAI action.
-  late final RunRecorder _recorder = RunRecorder();
+  late final RunRecorder _recorder = widget.recorder ?? RunRecorder();
   bool _running = false;
   bool _started = false;
   bool _finished = false;
@@ -666,12 +673,17 @@ class _RunTrackerScreenState extends State<RunTrackerScreen> {
       _recorder.restoreDraft(draft);
       _started = true;
       _running = true;
+    } else if (_recorder.started) {
+      _started = true;
+      _running = !_recorder.recording;
     }
   }
 
   @override
   void dispose() {
-    _recorder.dispose();
+    if (widget.recorder == null) {
+      _recorder.dispose();
+    }
     super.dispose();
   }
 
@@ -798,8 +810,11 @@ class _RunTrackerScreenState extends State<RunTrackerScreen> {
       List<({Challenge challenge, PartisipasiChallenge participation})>
       eligible = const [];
       try {
+        final activeSport = _recorder.started
+            ? _recorder.jenis
+            : widget.sportType;
         eligible = await ChallengeRepository().eligibleActiveChallengesForSport(
-          widget.sportType,
+          activeSport,
         );
       } catch (_) {}
 
@@ -929,6 +944,14 @@ class _RunTrackerScreenState extends State<RunTrackerScreen> {
                     final hero = fluid(w, 72, 160);
                     final circle = fluid(w, 84, 112);
                     final scheme = PacerScheme.of(context);
+                    final activeSport = _recorder.started
+                        ? _recorder.jenis
+                        : widget.sportType;
+                    final mismatchBanner = _buildMismatchBanner(
+                      context,
+                      scheme,
+                      activeSport,
+                    );
                     Widget header = Padding(
                       padding: const EdgeInsets.fromLTRB(32, 12, 32, 0),
                       child: Row(
@@ -969,7 +992,7 @@ class _RunTrackerScreenState extends State<RunTrackerScreen> {
                               mainAxisSize: MainAxisSize.min,
                               children: [
                                 Icon(
-                                  switch (widget.sportType) {
+                                  switch (activeSport) {
                                     'bersepeda' => Icons.directions_bike,
                                     'joging' => Icons.directions_walk,
                                     'berjalan' => Icons.nordic_walking,
@@ -980,7 +1003,7 @@ class _RunTrackerScreenState extends State<RunTrackerScreen> {
                                 ),
                                 const SizedBox(width: 4),
                                 Text(
-                                  widget.sportType.toUpperCase(),
+                                  activeSport.toUpperCase(),
                                   style: GoogleFonts.spaceGrotesk(
                                     fontSize: 11,
                                     fontWeight: FontWeight.w700,
@@ -998,27 +1021,29 @@ class _RunTrackerScreenState extends State<RunTrackerScreen> {
                     );
                     Widget heroBlock = SizedBox(
                       width: double.infinity,
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          FittedBox(
-                            fit: BoxFit.scaleDown,
-                            child: Text(
-                              fmtKmNum(_recorder.distanceM),
-                              style: PacerText.giantNumOf(context, hero),
-                              textAlign: TextAlign.center,
-                            ),
+                      child: Center(
+                        child: FittedBox(
+                          fit: BoxFit.scaleDown,
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Text(
+                                fmtKmNum(_recorder.distanceM),
+                                style: PacerText.giantNumOf(context, hero),
+                                textAlign: TextAlign.center,
+                              ),
+                              Text(
+                                S.distanceKm,
+                                style: TextStyle(
+                                  fontWeight: FontWeight.w300,
+                                  fontSize: 15,
+                                  color: scheme.overlay,
+                                ),
+                              ),
+                            ],
                           ),
-                          Text(
-                            S.distanceKm,
-                            style: TextStyle(
-                              fontWeight: FontWeight.w300,
-                              fontSize: 15,
-                              color: scheme.overlay,
-                            ),
-                          ),
-                        ],
+                        ),
                       ),
                     );
                     final livePace = _recorder.paceSecPerKm;
@@ -1027,7 +1052,7 @@ class _RunTrackerScreenState extends State<RunTrackerScreen> {
                         ? "0'00''"
                         : "${paceSecs ~/ 60}'${(paceSecs % 60).toString().padLeft(2, '0')}\"";
                     final kcal = estimateCaloriesKcal(
-                      jenis: widget.sportType,
+                      jenis: activeSport,
                       durasiS: _recorder.elapsed.inSeconds,
                       jarakM: _recorder.distanceM,
                     );
@@ -1136,6 +1161,7 @@ class _RunTrackerScreenState extends State<RunTrackerScreen> {
                             paceText: paceText,
                             kcal: kcal,
                           ),
+                          mismatchBanner,
                           // Non-blocking spacer lets pan/zoom gestures pass to RouteMap.
                           const Expanded(
                             child: IgnorePointer(child: SizedBox.expand()),
@@ -1150,6 +1176,7 @@ class _RunTrackerScreenState extends State<RunTrackerScreen> {
                       return Column(
                         children: [
                           header,
+                          mismatchBanner,
                           Expanded(
                             child: Row(
                               children: [
@@ -1176,6 +1203,7 @@ class _RunTrackerScreenState extends State<RunTrackerScreen> {
                     return Column(
                       children: [
                         header,
+                        mismatchBanner,
                         Expanded(child: heroBlock),
                         stats,
                         const SizedBox(height: 24),
@@ -1271,6 +1299,146 @@ class _RunTrackerScreenState extends State<RunTrackerScreen> {
       ),
     );
   }
+
+  Widget _buildMismatchBanner(
+    BuildContext context,
+    PacerScheme scheme,
+    String activeSport,
+  ) {
+    final ActivityMismatch? mismatch = _recorder.activeMismatch;
+    if (mismatch == null) return const SizedBox.shrink();
+    final isVehicle = mismatch.isVehicleDetected;
+    final suggested = mismatch.suggestedJenis;
+    if (!isVehicle && suggested == null) return const SizedBox.shrink();
+
+    final Color accent = isVehicle
+        ? PacerColors.errorRed
+        : PacerColors.streakAmber;
+    final IconData icon = isVehicle
+        ? Icons.directions_car_filled_outlined
+        : Icons.swap_horiz_rounded;
+    final String title = isVehicle
+        ? S.vehicleDetectedTitle
+        : S.mismatchTitle(suggested!);
+    final String subtitle = isVehicle
+        ? S.vehicleDetectedSubtitle
+        : S.mismatchSubtitle(activeSport, suggested!);
+
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 10, 20, 0),
+      child: Center(
+        child: ConstrainedBox(
+          constraints: const BoxConstraints(maxWidth: 560),
+          child: PacerSurface(
+            radius: PacerRadii.lg,
+            color: scheme.card.withValues(alpha: 0.96),
+            borderColor: accent.withValues(alpha: 0.55),
+            padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  children: [
+                    Icon(icon, size: 18, color: accent),
+                    const SizedBox(width: 8),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            title,
+                            style: TextStyle(
+                              fontSize: 13,
+                              fontWeight: FontWeight.w700,
+                              color: scheme.ink,
+                            ),
+                          ),
+                          Text(
+                            subtitle,
+                            style: TextStyle(
+                              fontSize: 11.5,
+                              color: scheme.soft,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 6),
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: Wrap(
+                    spacing: 8,
+                    runSpacing: 4,
+                    children: [
+                      TextButton(
+                        style: TextButton.styleFrom(
+                          minimumSize: const Size(0, 32),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 10,
+                            vertical: 4,
+                          ),
+                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                        ),
+                        onPressed: _recorder.dismissMismatchPrompt,
+                        child: Text(
+                          isVehicle
+                              ? S.dismissPromptCta
+                              : S.keepSportCta(activeSport),
+                          style: TextStyle(fontSize: 12, color: scheme.soft),
+                        ),
+                      ),
+                      FilledButton(
+                        style: FilledButton.styleFrom(
+                          backgroundColor: accent,
+                          foregroundColor: Colors.white,
+                          minimumSize: const Size(0, 32),
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 12,
+                            vertical: 4,
+                          ),
+                          tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                        ),
+                        onPressed: () async {
+                          if (isVehicle) {
+                            _pause();
+                            _recorder.dismissMismatchPrompt();
+                            return;
+                          }
+                          final target = suggested!;
+                          await _recorder.switchSport(target);
+                          if (context.mounted) {
+                            ScaffoldMessenger.of(context)
+                              ..hideCurrentSnackBar()
+                              ..showSnackBar(
+                                SnackBar(
+                                  content: Text(S.sportSwitchedNotice(target)),
+                                ),
+                              );
+                          }
+                        },
+                        child: Text(
+                          isVehicle
+                              ? S.pauseTrackingCta
+                              : S.switchToSportCta(suggested!),
+                          style: const TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      ),
+    );
+  }
 }
 
 class _RouteGridPainter extends CustomPainter {
@@ -1325,6 +1493,9 @@ class _RunFinishScreenState extends State<RunFinishScreen> {
   Future<UserProfile?>? _profileFuture;
   Future<List<({Challenge challenge, PartisipasiChallenge participation})>>?
   _appliedChallengesFuture;
+  LocalActivity? _liveLocalActivity;
+  bool _mutating = false;
+  bool _changed = false;
 
   @override
   void initState() {
@@ -1332,6 +1503,7 @@ class _RunFinishScreenState extends State<RunFinishScreen> {
     _routeFuture = _loadRoute();
     _profileFuture = _loadProfile();
     _appliedChallengesFuture = _loadAppliedChallenges();
+    unawaited(_loadLiveActivity());
   }
 
   @override
@@ -1343,6 +1515,87 @@ class _RunFinishScreenState extends State<RunFinishScreen> {
     }
     if (widget.summary?.challengeIds != oldWidget.summary?.challengeIds) {
       _appliedChallengesFuture = _loadAppliedChallenges();
+    }
+    if (widget.aktivitasId != oldWidget.aktivitasId ||
+        widget.summary?.aktivitasId != oldWidget.summary?.aktivitasId) {
+      unawaited(_loadLiveActivity());
+    }
+  }
+
+  Future<void> _loadLiveActivity() async {
+    final id = widget.aktivitasId ?? widget.summary?.aktivitasId;
+    if (id == null || id.isEmpty) return;
+    try {
+      final local = await LocalStore.instance.getActivity(id);
+      if (mounted && local != null) {
+        setState(() => _liveLocalActivity = local);
+      }
+    } catch (_) {}
+  }
+
+  Future<void> _reclassifyActivity(String id, String newJenis) async {
+    if (_mutating) return;
+    setState(() => _mutating = true);
+    try {
+      final updated = await ActivityRepository().reclassifySport(
+        aktivitasId: id,
+        newJenis: newJenis,
+      );
+      if (!mounted) return;
+      setState(() {
+        _liveLocalActivity = updated ?? _liveLocalActivity;
+        _changed = true;
+        _appliedChallengesFuture = _loadAppliedChallenges();
+      });
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(
+          SnackBar(content: Text(S.sportSwitchedNotice(newJenis))),
+        );
+    } finally {
+      if (mounted) setState(() => _mutating = false);
+    }
+  }
+
+  Future<void> _deleteFlaggedActivity(String id) async {
+    if (_mutating) return;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(S.deleteFlaggedConfirmTitle),
+        content: Text(S.deleteFlaggedConfirmBody),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: Text(MaterialLocalizations.of(ctx).cancelButtonLabel),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(
+              backgroundColor: PacerColors.errorRed,
+              foregroundColor: Colors.white,
+            ),
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: Text(S.deleteFlaggedActivityCta),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    setState(() => _mutating = true);
+    try {
+      await ActivityRepository().deleteActivity(id);
+      if (!mounted) return;
+      _changed = true;
+      ScaffoldMessenger.of(context)
+        ..hideCurrentSnackBar()
+        ..showSnackBar(SnackBar(content: Text(S.flaggedActivityDeletedNotice)));
+      if (widget.onBack != null) {
+        widget.onBack!();
+      } else {
+        Navigator.of(context).pop(true);
+      }
+    } finally {
+      if (mounted) setState(() => _mutating = false);
     }
   }
 
@@ -1398,7 +1651,7 @@ class _RunFinishScreenState extends State<RunFinishScreen> {
     if (widget.onBack != null) {
       widget.onBack!();
     } else {
-      Navigator.of(context).maybePop();
+      Navigator.of(context).maybePop(_changed);
     }
   }
 
@@ -1422,6 +1675,7 @@ class _RunFinishScreenState extends State<RunFinishScreen> {
       points: routePts,
       weightKg: profile?.beratKg,
       heightCm: profile?.tinggiCm,
+      measuredCadenceSpm: summary.cadenceSpm,
     );
     return [
       (
@@ -1446,13 +1700,181 @@ class _RunFinishScreenState extends State<RunFinishScreen> {
     ];
   }
 
+  Widget _buildVerificationBanner(
+    BuildContext context,
+    PacerScheme scheme, {
+    required String? activityId,
+    required String jenis,
+    required String? status,
+    required String? suggestedSport,
+  }) {
+    if (status == null ||
+        status.isEmpty ||
+        status == 'verified' ||
+        status == 'pending') {
+      return const SizedBox.shrink();
+    }
+    if (status == 'reclassified') {
+      return Padding(
+        padding: const EdgeInsets.only(top: 14),
+        child: PacerSurface(
+          radius: PacerRadii.md,
+          color: PacerColors.chipGreen.withValues(alpha: 0.1),
+          borderColor: PacerColors.chipGreen.withValues(alpha: 0.45),
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+          child: Row(
+            children: [
+              const Icon(
+                Icons.check_circle_outline,
+                size: 18,
+                color: PacerColors.chipGreen,
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: Text(
+                  S.validationBadgeLabel('reclassified'),
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: scheme.ink,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
+    }
+
+    final isVehicle = status == 'flagged_vehicle';
+    final Color accent = isVehicle
+        ? PacerColors.errorRed
+        : PacerColors.streakAmber;
+    final IconData icon = isVehicle
+        ? Icons.directions_car_filled_outlined
+        : Icons.warning_amber_rounded;
+    final String title = isVehicle
+        ? S.finishVehicleTitle
+        : S.finishMismatchTitle(suggestedSport);
+    final String body = isVehicle
+        ? S.finishVehicleBody
+        : S.finishMismatchBody(jenis, suggestedSport);
+
+    final bool canAct = activityId != null && activityId.isNotEmpty;
+
+    return Padding(
+      padding: const EdgeInsets.only(top: 14),
+      child: PacerSurface(
+        radius: PacerRadii.lg,
+        color: accent.withValues(alpha: 0.1),
+        borderColor: accent.withValues(alpha: 0.55),
+        padding: const EdgeInsets.all(14),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Icon(icon, size: 20, color: accent),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        title,
+                        style: TextStyle(
+                          fontSize: 14,
+                          fontWeight: FontWeight.w700,
+                          color: scheme.ink,
+                        ),
+                      ),
+                      const SizedBox(height: 3),
+                      Text(
+                        body,
+                        style: TextStyle(fontSize: 12.5, color: scheme.soft),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            if (canAct && (isVehicle || suggestedSport != null)) ...[
+              const SizedBox(height: 10),
+              Align(
+                alignment: Alignment.centerRight,
+                child: FilledButton(
+                  style: FilledButton.styleFrom(
+                    backgroundColor: accent,
+                    foregroundColor: Colors.white,
+                  ),
+                  onPressed: _mutating
+                      ? null
+                      : () => isVehicle
+                            ? _deleteFlaggedActivity(activityId)
+                            : _reclassifyActivity(activityId, suggestedSport!),
+                  child: Text(
+                    isVehicle
+                        ? S.deleteFlaggedActivityCta
+                        : S.switchToSportCta(suggestedSport!),
+                  ),
+                ),
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final scheme = PacerScheme.of(context);
-    final summary = widget.summary;
+    final liveAct = _liveLocalActivity?.activity;
+    final baseSummary = widget.summary;
+    final effectiveJenis = liveAct?.jenis ?? baseSummary?.jenis ?? 'lari';
+    final effectiveStatus =
+        liveAct?.validationStatus ?? baseSummary?.validationStatus;
+    final effectiveSuggested =
+        liveAct?.suggestedSport ?? baseSummary?.suggestedSport;
+    final effectiveCadence = liveAct?.cadenceSpm ?? baseSummary?.cadenceSpm;
+    final effectiveActivityId =
+        widget.aktivitasId ?? baseSummary?.aktivitasId ?? liveAct?.id;
+    final summary = baseSummary == null
+        ? (liveAct == null
+              ? null
+              : RunSummary(
+                  aktivitasId: liveAct.id,
+                  jenis: liveAct.jenis,
+                  jarakM: liveAct.jarakM ?? 0,
+                  durasiS: liveAct.durasiS ?? 0,
+                  pointCount: 0,
+                  challengeIds: liveAct.challengeIds ?? const [],
+                  suggestedSport: effectiveSuggested,
+                  validationStatus: effectiveStatus,
+                  cadenceSpm: effectiveCadence,
+                ))
+        : RunSummary(
+            aktivitasId: baseSummary.aktivitasId,
+            jenis: effectiveJenis,
+            jarakM: baseSummary.jarakM,
+            durasiS: baseSummary.durasiS,
+            pointCount: baseSummary.pointCount,
+            anchorLat: baseSummary.anchorLat,
+            anchorLng: baseSummary.anchorLng,
+            points: baseSummary.points,
+            challengeIds: baseSummary.challengeIds,
+            suggestedSport: effectiveSuggested,
+            validationStatus: effectiveStatus,
+            cadenceSpm: effectiveCadence,
+          );
+    final displayTitle = _changed && liveAct != null
+        ? '${S.sportName(liveAct.jenis)} ${fmtDate(liveAct.mulaiAt)}'.trim()
+        : (widget.title ??
+              (liveAct != null ? S.sportName(liveAct.jenis) : S.running));
     final hasInlinePts = summary?.points.isNotEmpty ?? false;
     final hasLookupId =
-        widget.aktivitasId != null && widget.aktivitasId!.isNotEmpty;
+        effectiveActivityId != null && effectiveActivityId.isNotEmpty;
     final initialRouteData = hasInlinePts
         ? summary!.points
         : (!hasLookupId ? const <RutePoint>[] : null);
@@ -1464,10 +1886,14 @@ class _RunFinishScreenState extends State<RunFinishScreen> {
         : (widget.isHistoryDetail ? "5'00\"" : "0'00\"");
 
     return PopScope(
-      canPop: widget.onBack == null,
+      canPop: widget.onBack == null && !_changed,
       onPopInvokedWithResult: (didPop, _) {
         if (didPop) return;
-        widget.onBack?.call();
+        if (widget.onBack != null) {
+          widget.onBack!();
+        } else {
+          Navigator.of(context).pop(true);
+        }
       },
       child: Scaffold(
         body: Stack(
@@ -1527,7 +1953,7 @@ class _RunFinishScreenState extends State<RunFinishScreen> {
                         ),
                         const SizedBox(height: 12),
                         Text(
-                          widget.title ?? S.running,
+                          displayTitle,
                           style: TextStyle(fontSize: 24, color: scheme.ink),
                         ),
                         const SizedBox(height: 20),
@@ -1584,6 +2010,14 @@ class _RunFinishScreenState extends State<RunFinishScreen> {
                               ? fmtDurasi(summary.durasiS)
                               : (widget.isHistoryDetail ? '15.00' : '00.00'),
                           pace: paceText,
+                        ),
+                        _buildVerificationBanner(
+                          context,
+                          scheme,
+                          activityId: effectiveActivityId,
+                          jenis: effectiveJenis,
+                          status: effectiveStatus,
+                          suggestedSport: effectiveSuggested,
                         ),
                         const SizedBox(height: 18),
                         FutureBuilder<UserProfile?>(
@@ -4280,22 +4714,30 @@ class HistoryScreenState extends State<HistoryScreen> {
   Widget _activityCard(LocalActivity item) {
     final a = item.activity;
     return GestureDetector(
-      onTap: () => Navigator.of(context).push(
-        MaterialPageRoute(
-          builder: (_) => RunFinishScreen(
-            title: '${S.sportName(a.jenis)} ${fmtDate(a.mulaiAt)}'.trim(),
-            isHistoryDetail: true,
-            aktivitasId: a.id,
-            summary: RunSummary(
+      onTap: () async {
+        final changed = await Navigator.of(context).push<bool>(
+          MaterialPageRoute(
+            builder: (_) => RunFinishScreen(
+              title: '${S.sportName(a.jenis)} ${fmtDate(a.mulaiAt)}'.trim(),
+              isHistoryDetail: true,
               aktivitasId: a.id,
-              jenis: a.jenis,
-              jarakM: a.jarakM ?? 0,
-              durasiS: a.durasiS ?? 0,
-              pointCount: 0,
+              summary: RunSummary(
+                aktivitasId: a.id,
+                jenis: a.jenis,
+                jarakM: a.jarakM ?? 0,
+                durasiS: a.durasiS ?? 0,
+                pointCount: 0,
+                suggestedSport: a.suggestedSport,
+                validationStatus: a.validationStatus,
+                cadenceSpm: a.cadenceSpm,
+              ),
             ),
           ),
-        ),
-      ),
+        );
+        if (changed == true && mounted) {
+          setState(() => _future = _load());
+        }
+      },
       child: RunSessionCard(
         title: S.sportName(a.jenis),
         date: fmtDate(a.mulaiAt),
@@ -4303,6 +4745,8 @@ class HistoryScreenState extends State<HistoryScreen> {
         pace: fmtPace(a.durasiS, a.jarakM),
         distance: fmtKm(a.jarakM),
         syncState: _isDemo ? null : item.syncState,
+        validationStatus: a.validationStatus,
+        suggestedSport: a.suggestedSport,
       ),
     );
   }
@@ -8532,6 +8976,10 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
       case 'role_updated':
       case 'team_role':
         return (Icons.groups_outlined, PacerColors.lime);
+      case 'sport_reclassification_suggested':
+        return (Icons.swap_horiz_rounded, PacerColors.streakAmber);
+      case 'vehicle_activity_flagged':
+        return (Icons.directions_car_filled_outlined, PacerColors.errorRed);
       default:
         return (Icons.notifications_active, PacerColors.lime);
     }

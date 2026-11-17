@@ -189,6 +189,19 @@ class MemoryLocalStore implements LocalStore {
   }
 
   @override
+  Future<void> updateDraftSport(String id, String jenis) async {
+    final existing = _activities[id];
+    if (existing == null || existing.status != RunStatus.draft) return;
+    _activities[id] = LocalActivity(
+      activity: existing.activity.copyWith(jenis: jenis),
+      status: existing.status,
+      syncState: existing.syncState,
+      statistikApplied: existing.statistikApplied,
+      updatedAt: DateTime.now().toUtc(),
+    );
+  }
+
+  @override
   Future<ActiveDraftRun?> loadActiveDraft(String userId) async {
     final drafts =
         _activities.values
@@ -232,6 +245,9 @@ class MemoryLocalStore implements LocalStore {
     required double jarakM,
     required List<RutePoint> allPoints,
     List<String>? challengeIds,
+    String? suggestedSport,
+    String? validationStatus,
+    int? cadenceSpm,
   }) async {
     final activity = Activity(
       id: id,
@@ -242,6 +258,9 @@ class MemoryLocalStore implements LocalStore {
       durasiS: durasiS,
       jarakM: jarakM,
       challengeIds: challengeIds,
+      suggestedSport: suggestedSport,
+      validationStatus: validationStatus,
+      cadenceSpm: cadenceSpm,
     );
     _activities[id] = LocalActivity(
       activity: activity,
@@ -261,6 +280,55 @@ class MemoryLocalStore implements LocalStore {
       payload: activity.toJson(),
     );
     return activity;
+  }
+
+  @override
+  Future<LocalActivity?> getActivity(String id) async => _activities[id];
+
+  @override
+  Future<void> updateActivityValidation(
+    String id, {
+    String? jenis,
+    String? suggestedSport,
+    bool clearSuggestedSport = false,
+    String? validationStatus,
+    int? cadenceSpm,
+  }) async {
+    final existing = _activities[id];
+    if (existing == null) return;
+    final updated = existing.activity.copyWith(
+      jenis: jenis,
+      suggestedSport: suggestedSport,
+      clearSuggestedSport: clearSuggestedSport,
+      validationStatus: validationStatus,
+      cadenceSpm: cadenceSpm,
+    );
+    _activities[id] = LocalActivity(
+      activity: updated,
+      status: existing.status,
+      syncState: existing.syncState,
+      statistikApplied: existing.statistikApplied,
+      updatedAt: DateTime.now().toUtc(),
+    );
+    for (var i = 0; i < _outbox.length; i++) {
+      final item = _outbox[i];
+      if (item.opType == OutboxOp.syncActivity &&
+          item.entityId == id &&
+          item.status == SyncState.pending) {
+        _outbox[i] = OutboxItem(
+          id: item.id,
+          userId: item.userId,
+          opType: item.opType,
+          entityId: item.entityId,
+          payload: updated.toJson(),
+          status: item.status,
+          attempts: item.attempts,
+          nextRetryAt: item.nextRetryAt,
+          lastError: item.lastError,
+          createdAt: item.createdAt,
+        );
+      }
+    }
   }
 
   @override
