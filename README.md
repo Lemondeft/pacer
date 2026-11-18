@@ -85,3 +85,6 @@ git clone [https://github.com/Lemondeft/pacer.git](https://github.com/Lemondeft/
 cd pacer
 flutter pub get
 cp .env.example .env
+
+```
+basically, clone this repo and setup your own supabase server.
