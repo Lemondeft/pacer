@@ -11,6 +11,7 @@ import 'package:pacer/src/leaderboard/leaderboard_model.dart';
 import 'package:pacer/src/local/local_helpers.dart';
 import 'package:pacer/src/local/local_models.dart';
 import 'package:pacer/src/local/local_store.dart';
+import 'package:pacer/src/local/swr_helper.dart' show isDemoUserId;
 import 'package:pacer/src/notifications/notification_model.dart';
 import 'package:pacer/src/teams/team_model.dart';
 
@@ -21,7 +22,7 @@ class SqliteLocalStore implements LocalStore {
 
   SqliteLocalStore._(this._db);
 
-  static const int schemaVersion = 4;
+  static const int schemaVersion = 5;
 
   /// Opens or creates the offline SQLite database at [path] (or
   /// `inMemoryDatabasePath` in tests) using the supplied [factory].
@@ -82,6 +83,14 @@ class SqliteLocalStore implements LocalStore {
               'INTEGER',
             );
           }
+          if (oldVersion < 5) {
+            await _addColumnIfMissing(
+              db,
+              'activities',
+              'os_motion_summary_json',
+              'TEXT',
+            );
+          }
         },
       ),
     );
@@ -131,6 +140,7 @@ class SqliteLocalStore implements LocalStore {
         suggested_sport TEXT,
         validation_status TEXT,
         cadence_spm INTEGER,
+        os_motion_summary_json TEXT,
         status TEXT NOT NULL,
         sync_state TEXT NOT NULL,
         statistik_applied INTEGER NOT NULL DEFAULT 0,
@@ -396,6 +406,84 @@ class SqliteLocalStore implements LocalStore {
   }
 
   @override
+  Future<void> wipeUserData(String userId) async {
+    await _db.transaction((txn) async {
+      final actRows = await txn.query(
+        'activities',
+        columns: ['id'],
+        where: 'user_id = ?',
+        whereArgs: [userId],
+      );
+      for (final row in actRows) {
+        final actId = row['id'] as String;
+        await txn.delete(
+          'route_points',
+          where: 'aktivitas_id = ?',
+          whereArgs: [actId],
+        );
+        await txn.delete(
+          'sync_meta',
+          where: 'cache_key = ?',
+          whereArgs: ['ts_route_$actId'],
+        );
+      }
+      await txn.delete('activities', where: 'user_id = ?', whereArgs: [userId]);
+      await txn.delete('statistik', where: 'user_id = ?', whereArgs: [userId]);
+      await txn.delete('streaks', where: 'user_id = ?', whereArgs: [userId]);
+      await txn.delete('teams', where: 'user_id = ?', whereArgs: [userId]);
+      await txn.delete(
+        'team_rosters',
+        where: 'owner_user_id = ?',
+        whereArgs: [userId],
+      );
+      await txn.delete('challenges', where: 'user_id = ?', whereArgs: [userId]);
+      await txn.delete(
+        'challenge_participations',
+        where: 'user_id = ?',
+        whereArgs: [userId],
+      );
+      await txn.delete(
+        'user_notifications',
+        where: 'user_id = ?',
+        whereArgs: [userId],
+      );
+      await txn.delete('leaderboards', where: 'user_id = ?', whereArgs: [userId]);
+      await txn.delete(
+        'leaderboard_entries',
+        where: 'owner_user_id = ?',
+        whereArgs: [userId],
+      );
+      await txn.delete(
+        'leaderboard_scopes',
+        where: 'user_id = ?',
+        whereArgs: [userId],
+      );
+      await txn.delete(
+        'chat_messages',
+        where: 'owner_user_id = ?',
+        whereArgs: [userId],
+      );
+      await txn.delete(
+        'coach_rows_cache',
+        where: 'user_id = ?',
+        whereArgs: [userId],
+      );
+      await txn.delete('sync_outbox', where: 'user_id = ?', whereArgs: [userId]);
+      await txn.delete('profiles', where: 'id = ?', whereArgs: [userId]);
+      await txn.delete(
+        'sync_meta',
+        where: 'instr(cache_key, ?) > 0',
+        whereArgs: [userId],
+      );
+      await txn.delete(
+        'sync_meta',
+        where: 'cache_key = ? AND value = ?',
+        whereArgs: ['last_user_id', userId],
+      );
+    });
+  }
+
+  @override
   Future<UserProfile?> getProfile(String userId) async {
     final rows = await _db.query(
       'profiles',
@@ -486,39 +574,41 @@ class SqliteLocalStore implements LocalStore {
         'updated_at': _nowIso(),
       }, conflictAlgorithm: ConflictAlgorithm.replace);
 
-      final outboxRows = await txn.query(
-        'sync_outbox',
-        where: 'user_id = ? AND op_type = ? AND status = ?',
-        whereArgs: [userId, OutboxOp.updateProfile, 'pending'],
-        orderBy: 'id DESC',
-        limit: 1,
-      );
-      if (outboxRows.isNotEmpty) {
-        final prev = outboxRows.first;
-        final prevMap = Map<String, dynamic>.from(
-          jsonDecode(prev['payload_json'] as String) as Map,
-        );
-        await txn.update(
+      if (!isDemoUserId(userId)) {
+        final outboxRows = await txn.query(
           'sync_outbox',
-          {
-            'payload_json': jsonEncode({...prevMap, ...patch}),
-            'attempts': 0,
-            'next_retry_at': null,
-            'last_error': null,
-          },
-          where: 'id = ?',
-          whereArgs: [prev['id']],
+          where: 'user_id = ? AND op_type = ? AND status = ?',
+          whereArgs: [userId, OutboxOp.updateProfile, 'pending'],
+          orderBy: 'id DESC',
+          limit: 1,
         );
-      } else {
-        await txn.insert('sync_outbox', {
-          'user_id': userId,
-          'op_type': OutboxOp.updateProfile,
-          'entity_id': userId,
-          'payload_json': jsonEncode(patch),
-          'status': 'pending',
-          'attempts': 0,
-          'created_at': _nowIso(),
-        });
+        if (outboxRows.isNotEmpty) {
+          final prev = outboxRows.first;
+          final prevMap = Map<String, dynamic>.from(
+            jsonDecode(prev['payload_json'] as String) as Map,
+          );
+          await txn.update(
+            'sync_outbox',
+            {
+              'payload_json': jsonEncode({...prevMap, ...patch}),
+              'attempts': 0,
+              'next_retry_at': null,
+              'last_error': null,
+            },
+            where: 'id = ?',
+            whereArgs: [prev['id']],
+          );
+        } else {
+          await txn.insert('sync_outbox', {
+            'user_id': userId,
+            'op_type': OutboxOp.updateProfile,
+            'entity_id': userId,
+            'payload_json': jsonEncode(patch),
+            'status': 'pending',
+            'attempts': 0,
+            'created_at': _nowIso(),
+          });
+        }
       }
     });
   }
@@ -546,20 +636,22 @@ class SqliteLocalStore implements LocalStore {
           whereArgs: [userId],
         );
       }
-      await txn.delete(
-        'sync_outbox',
-        where: 'user_id = ? AND op_type = ? AND status = ?',
-        whereArgs: [userId, OutboxOp.updateLanguage, 'pending'],
-      );
-      await txn.insert('sync_outbox', {
-        'user_id': userId,
-        'op_type': OutboxOp.updateLanguage,
-        'entity_id': userId,
-        'payload_json': jsonEncode({'language': langCode}),
-        'status': 'pending',
-        'attempts': 0,
-        'created_at': _nowIso(),
-      });
+      if (!isDemoUserId(userId)) {
+        await txn.delete(
+          'sync_outbox',
+          where: 'user_id = ? AND op_type = ? AND status = ?',
+          whereArgs: [userId, OutboxOp.updateLanguage, 'pending'],
+        );
+        await txn.insert('sync_outbox', {
+          'user_id': userId,
+          'op_type': OutboxOp.updateLanguage,
+          'entity_id': userId,
+          'payload_json': jsonEncode({'language': langCode}),
+          'status': 'pending',
+          'attempts': 0,
+          'created_at': _nowIso(),
+        });
+      }
     });
   }
 
@@ -678,6 +770,7 @@ class SqliteLocalStore implements LocalStore {
     String? suggestedSport,
     String? validationStatus,
     int? cadenceSpm,
+    Map<String, dynamic>? osMotionSummary,
   }) async {
     final activity = Activity(
       id: id,
@@ -691,6 +784,7 @@ class SqliteLocalStore implements LocalStore {
       suggestedSport: suggestedSport,
       validationStatus: validationStatus,
       cadenceSpm: cadenceSpm,
+      osMotionSummary: osMotionSummary,
     );
     await _db.transaction((txn) async {
       await txn.insert('activities', {
@@ -713,20 +807,22 @@ class SqliteLocalStore implements LocalStore {
         await batch.commit(noResult: true);
       }
 
-      await txn.delete(
-        'sync_outbox',
-        where: 'op_type = ? AND entity_id = ?',
-        whereArgs: [OutboxOp.syncActivity, id],
-      );
-      await txn.insert('sync_outbox', {
-        'user_id': userId,
-        'op_type': OutboxOp.syncActivity,
-        'entity_id': id,
-        'payload_json': jsonEncode(activity.toJson()),
-        'status': 'pending',
-        'attempts': 0,
-        'created_at': _nowIso(),
-      });
+      if (!isDemoUserId(userId)) {
+        await txn.delete(
+          'sync_outbox',
+          where: 'op_type = ? AND entity_id = ?',
+          whereArgs: [OutboxOp.syncActivity, id],
+        );
+        await txn.insert('sync_outbox', {
+          'user_id': userId,
+          'op_type': OutboxOp.syncActivity,
+          'entity_id': id,
+          'payload_json': jsonEncode(activity.toJson()),
+          'status': 'pending',
+          'attempts': 0,
+          'created_at': _nowIso(),
+        });
+      }
     });
     return activity;
   }
@@ -883,12 +979,15 @@ class SqliteLocalStore implements LocalStore {
     await _db.transaction((txn) async {
       final exists = await txn.query(
         'activities',
-        columns: ['id'],
+        columns: ['id', 'sync_state'],
         where: 'id = ?',
         whereArgs: [aktivitasId],
         limit: 1,
       );
       if (exists.isEmpty) return;
+      final syncState = exists.first['sync_state'] as String?;
+      // Never wipe unsynced local route points with an empty remote list.
+      if (points.isEmpty && syncState != 'synced') return;
       await txn.delete(
         'route_points',
         where: 'aktivitas_id = ?',
@@ -1409,30 +1508,32 @@ class SqliteLocalStore implements LocalStore {
       }, conflictAlgorithm: ConflictAlgorithm.replace);
       await _applyActivationSlotTxn(txn, userId, challengeId);
 
-      await txn.delete(
-        'sync_outbox',
-        where: 'user_id = ? AND entity_id = ? AND op_type IN (?, ?) AND status = ?',
-        whereArgs: [
-          userId,
-          challengeId,
-          OutboxOp.joinChallenge,
-          OutboxOp.leaveChallenge,
-          'pending',
-        ],
-      );
-      await txn.insert('sync_outbox', {
-        'user_id': userId,
-        'op_type': OutboxOp.joinChallenge,
-        'entity_id': challengeId,
-        'payload_json': jsonEncode({
-          'id': p.id,
-          'challenge_id': challengeId,
-          'created_at': p.createdAt!.toIso8601String(),
-        }),
-        'status': 'pending',
-        'attempts': 0,
-        'created_at': _nowIso(),
-      });
+      if (!isDemoUserId(userId)) {
+        await txn.delete(
+          'sync_outbox',
+          where: 'user_id = ? AND entity_id = ? AND op_type IN (?, ?) AND status = ?',
+          whereArgs: [
+            userId,
+            challengeId,
+            OutboxOp.joinChallenge,
+            OutboxOp.leaveChallenge,
+            'pending',
+          ],
+        );
+        await txn.insert('sync_outbox', {
+          'user_id': userId,
+          'op_type': OutboxOp.joinChallenge,
+          'entity_id': challengeId,
+          'payload_json': jsonEncode({
+            'id': p.id,
+            'challenge_id': challengeId,
+            'created_at': p.createdAt!.toIso8601String(),
+          }),
+          'status': 'pending',
+          'attempts': 0,
+          'created_at': _nowIso(),
+        });
+      }
     });
     return p;
   }
@@ -1444,25 +1545,27 @@ class SqliteLocalStore implements LocalStore {
   ) async {
     await _db.transaction((txn) async {
       await _applyActivationSlotTxn(txn, userId, challengeId);
-      await txn.delete(
-        'sync_outbox',
-        where: 'user_id = ? AND entity_id = ? AND op_type = ? AND status = ?',
-        whereArgs: [
-          userId,
-          challengeId,
-          OutboxOp.activateChallenge,
-          'pending',
-        ],
-      );
-      await txn.insert('sync_outbox', {
-        'user_id': userId,
-        'op_type': OutboxOp.activateChallenge,
-        'entity_id': challengeId,
-        'payload_json': jsonEncode({'challenge_id': challengeId}),
-        'status': 'pending',
-        'attempts': 0,
-        'created_at': _nowIso(),
-      });
+      if (!isDemoUserId(userId)) {
+        await txn.delete(
+          'sync_outbox',
+          where: 'user_id = ? AND entity_id = ? AND op_type = ? AND status = ?',
+          whereArgs: [
+            userId,
+            challengeId,
+            OutboxOp.activateChallenge,
+            'pending',
+          ],
+        );
+        await txn.insert('sync_outbox', {
+          'user_id': userId,
+          'op_type': OutboxOp.activateChallenge,
+          'entity_id': challengeId,
+          'payload_json': jsonEncode({'challenge_id': challengeId}),
+          'status': 'pending',
+          'attempts': 0,
+          'created_at': _nowIso(),
+        });
+      }
     });
     return getParticipations(userId);
   }
@@ -1587,33 +1690,35 @@ class SqliteLocalStore implements LocalStore {
         where: 'user_id = ? AND challenge_id = ?',
         whereArgs: [userId, challengeId],
       );
-      final pendingJoins = await txn.query(
-        'sync_outbox',
-        columns: ['id'],
-        where: 'user_id = ? AND entity_id = ? AND op_type = ? AND status = ?',
-        whereArgs: [userId, challengeId, OutboxOp.joinChallenge, 'pending'],
-      );
-      await txn.delete(
-        'sync_outbox',
-        where: 'user_id = ? AND entity_id = ? AND op_type IN (?, ?) AND status = ?',
-        whereArgs: [
-          userId,
-          challengeId,
-          OutboxOp.joinChallenge,
-          OutboxOp.leaveChallenge,
-          'pending',
-        ],
-      );
-      if (pendingJoins.isEmpty) {
-        await txn.insert('sync_outbox', {
-          'user_id': userId,
-          'op_type': OutboxOp.leaveChallenge,
-          'entity_id': challengeId,
-          'payload_json': jsonEncode({'challenge_id': challengeId}),
-          'status': 'pending',
-          'attempts': 0,
-          'created_at': _nowIso(),
-        });
+      if (!isDemoUserId(userId)) {
+        final pendingJoins = await txn.query(
+          'sync_outbox',
+          columns: ['id'],
+          where: 'user_id = ? AND entity_id = ? AND op_type = ? AND status = ?',
+          whereArgs: [userId, challengeId, OutboxOp.joinChallenge, 'pending'],
+        );
+        await txn.delete(
+          'sync_outbox',
+          where: 'user_id = ? AND entity_id = ? AND op_type IN (?, ?) AND status = ?',
+          whereArgs: [
+            userId,
+            challengeId,
+            OutboxOp.joinChallenge,
+            OutboxOp.leaveChallenge,
+            'pending',
+          ],
+        );
+        if (pendingJoins.isEmpty) {
+          await txn.insert('sync_outbox', {
+            'user_id': userId,
+            'op_type': OutboxOp.leaveChallenge,
+            'entity_id': challengeId,
+            'payload_json': jsonEncode({'challenge_id': challengeId}),
+            'status': 'pending',
+            'attempts': 0,
+            'created_at': _nowIso(),
+          });
+        }
       }
     });
   }
@@ -1810,6 +1915,7 @@ class SqliteLocalStore implements LocalStore {
   }) async {
     final ts = (createdAt ?? DateTime.now()).toUtc();
     final trimmed = body.trim();
+    final demo = isDemoUserId(userId);
     await _db.transaction((txn) async {
       await txn.insert('chat_messages', {
         'owner_user_id': userId,
@@ -1819,17 +1925,19 @@ class SqliteLocalStore implements LocalStore {
         'user_nama': userNama,
         'body': trimmed,
         'created_at': ts.toIso8601String(),
-        'sync_state': 'pending',
+        'sync_state': demo ? 'synced' : 'pending',
       }, conflictAlgorithm: ConflictAlgorithm.replace);
-      await txn.insert('sync_outbox', {
-        'user_id': userId,
-        'op_type': OutboxOp.sendChat,
-        'entity_id': id,
-        'payload_json': jsonEncode({'id': id, 'team_id': teamId, 'body': trimmed}),
-        'status': 'pending',
-        'attempts': 0,
-        'created_at': _nowIso(),
-      });
+      if (!demo) {
+        await txn.insert('sync_outbox', {
+          'user_id': userId,
+          'op_type': OutboxOp.sendChat,
+          'entity_id': id,
+          'payload_json': jsonEncode({'id': id, 'team_id': teamId, 'body': trimmed}),
+          'status': 'pending',
+          'attempts': 0,
+          'created_at': _nowIso(),
+        });
+      }
     });
     return LocalChatMessage(
       message: ChatMessage(
@@ -1840,7 +1948,7 @@ class SqliteLocalStore implements LocalStore {
         body: trimmed,
         createdAt: ts,
       ),
-      syncState: SyncState.pending,
+      syncState: demo ? SyncState.synced : SyncState.pending,
     );
   }
 
@@ -2089,8 +2197,11 @@ class SqliteLocalStore implements LocalStore {
   Map<String, Object?> _activityToSqliteRow(Activity a) {
     final json = Map<String, Object?>.from(a.toJson());
     json.remove('challenge_ids');
+    json.remove('os_motion_summary');
     json['challenge_ids_json'] =
         a.challengeIds == null ? null : jsonEncode(a.challengeIds);
+    json['os_motion_summary_json'] =
+        a.osMotionSummary == null ? null : jsonEncode(a.osMotionSummary);
     return json;
   }
 
@@ -2099,6 +2210,12 @@ class SqliteLocalStore implements LocalStore {
     final rawChallengeIds = map.remove('challenge_ids_json') as String?;
     if (rawChallengeIds != null) {
       map['challenge_ids'] = jsonDecode(rawChallengeIds) as List;
+    }
+    final rawMotionSummary = map.remove('os_motion_summary_json') as String?;
+    if (rawMotionSummary != null) {
+      map['os_motion_summary'] = Map<String, dynamic>.from(
+        jsonDecode(rawMotionSummary) as Map,
+      );
     }
     return LocalActivity(
       activity: Activity.fromJson(map),

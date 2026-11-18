@@ -159,7 +159,7 @@ void main() {
 
       expect(find.text('Monas Morning Joggers'), findsOneWidget);
       expect(find.text('11 anggota'), findsWidgets);
-      expect(find.text('Coach Hendra'), findsOneWidget);
+      expect(find.text('coach_hendra'), findsOneWidget);
       expect(find.text('Gabung'), findsOneWidget);
 
       // Join team -> member count increments to 12 and Leave button appears
@@ -228,8 +228,8 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      expect(find.text('Budi Santoso'), findsOneWidget);
-      expect(find.text('Siti Rahma'), findsOneWidget);
+      expect(find.text('budi_santoso'), findsOneWidget);
+      expect(find.text('siti_rahma'), findsOneWidget);
     });
 
     testWidgets('ChallengeListScreen renders dummy challenges in demo mode', (tester) async {
@@ -261,7 +261,7 @@ void main() {
       );
       await tester.pumpAndSettle();
 
-      expect(find.text('Budi Santoso'), findsOneWidget);
+      expect(find.text('budi_santoso'), findsOneWidget);
       expect(find.text('Target Tercapai'), findsWidgets);
     });
   });

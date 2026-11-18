@@ -207,7 +207,7 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text('Dewi Sartika'), findsOneWidget);
-      expect(find.text('Pacer Demo'), findsNothing);
+      expect(find.text('pacer_demo'), findsNothing);
     });
 
     testWidgets('LanguageSettingsScreen queues language offline without failure snackbar and AccountScreen warns before signing out with pending sync', (tester) async {

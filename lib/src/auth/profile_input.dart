@@ -60,6 +60,18 @@ DateTime? parseIsoDate(String raw) {
   return (dt.year == y && dt.month == mo && dt.day == d) ? dt : null;
 }
 
+/// Validation failures for account usernames (sign-up & profile edits).
+enum UsernameError { required, hasWhitespace, tooShort }
+
+/// Validates username input: required, at least 3 chars, and zero whitespace.
+UsernameError? validateUsername(String raw) {
+  final trimmed = raw.trim();
+  if (trimmed.isEmpty) return UsernameError.required;
+  if (RegExp(r'\s').hasMatch(trimmed)) return UsernameError.hasWhitespace;
+  if (trimmed.length < 3) return UsernameError.tooShort;
+  return null;
+}
+
 /// DB check: 0 < height < 300 (cm). True when [v] is acceptable.
 bool validHeightCm(double v) => v > 0 && v < 300;
 

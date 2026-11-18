@@ -97,6 +97,7 @@ function gapEquivalentMultiplier(grade: number): number {
 function analyzeSegments(points: RoutePointRow[]): {
   segments: SegmentMetric[];
   avgKmh: number;
+  movingAvgKmh: number;
   p90Kmh: number;
   sustained120sMaxKmh: number;
   gapAvgKmh: number;
@@ -112,28 +113,78 @@ function analyzeSegments(points: RoutePointRow[]): {
     }))
     .filter((p) => Number.isFinite(p.tMs));
 
+  // Smooth raw GPS/baro elevation noise with a 5-point moving average so +/-3 m
+  // flat jitter does not create phantom grades while preserving true macro slopes.
+  const smoothElev: Array<number | null> = validPts.map((_, idx) => {
+    let sum = 0;
+    let cnt = 0;
+    for (let j = Math.max(0, idx - 2); j <= Math.min(validPts.length - 1, idx + 2); j++) {
+      const e = validPts[j].elevasi_m;
+      if (e != null && Number.isFinite(e)) {
+        sum += e;
+        cnt++;
+      }
+    }
+    return cnt > 0 ? sum / cnt : null;
+  });
+
   const segments: SegmentMetric[] = [];
   let maxUpGrade = 0;
+  let gradeAnchorIdx = 0;
+  let spanDistSinceAnchor = 0;
 
   for (let i = 1; i < validPts.length; i++) {
     const prev = validPts[i - 1];
     const curr = validPts[i];
     const dtS = (curr.tMs - prev.tMs) / 1000;
-    if (dtS < 0.5 || dtS > 300) continue;
+    if (dtS < 0.5 || dtS > 300) {
+      gradeAnchorIdx = i;
+      spanDistSinceAnchor = 0;
+      continue;
+    }
 
     const rawDist = haversineMeters(prev.lat, prev.lng, curr.lat, curr.lng);
     const speedMs = rawDist / dtS;
     if (speedMs > 55) continue; // Ignore obvious >198 km/h GPS teleport spikes.
 
-    let grade = 0;
-    if (
-      rawDist >= 15 &&
-      prev.elevasi_m != null &&
-      curr.elevasi_m != null &&
-      Number.isFinite(prev.elevasi_m) &&
-      Number.isFinite(curr.elevasi_m)
+    spanDistSinceAnchor += rawDist;
+    while (
+      gradeAnchorIdx + 1 < i &&
+      spanDistSinceAnchor - haversineMeters(
+        validPts[gradeAnchorIdx].lat,
+        validPts[gradeAnchorIdx].lng,
+        validPts[gradeAnchorIdx + 1].lat,
+        validPts[gradeAnchorIdx + 1].lng,
+      ) >= 60
     ) {
-      grade = clamp((curr.elevasi_m - prev.elevasi_m) / rawDist, -0.45, 0.45);
+      spanDistSinceAnchor -= haversineMeters(
+        validPts[gradeAnchorIdx].lat,
+        validPts[gradeAnchorIdx].lng,
+        validPts[gradeAnchorIdx + 1].lat,
+        validPts[gradeAnchorIdx + 1].lng,
+      );
+      gradeAnchorIdx++;
+    }
+
+    let grade = 0;
+    const anchorElev = smoothElev[gradeAnchorIdx];
+    const currElev = smoothElev[i];
+    if (
+      spanDistSinceAnchor >= 60 &&
+      anchorElev != null &&
+      currElev != null
+    ) {
+      const spanDt = Math.max(1, (curr.tMs - validPts[gradeAnchorIdx].tMs) / 1000);
+      const dz = clamp(currElev - anchorElev, -1.5 * spanDt, 1.5 * spanDt);
+      grade = clamp(dz / spanDistSinceAnchor, -0.45, 0.45);
+      if (grade > maxUpGrade) maxUpGrade = grade;
+    } else if (
+      rawDist >= 15 &&
+      smoothElev[i - 1] != null &&
+      currElev != null
+    ) {
+      const dz = clamp(currElev - smoothElev[i - 1]!, -1.2 * dtS, 1.2 * dtS);
+      grade = clamp(dz / rawDist, -0.45, 0.45);
       if (grade > maxUpGrade) maxUpGrade = grade;
     }
 
@@ -157,6 +208,7 @@ function analyzeSegments(points: RoutePointRow[]): {
     return {
       segments,
       avgKmh: 0,
+      movingAvgKmh: 0,
       p90Kmh: 0,
       sustained120sMaxKmh: 0,
       gapAvgKmh: 0,
@@ -168,6 +220,8 @@ function analyzeSegments(points: RoutePointRow[]): {
 
   let sumDist = 0;
   let sumDt = 0;
+  let sumMovingDist = 0;
+  let sumMovingDt = 0;
   let sumGapDist = 0;
   const speedsKmh: number[] = [];
   const gapSpeedsKmh: number[] = [];
@@ -175,6 +229,10 @@ function analyzeSegments(points: RoutePointRow[]): {
   for (const s of segments) {
     sumDist += s.distanceM;
     sumDt += s.dtS;
+    if (s.speedMs >= 0.8) {
+      sumMovingDist += s.distanceM;
+      sumMovingDt += s.dtS;
+    }
     sumGapDist += s.gapSpeedMs * s.dtS;
     speedsKmh.push(s.speedMs * 3.6);
     gapSpeedsKmh.push(s.gapSpeedMs * 3.6);
@@ -198,9 +256,11 @@ function analyzeSegments(points: RoutePointRow[]): {
     }
   }
 
+  const avgKmh = sumDt > 0 ? (sumDist / sumDt) * 3.6 : 0;
   return {
     segments,
-    avgKmh: sumDt > 0 ? (sumDist / sumDt) * 3.6 : 0,
+    avgKmh,
+    movingAvgKmh: sumMovingDt > 0 ? (sumMovingDist / sumMovingDt) * 3.6 : avgKmh,
     p90Kmh: percentile(speedsKmh, 0.9),
     sustained120sMaxKmh,
     gapAvgKmh: sumDt > 0 ? (sumGapDist / sumDt) * 3.6 : 0,
@@ -246,10 +306,19 @@ async function queryOsrmRoadMatch(
   }
 }
 
+interface OsMotionSummary {
+  cycling_burst_windows?: number;
+  bike_os_windows?: number;
+  max_window_kmh?: number;
+  peak_window_cadence_spm?: number;
+}
+
 function classifyServerVerdict(params: {
   jenis: SportType;
   cadenceSpm: number | null;
+  osMotionSummary?: OsMotionSummary | null;
   avgKmh: number;
+  movingAvgKmh: number;
   p90Kmh: number;
   sustained120sMaxKmh: number;
   gapAvgKmh: number;
@@ -262,7 +331,9 @@ function classifyServerVerdict(params: {
   const {
     jenis,
     cadenceSpm,
+    osMotionSummary,
     avgKmh,
+    movingAvgKmh,
     p90Kmh,
     sustained120sMaxKmh,
     gapAvgKmh,
@@ -301,13 +372,35 @@ function classifyServerVerdict(params: {
   // 2. Foot sports (berjalan / joging / lari) claimed.
   if (jenis === "berjalan" || jenis === "joging" || jenis === "lari") {
     const nonRunningCadence = cadenceSpm == null || cadenceSpm < 115;
+    const cyclingBursts = Number(osMotionSummary?.cycling_burst_windows ?? 0);
+    const bikeOsWindows = Number(osMotionSummary?.bike_os_windows ?? 0);
+    const peakWinCadence = osMotionSummary?.peak_window_cadence_spm ??
+      (cyclingBursts === 0 && bikeOsWindows === 0 ? cadenceSpm : null);
+    const sprintVerified =
+      sustained120sMaxKmh < 24.5 &&
+      peakWinCadence != null &&
+      peakWinCadence >= 165 &&
+      cyclingBursts === 0 &&
+      bikeOsWindows === 0;
+    const gapLimit = maxUpGrade >= 0.08 ? 24.5 : 22.0;
+    const greyZoneBike =
+      totalDurationS >= 180 &&
+      p90Kmh >= 14.0 &&
+      movingAvgKmh >= 13.0 &&
+      (cadenceSpm === 0 ||
+        (cyclingBursts >= 2 && (peakWinCadence ?? 0) < 120) ||
+        (bikeOsWindows >= 2 && (cadenceSpm == null || cadenceSpm < 125)));
+
     if (
-      sustained120sMaxKmh >= 20 ||
-      (p90Kmh >= 18 && avgKmh >= 14.5 && nonRunningCadence) ||
-      (gapP90Kmh >= 22 && nonRunningCadence)
+      sustained120sMaxKmh >= 24.5 ||
+      (sustained120sMaxKmh >= 20 && !sprintVerified) ||
+      (p90Kmh >= 18 && movingAvgKmh >= 14.5 && nonRunningCadence) ||
+      (gapP90Kmh >= gapLimit && nonRunningCadence) ||
+      greyZoneBike
     ) {
       reasons.push(`p90=${p90Kmh.toFixed(1)}kmh`);
       reasons.push(`sustained_120s=${sustained120sMaxKmh.toFixed(1)}kmh`);
+      if (greyZoneBike) reasons.push("grey_zone_cycling_signature");
       if (osrm.matched) reasons.push("osrm_road_corridor");
       return {
         validationStatus: "flagged_ride",
@@ -320,10 +413,11 @@ function classifyServerVerdict(params: {
     if (
       jenis === "berjalan" &&
       totalDurationS >= 120 &&
-      (avgKmh >= 9.0 || (gapP90Kmh >= 10.5 && (cadenceSpm == null || cadenceSpm >= 145)))
+      (movingAvgKmh >= 9.0 ||
+        (gapP90Kmh >= 10.5 && (cadenceSpm == null || cadenceSpm >= 145)))
     ) {
       const suggested: SportType = p90Kmh >= 12.5 ? "lari" : "joging";
-      reasons.push(`walk_speed_too_high avg=${avgKmh.toFixed(1)}kmh`);
+      reasons.push(`walk_speed_too_high avg=${movingAvgKmh.toFixed(1)}kmh`);
       return {
         validationStatus: "flagged_mismatch",
         suggestedSport: suggested,
@@ -335,12 +429,12 @@ function classifyServerVerdict(params: {
     if (
       jenis === "lari" &&
       totalDurationS >= 120 &&
-      avgKmh < 5.5 &&
+      movingAvgKmh < 5.5 &&
       p90Kmh < 6.8 &&
       maxUpGrade < 0.08 &&
       (cadenceSpm == null || cadenceSpm < 128)
     ) {
-      reasons.push(`run_speed_matches_walk avg=${avgKmh.toFixed(1)}kmh`);
+      reasons.push(`run_speed_matches_walk avg=${movingAvgKmh.toFixed(1)}kmh`);
       return {
         validationStatus: "flagged_mismatch",
         suggestedSport: "berjalan",
@@ -454,7 +548,7 @@ Deno.serve(async (req: Request): Promise<Response> => {
 
   const { data: activity, error: actErr } = await admin
     .from("aktivitas")
-    .select("id, user_id, jenis, durasi_s, jarak_m, cadence_spm, validation_status")
+    .select("id, user_id, jenis, durasi_s, jarak_m, cadence_spm, os_motion_summary, validation_status")
     .eq("id", aktivitasId)
     .maybeSingle();
 
@@ -494,7 +588,9 @@ Deno.serve(async (req: Request): Promise<Response> => {
   const verdict = classifyServerVerdict({
     jenis: activity.jenis as SportType,
     cadenceSpm: activity.cadence_spm ?? null,
+    osMotionSummary: (activity.os_motion_summary as OsMotionSummary | null) ?? null,
     avgKmh: metrics.avgKmh,
+    movingAvgKmh: metrics.movingAvgKmh,
     p90Kmh: metrics.p90Kmh,
     sustained120sMaxKmh: metrics.sustained120sMaxKmh,
     gapAvgKmh: metrics.gapAvgKmh,

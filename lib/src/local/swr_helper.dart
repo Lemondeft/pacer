@@ -6,6 +6,12 @@ import 'package:pacer/src/local/local_store.dart';
 import 'package:pacer/src/sync/connectivity_service.dart';
 import 'package:pacer/supabase.dart';
 
+/// Canonical user ID for the local ephemeral Demo Account sandbox.
+const String demoSandboxUserId = 'demo-user-me';
+
+/// True when [userId] belongs to the local ephemeral Demo Account.
+bool isDemoUserId(String? userId) => userId == demoSandboxUserId;
+
 /// Returns [override] or global [supa] when initialized; `null` in demo/test
 /// environments where Supabase was never configured.
 SupabaseClient? safeSupabaseClient([SupabaseClient? override]) {
@@ -17,7 +23,8 @@ SupabaseClient? safeSupabaseClient([SupabaseClient? override]) {
   }
 }
 
-/// Resolves the active user id from live auth session or last offline session.
+/// Resolves the active user id from live auth session, Demo Account, or cached
+/// real offline session.
 Future<String?> resolveActiveUserId({
   SupabaseClient? client,
   LocalStore? store,
@@ -27,12 +34,22 @@ Future<String?> resolveActiveUserId({
   return (store ?? LocalStore.instance).getLastUserId();
 }
 
-/// True when neither a live session nor a cached offline user session exists,
-/// meaning the app is running in Demo Mode and may render sample data.
+/// True ONLY when neither a live session nor any local user (demo or real) is
+/// active — used strictly by standalone preview/widget tests with no user.
 Future<bool> isDemoAccount({
   SupabaseClient? client,
   LocalStore? store,
 }) async => (await resolveActiveUserId(client: client, store: store)) == null;
+
+/// True when the active session is either unauthenticated preview OR the seeded
+/// local [demoSandboxUserId] Demo Account (never syncs to Supabase).
+Future<bool> isDemoSession({
+  SupabaseClient? client,
+  LocalStore? store,
+}) async {
+  final uid = await resolveActiveUserId(client: client, store: store);
+  return uid == null || isDemoUserId(uid);
+}
 
 /// Stale-While-Revalidate reader shared across repositories:
 /// - Returns persisted local data immediately when present (or previously synced).
@@ -50,6 +67,11 @@ Future<T> offlineRead<T>({
   bool hasBackend = true,
 }) async {
   final emptyCheck = isEmpty ?? _defaultIsEmpty;
+  final localUid = await store.getLastUserId();
+  final effectiveHasBackend =
+      hasBackend &&
+      !(safeSupabaseClient()?.auth.currentUser?.id == null &&
+          isDemoUserId(localUid));
 
   Future<T> refreshAndSave() async {
     final remote = await fetchRemote();
@@ -59,7 +81,7 @@ Future<T> offlineRead<T>({
     return remote;
   }
 
-  if (forceRefresh && hasBackend) {
+  if (forceRefresh && effectiveHasBackend) {
     try {
       return await refreshAndSave();
     } catch (e) {
@@ -78,7 +100,7 @@ Future<T> offlineRead<T>({
   final lastSync = await store.getSyncTimestamp(syncKey);
   final hasCachedState = lastSync != null || !emptyCheck(local);
 
-  if (!hasBackend) return local;
+  if (!effectiveHasBackend) return local;
 
   if (hasCachedState) {
     final isStale =

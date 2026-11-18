@@ -26,6 +26,15 @@ void main() {
     expect(indonesianRegions.toSet().length, indonesianRegions.length);
   });
 
+  test('validateUsername enforces required, no whitespace, and min length 3', () {
+    expect(validateUsername(''), UsernameError.required);
+    expect(validateUsername('   '), UsernameError.required);
+    expect(validateUsername('andi wijaya'), UsernameError.hasWhitespace);
+    expect(validateUsername('ab'), UsernameError.tooShort);
+    expect(validateUsername('andi_wijaya'), isNull);
+    expect(validateUsername('  pacer1  '), isNull);
+  });
+
   testWidgets('AboutMe (demo) shows data and edit dialog validates', (t) async {
     t.view.physicalSize = const Size(720, 1600);
     t.view.devicePixelRatio = 1.0;
@@ -34,11 +43,17 @@ void main() {
       MaterialApp(theme: PacerTheme.dark(), home: const AboutMeScreen()),
     );
     await t.pumpAndSettle();
-    expect(find.text('Pacer Demo'), findsOneWidget);
+    expect(find.text('pacer_demo'), findsOneWidget);
     expect(find.text('DKI Jakarta'), findsOneWidget);
 
     await t.tap(find.byType(ElevatedButton));
     await t.pumpAndSettle();
+    // Spaced username → inline error, dialog stays open.
+    await t.enterText(find.byType(TextField).at(0), 'bad name');
+    await t.tap(find.byType(TextButton).last);
+    await t.pumpAndSettle();
+    expect(find.byType(ProfileEditDialog), findsOneWidget);
+    await t.enterText(find.byType(TextField).at(0), 'pacer_demo');
     // Bad height → inline error, dialog stays open.
     await t.enterText(find.byType(TextField).at(1), '999');
     await t.tap(find.byType(TextButton).last);

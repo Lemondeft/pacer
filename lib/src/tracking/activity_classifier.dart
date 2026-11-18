@@ -66,6 +66,11 @@ class DetectionThresholds {
   // Layer 1 — GPS Sanitization
   static const double maxGpsAccuracyMeters = 20.0;
   static const double maxHumanAccelMps2 = 4.0;
+  static const double maxInitialAccelMps2 = 6.5;
+  static const double maxInitialBurstSpeedMs = 18.0;
+  static const double maxGapSpeedDeltaMs = 10.0;
+  static const int outlierRecoveryStreak = 3;
+  static const double outlierRecoveryMaxSpeedKmh = 45.0;
   static const double gpsRawTeleportCeilingKmh = 110.0;
   static const int windowDurationSeconds = 30;
 
@@ -85,7 +90,7 @@ class DetectionThresholds {
   // Layer 3 — Targeted 25 Hz Accelerometer Bursts
   static const double ambiguitySpeedMinKmh = 7.5;
   static const double ambiguitySpeedMaxKmh = 15.0;
-  static const double runBikeAmbiguityMinKmh = 12.0;
+  static const double runBikeAmbiguityMinKmh = 10.5;
   static const double runBikeAmbiguityMaxKmh = 24.0;
   static const double rideAmbiguityLowMaxKmh = 16.0;
   static const double rideAmbiguityHighMinKmh = 35.0;
@@ -308,13 +313,26 @@ class GpsSanitizer {
   GpsFix? _lastAccepted;
   double? _lastSegmentSpeedMs;
   final List<_AcceptedSample> _window = <_AcceptedSample>[];
+  final List<GpsFix> _candidateOutliers = <GpsFix>[];
 
   GpsFix? get lastAccepted => _lastAccepted;
+
+  static bool isNullIsland(double lat, double lng) =>
+      lat.abs() < 1e-5 && lng.abs() < 1e-5;
 
   void reset() {
     _lastAccepted = null;
     _lastSegmentSpeedMs = null;
     _window.clear();
+    _candidateOutliers.clear();
+  }
+
+  /// Clears spatial anchor on manual pause/resume so relocation during pause
+  /// starts a fresh segment instead of bridging a straight chord or locking out fixes.
+  void markPauseBreak() {
+    _lastAccepted = null;
+    _lastSegmentSpeedMs = null;
+    _candidateOutliers.clear();
   }
 
   GpsSanitizeResult ingest(GpsFix fix) {
@@ -325,6 +343,7 @@ class GpsSanitizer {
     }
     if (!fix.lat.isFinite ||
         !fix.lng.isFinite ||
+        isNullIsland(fix.lat, fix.lng) ||
         !isValidLatLng(fix.lat, fix.lng)) {
       return const GpsSanitizeResult(
         status: GpsIngestStatus.droppedInvalidCoords,
@@ -333,6 +352,7 @@ class GpsSanitizer {
 
     final prev = _lastAccepted;
     if (prev == null) {
+      _candidateOutliers.clear();
       final initialSpeedMs =
           (fix.speedMs != null && fix.speedMs!.isFinite && fix.speedMs! >= 0)
           ? fix.speedMs!
@@ -365,19 +385,53 @@ class GpsSanitizer {
     final speedMs = distM / dtSec;
     final speedKmh = speedMs * 3.6;
     if (speedKmh > DetectionThresholds.gpsRawTeleportCeilingKmh) {
-      return const GpsSanitizeResult(status: GpsIngestStatus.droppedTeleport);
+      return _recordRejectedAndMaybeRecover(
+        fix,
+        GpsIngestStatus.droppedTeleport,
+      );
     }
 
     final prevSpeedMs = _lastSegmentSpeedMs;
-    if (prevSpeedMs != null && dtSec <= 10.0) {
-      final accelMps2 = (speedMs - prevSpeedMs).abs() / dtSec;
-      if (accelMps2 > DetectionThresholds.maxHumanAccelMps2) {
-        return const GpsSanitizeResult(
-          status: GpsIngestStatus.droppedImplausibleAccel,
+    if (prevSpeedMs == null) {
+      if (dtSec <= 10.0) {
+        final baselineSpeedMs =
+            (prev.speedMs != null &&
+                prev.speedMs!.isFinite &&
+                prev.speedMs! >= 0)
+            ? prev.speedMs!
+            : 0.0;
+        final initialAccelMps2 = (speedMs - baselineSpeedMs).abs() / dtSec;
+        if (initialAccelMps2 > DetectionThresholds.maxInitialAccelMps2 ||
+            (speedMs > DetectionThresholds.maxInitialBurstSpeedMs &&
+                dtSec <= 2.0)) {
+          return _recordRejectedAndMaybeRecover(
+            fix,
+            GpsIngestStatus.droppedImplausibleAccel,
+          );
+        }
+      } else if (speedKmh > DetectionThresholds.outlierRecoveryMaxSpeedKmh) {
+        return _recordRejectedAndMaybeRecover(
+          fix,
+          GpsIngestStatus.droppedImplausibleAccel,
         );
       }
+    } else if (dtSec <= 10.0) {
+      final accelMps2 = (speedMs - prevSpeedMs).abs() / dtSec;
+      if (accelMps2 > DetectionThresholds.maxHumanAccelMps2) {
+        return _recordRejectedAndMaybeRecover(
+          fix,
+          GpsIngestStatus.droppedImplausibleAccel,
+        );
+      }
+    } else if ((speedMs - prevSpeedMs).abs() >
+        DetectionThresholds.maxGapSpeedDeltaMs) {
+      return _recordRejectedAndMaybeRecover(
+        fix,
+        GpsIngestStatus.droppedImplausibleAccel,
+      );
     }
 
+    _candidateOutliers.clear();
     _lastAccepted = fix;
     _lastSegmentSpeedMs = speedMs;
     _window.add(
@@ -395,6 +449,82 @@ class GpsSanitizer {
       status: GpsIngestStatus.accepted,
       segmentDistanceMeters: distM,
       segmentSpeedKmh: speedKmh,
+    );
+  }
+
+  /// Recovers from genuine relocations after [outlierRecoveryStreak] mutually
+  /// consistent rejected fixes without adding an implausible jump chord.
+  GpsSanitizeResult _recordRejectedAndMaybeRecover(
+    GpsFix fix,
+    GpsIngestStatus rejectedStatus,
+  ) {
+    if (_candidateOutliers.isEmpty) {
+      _candidateOutliers.add(fix);
+      return GpsSanitizeResult(status: rejectedStatus);
+    }
+    final prevCand = _candidateOutliers.last;
+    final dtSec =
+        fix.timestamp.difference(prevCand.timestamp).inMicroseconds / 1e6;
+    if (!dtSec.isFinite || dtSec <= 0) {
+      return GpsSanitizeResult(status: rejectedStatus);
+    }
+    final distM = haversineMeters(prevCand.lat, prevCand.lng, fix.lat, fix.lng);
+    final candSpeedMs = distM / dtSec;
+    final candSpeedKmh = candSpeedMs * 3.6;
+    if (candSpeedKmh > DetectionThresholds.outlierRecoveryMaxSpeedKmh) {
+      _candidateOutliers
+        ..clear()
+        ..add(fix);
+      return GpsSanitizeResult(status: rejectedStatus);
+    }
+    if (_candidateOutliers.length >= 2) {
+      final anchorCand = _candidateOutliers[_candidateOutliers.length - 2];
+      final prevDt =
+          prevCand.timestamp.difference(anchorCand.timestamp).inMicroseconds /
+          1e6;
+      if (prevDt > 0) {
+        final prevSpeed =
+            haversineMeters(
+              anchorCand.lat,
+              anchorCand.lng,
+              prevCand.lat,
+              prevCand.lng,
+            ) /
+            prevDt;
+        if (dtSec <= 10.0 &&
+            (candSpeedMs - prevSpeed).abs() / dtSec >
+                DetectionThresholds.maxHumanAccelMps2) {
+          _candidateOutliers
+            ..clear()
+            ..add(fix);
+          return GpsSanitizeResult(status: rejectedStatus);
+        }
+      }
+    }
+
+    _candidateOutliers.add(fix);
+    if (_candidateOutliers.length < DetectionThresholds.outlierRecoveryStreak) {
+      return GpsSanitizeResult(status: rejectedStatus);
+    }
+
+    _candidateOutliers.clear();
+    _lastAccepted = fix;
+    _lastSegmentSpeedMs = candSpeedMs;
+    _window.add(
+      _AcceptedSample(
+        timestamp: fix.timestamp,
+        distMeters: 0,
+        speedKmh: candSpeedKmh,
+        altitudeM: fix.altitudeM.isFinite
+            ? fix.altitudeM
+            : (_window.isNotEmpty ? _window.last.altitudeM : 0.0),
+      ),
+    );
+    _pruneWindow(fix.timestamp);
+    return GpsSanitizeResult(
+      status: GpsIngestStatus.accepted,
+      segmentDistanceMeters: 0,
+      segmentSpeedKmh: candSpeedKmh,
     );
   }
 
@@ -933,8 +1063,16 @@ ActivityEvaluation _evaluateRunToBike(
 
   if (w.accelBurst != null) {
     if (w.accelBurst!.isCyclingSignature && w.medianSpeedKmh > 11.0) {
-      score += 45;
-      reasons.add('ACCEL_NO_HEEL_STRIKE');
+      final noFootCadence = w.steps == null || w.steps! < 8;
+      final burstCadence = w.accelBurst!.estimatedCadenceSpm;
+      final lowBurstCadence = burstCadence == null || burstCadence < 130;
+      if (w.medianSpeedKmh >= 13.5 && noFootCadence && lowBurstCadence) {
+        score += 70;
+        reasons.add('ACCEL_BIKE_NO_STEPS');
+      } else {
+        score += 45;
+        reasons.add('ACCEL_NO_HEEL_STRIKE');
+      }
     }
   }
 
@@ -1097,6 +1235,7 @@ class ActivityMismatchMonitor {
   });
 
   int _consecutiveWindows = 0;
+  int _recoveryWindows = 0;
   String? _candidateKey;
   DateTime? _dismissedUntil;
   String? _dismissedKey;
@@ -1107,6 +1246,7 @@ class ActivityMismatchMonitor {
 
   void reset() {
     _consecutiveWindows = 0;
+    _recoveryWindows = 0;
     _candidateKey = null;
     _dismissedUntil = null;
     _dismissedKey = null;
@@ -1124,6 +1264,7 @@ class ActivityMismatchMonitor {
       _dismissedUntil = (now ?? DateTime.now()).add(dismissCooldown);
     }
     _consecutiveWindows = 0;
+    _recoveryWindows = 0;
     _candidateKey = null;
     _activeMismatch = null;
   }
@@ -1138,8 +1279,29 @@ class ActivityMismatchMonitor {
     if (!eval.isMismatch) {
       _consecutiveWindows = 0;
       _candidateKey = null;
+      final active = _activeMismatch;
+      // Auto-clear transient Run/Jog -> Walk break warnings once running
+      // resumes for 2 consecutive windows; never auto-clear ride/vehicle flags.
+      final isTransientFootDrop =
+          active != null &&
+          !active.isVehicleDetected &&
+          active.detectedCategory == DetectedCategory.walk &&
+          (selectedSport == SportType.run || selectedSport == SportType.jog);
+      if (isTransientFootDrop &&
+          window.medianSpeedKmh >= DetectionThresholds.walkToRunMinSpeedKmh) {
+        _recoveryWindows++;
+        if (_recoveryWindows >=
+            DetectionThresholds.requiredConsecutiveWindows) {
+          _activeMismatch = null;
+          _recoveryWindows = 0;
+        }
+      } else {
+        _recoveryWindows = 0;
+      }
       return _activeMismatch;
     }
+
+    _recoveryWindows = 0;
 
     final key = _signatureKey(
       eval.detectedCategory,

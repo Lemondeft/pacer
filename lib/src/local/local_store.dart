@@ -36,6 +36,10 @@ abstract class LocalStore {
   Future<void> setSyncTimestamp(String key, DateTime at);
   Future<DateTime?> getSyncTimestamp(String key);
 
+  /// Permanently removes every locally stored row belonging to [userId]
+  /// (used to wipe the ephemeral Demo Account cleanly on logout).
+  Future<void> wipeUserData(String userId);
+
   // ---- Profiles & Preferences ----
   Future<UserProfile?> getProfile(String userId);
   Future<String?> getLanguage(String userId);
@@ -77,6 +81,7 @@ abstract class LocalStore {
     String? suggestedSport,
     String? validationStatus,
     int? cadenceSpm,
+    Map<String, dynamic>? osMotionSummary,
   });
 
   // ---- Activities, Routes, Statistik & Streaks ----

@@ -8,6 +8,7 @@ import 'package:pacer/src/leaderboard/leaderboard_model.dart';
 import 'package:pacer/src/local/local_helpers.dart';
 import 'package:pacer/src/local/local_models.dart';
 import 'package:pacer/src/local/local_store.dart';
+import 'package:pacer/src/local/swr_helper.dart' show isDemoUserId;
 import 'package:pacer/src/notifications/notification_model.dart';
 import 'package:pacer/src/teams/team_model.dart';
 
@@ -54,6 +55,37 @@ class MemoryLocalStore implements LocalStore {
 
   @override
   Future<DateTime?> getSyncTimestamp(String key) async => _syncMeta[key];
+
+  @override
+  Future<void> wipeUserData(String userId) async {
+    if (_lastUserId == userId) _lastUserId = null;
+    _profiles.remove(userId);
+    _languages.remove(userId);
+    _emails.remove(userId);
+    final removedActivityIds = <String>[
+      for (final entry in _activities.entries)
+        if (entry.value.activity.userId == userId) entry.key,
+    ];
+    for (final actId in removedActivityIds) {
+      _activities.remove(actId);
+      _routes.remove(actId);
+      _syncMeta.remove('route_$actId');
+    }
+    _stats.removeWhere((k, _) => k.startsWith('${userId}_'));
+    _streaks.remove(userId);
+    _teams.remove(userId);
+    _rosters.removeWhere((k, _) => k.startsWith('${userId}_'));
+    _coachRows.removeWhere((k, _) => k.startsWith('${userId}_'));
+    _challenges.remove(userId);
+    _participations.remove(userId);
+    _notifications.remove(userId);
+    _leaderboards.remove(userId);
+    _lbEntries.removeWhere((k, _) => k.startsWith('${userId}_'));
+    _lbScopes.removeWhere((k, _) => k.startsWith('${userId}_'));
+    _chats.removeWhere((k, _) => k.startsWith('${userId}_'));
+    _outbox.removeWhere((o) => o.userId == userId);
+    _syncMeta.removeWhere((k, _) => k.contains(userId));
+  }
 
   @override
   Future<UserProfile?> getProfile(String userId) async => _profiles[userId];
@@ -248,6 +280,7 @@ class MemoryLocalStore implements LocalStore {
     String? suggestedSport,
     String? validationStatus,
     int? cadenceSpm,
+    Map<String, dynamic>? osMotionSummary,
   }) async {
     final activity = Activity(
       id: id,
@@ -261,6 +294,7 @@ class MemoryLocalStore implements LocalStore {
       suggestedSport: suggestedSport,
       validationStatus: validationStatus,
       cadenceSpm: cadenceSpm,
+      osMotionSummary: osMotionSummary,
     );
     _activities[id] = LocalActivity(
       activity: activity,
@@ -403,6 +437,12 @@ class MemoryLocalStore implements LocalStore {
     String aktivitasId,
     List<RutePoint> points,
   ) async {
+    final existingAct = _activities[aktivitasId];
+    if (points.isEmpty &&
+        existingAct != null &&
+        existingAct.syncState != SyncState.synced) {
+      return;
+    }
     _routes[aktivitasId] = List<RutePoint>.from(points);
   }
 
@@ -861,6 +901,7 @@ class MemoryLocalStore implements LocalStore {
     required String body,
     DateTime? createdAt,
   }) async {
+    final demo = isDemoUserId(userId);
     final msg = LocalChatMessage(
       message: ChatMessage(
         id: id,
@@ -870,15 +911,17 @@ class MemoryLocalStore implements LocalStore {
         body: body.trim(),
         createdAt: (createdAt ?? DateTime.now()).toUtc(),
       ),
-      syncState: SyncState.pending,
+      syncState: demo ? SyncState.synced : SyncState.pending,
     );
     _chats.putIfAbsent('${userId}_$teamId', () => {})[id] = msg;
-    _enqueue(
-      userId: userId,
-      opType: OutboxOp.sendChat,
-      entityId: id,
-      payload: {'id': id, 'team_id': teamId, 'body': body.trim()},
-    );
+    if (!demo) {
+      _enqueue(
+        userId: userId,
+        opType: OutboxOp.sendChat,
+        entityId: id,
+        payload: {'id': id, 'team_id': teamId, 'body': body.trim()},
+      );
+    }
     return msg;
   }
 
@@ -1143,6 +1186,7 @@ class MemoryLocalStore implements LocalStore {
     required String entityId,
     required Map<String, dynamic> payload,
   }) {
+    if (isDemoUserId(userId)) return;
     _outbox.add(
       OutboxItem(
         id: _nextOutboxId++,

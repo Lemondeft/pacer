@@ -41,6 +41,16 @@ class NotificationRepository {
     }
   }
 
+  /// Resets unread counter, dismissed banners, and bumps revision on sign-out
+  /// or account switch so stale badges/banners from prior users disappear.
+  static void resetSession() {
+    _dismissedBannerIds.clear();
+    if (unreadCountNotifier.value != 0) {
+      unreadCountNotifier.value = 0;
+    }
+    revisionNotifier.value++;
+  }
+
   /// Returns the newest unread team-challenge assignment notification not yet dismissed.
   static AppNotification? topAssignedBannerFrom(List<AppNotification> items) {
     for (final n in items) {

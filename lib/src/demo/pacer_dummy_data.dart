@@ -1,14 +1,18 @@
 import 'package:pacer/src/aktivitas/activity_model.dart';
+import 'package:pacer/src/auth/user_model.dart';
 import 'package:pacer/src/challenge/challenge_model.dart';
 import 'package:pacer/src/chat/chat_model.dart';
 import 'package:pacer/src/leaderboard/leaderboard_model.dart';
 import 'package:pacer/src/local/local_helpers.dart';
+import 'package:pacer/src/local/local_store.dart';
 import 'package:pacer/src/notifications/notification_model.dart';
 import 'package:pacer/src/teams/team_model.dart';
 
 /// Comprehensive in-app dummy data for demo, offline, and preview modes.
 class PacerDummyData {
   PacerDummyData._();
+
+  static const String demoUserId = 'demo-user-me';
 
   static final DateTime _now = DateTime.now();
 
@@ -181,9 +185,21 @@ class PacerDummyData {
   static final Map<String, String> _demoInviteOverrides = {};
   static final Set<String> _demoRemovedMembers = {};
   static final Map<String, String> _demoMemberRoleOverrides = {};
+  static final List<Activity> _customDemoActivities = [];
   static final List<Challenge> _customDemoChallenges = [];
   static Map<String, PartisipasiChallenge>? _demoParticipationsState;
   static List<AppNotification>? _demoNotificationsState;
+
+  static List<Activity> get demoActivities => [
+    ..._customDemoActivities,
+    ...activities,
+  ];
+
+  static void recordDemoActivity(Activity activity) {
+    _customDemoActivities.removeWhere((a) => a.id == activity.id);
+    _customDemoActivities.insert(0, activity);
+    recordDemoActivityProgress(activity);
+  }
 
   static void resetDemoTeams() {
     _demoJoinedIds
@@ -194,6 +210,7 @@ class PacerDummyData {
     _demoInviteOverrides.clear();
     _demoRemovedMembers.clear();
     _demoMemberRoleOverrides.clear();
+    _customDemoActivities.clear();
     _customDemoChallenges.clear();
     _demoParticipationsState = null;
     _demoNotificationsState = null;
@@ -321,7 +338,7 @@ class PacerDummyData {
       return [
         TeamRosterMember(
           userId: 'demo-user-me',
-          nama: 'Andi Wijaya',
+          nama: 'andi_wijaya',
           peran: 'ketua',
           appPeran: 'user',
           joinedAt: team.createdAt,
@@ -332,42 +349,42 @@ class PacerDummyData {
     final baseMembers = <TeamRosterMember>[
       TeamRosterMember(
         userId: 'demo-coach',
-        nama: 'Coach Hendra',
+        nama: 'coach_hendra',
         peran: 'ketua',
         appPeran: 'coach',
         joinedAt: _now.subtract(const Duration(days: 28)),
       ),
       TeamRosterMember(
         userId: 'demo-user-0',
-        nama: 'Budi Santoso',
+        nama: 'budi_santoso',
         peran: 'anggota',
         appPeran: 'user',
         joinedAt: _now.subtract(const Duration(days: 24)),
       ),
       TeamRosterMember(
         userId: 'demo-user-1',
-        nama: 'Siti Rahma',
+        nama: 'siti_rahma',
         peran: 'anggota',
         appPeran: 'user',
         joinedAt: _now.subtract(const Duration(days: 20)),
       ),
       TeamRosterMember(
         userId: 'demo-user-3',
-        nama: 'Dewi Lestari',
+        nama: 'dewi_lestari',
         peran: 'anggota',
         appPeran: 'user',
         joinedAt: _now.subtract(const Duration(days: 15)),
       ),
       TeamRosterMember(
         userId: 'demo-user-4',
-        nama: 'Rizky Pratama',
+        nama: 'rizky_pratama',
         peran: 'anggota',
         appPeran: 'user',
         joinedAt: _now.subtract(const Duration(days: 10)),
       ),
       TeamRosterMember(
         userId: 'demo-user-5',
-        nama: 'Farhan Ramadhan',
+        nama: 'farhan_ramadhan',
         peran: 'anggota',
         appPeran: 'user',
         joinedAt: _now.subtract(const Duration(days: 6)),
@@ -390,7 +407,7 @@ class PacerDummyData {
         1,
         TeamRosterMember(
           userId: 'demo-user-me',
-          nama: 'Andi Wijaya',
+          nama: 'andi_wijaya',
           peran:
               _demoMemberRoleOverrides['${teamId}_demo-user-me'] ??
               (team.dibuatOleh == 'demo-user-me' ? 'ketua' : 'anggota'),
@@ -817,7 +834,7 @@ class PacerDummyData {
         userId: 'demo-user-me',
         type: 'role_updated',
         title: 'Peran Tim Diperbarui',
-        body: 'Coach Hendra menyambutmu di GBK Runners Elite',
+        body: 'coach_hendra menyambutmu di GBK Runners Elite',
         teamId: '11111111-1111-1111-1111-111111111111',
         isRead: true,
         createdAt: _now.subtract(const Duration(days: 1)),
@@ -859,16 +876,16 @@ class PacerDummyData {
     final effectiveUid = uid ?? 'demo-user-me';
 
     final names = [
-      'Budi Santoso',
-      'Siti Rahma',
-      'Andi Wijaya',
-      'Dewi Lestari',
-      'Rizky Pratama',
-      'Farhan Ramadhan',
-      'Maya Putri',
-      'Eko Prasetyo',
-      'Nia Kurnia',
-      'Coach Hendra',
+      'budi_santoso',
+      'siti_rahma',
+      'andi_wijaya',
+      'dewi_lestari',
+      'rizky_pratama',
+      'farhan_ramadhan',
+      'maya_putri',
+      'eko_prasetyo',
+      'nia_kurnia',
+      'coach_hendra',
     ];
 
     List<double> rawValues;
@@ -900,7 +917,7 @@ class PacerDummyData {
     };
     final rows = <({Peringkat entry, String nama})>[];
     for (var i = 0; i < count; i++) {
-      final isMine = i == 2; // Andi Wijaya or current demo user
+      final isMine = i == 2; // andi_wijaya or current demo user
       final userId = isMine ? effectiveUid : 'demo-user-$i';
       rows.add((
         entry: Peringkat(
@@ -923,7 +940,7 @@ class PacerDummyData {
       id: 'msg-001',
       teamId: '11111111-1111-1111-1111-111111111111',
       userId: 'user-001',
-      userNama: 'Coach Hendra',
+      userNama: 'coach_hendra',
       body: 'Halo semuanya! Besok pagi kumpul lari bareng di GBK Gate 5 jam 06:00 WIB ya! 🏃‍♂️',
       createdAt: _now.subtract(const Duration(hours: 3)),
     ),
@@ -931,7 +948,7 @@ class PacerDummyData {
       id: 'msg-002',
       teamId: '11111111-1111-1111-1111-111111111111',
       userId: 'user-002',
-      userNama: 'Siti Rahma',
+      userNama: 'siti_rahma',
       body: 'Siap coach! Seragam jersey pacer warna lime kan?',
       createdAt: _now.subtract(const Duration(hours: 2, minutes: 45)),
     ),
@@ -939,7 +956,7 @@ class PacerDummyData {
       id: 'msg-003',
       teamId: '11111111-1111-1111-1111-111111111111',
       userId: 'user-003',
-      userNama: 'Budi Santoso',
+      userNama: 'budi_santoso',
       body: 'Betul, jangan lupa bawa tumbler air sendiri teman-teman!',
       createdAt: _now.subtract(const Duration(hours: 2, minutes: 30)),
     ),
@@ -947,7 +964,7 @@ class PacerDummyData {
       id: 'msg-004',
       teamId: '11111111-1111-1111-1111-111111111111',
       userId: 'user-004',
-      userNama: 'Dewi Lestari',
+      userNama: 'dewi_lestari',
       body: 'Aku target ikut rute 5K santai yaa 👟',
       createdAt: _now.subtract(const Duration(hours: 1, minutes: 50)),
     ),
@@ -955,7 +972,7 @@ class PacerDummyData {
       id: 'msg-005',
       teamId: '11111111-1111-1111-1111-111111111111',
       userId: 'user-005',
-      userNama: 'Farhan Ramadhan',
+      userNama: 'farhan_ramadhan',
       body: 'Keren! Tim kita sekarang ada di posisi 2 leaderboard mingguan!',
       createdAt: _now.subtract(const Duration(hours: 1, minutes: 15)),
     ),
@@ -963,7 +980,7 @@ class PacerDummyData {
       id: 'msg-006',
       teamId: '11111111-1111-1111-1111-111111111111',
       userId: 'demo-user-me',
-      userNama: 'Kamu',
+      userNama: 'andi_wijaya',
       body: 'Mantap, besok aku pasti datang on time! Semangat semuanya 🔥',
       createdAt: _now.subtract(const Duration(minutes: 20)),
     ),
@@ -988,7 +1005,7 @@ class PacerDummyData {
   >
   coachDummyRows = [
     (
-      nama: 'Budi Santoso',
+      nama: 'budi_santoso',
       sessions: 4,
       weekKm: 20.6,
       streak: 5,
@@ -996,7 +1013,7 @@ class PacerDummyData {
       berhasil: true,
     ),
     (
-      nama: 'Siti Rahma',
+      nama: 'siti_rahma',
       sessions: 3,
       weekKm: 12.7,
       streak: 3,
@@ -1004,7 +1021,7 @@ class PacerDummyData {
       berhasil: true,
     ),
     (
-      nama: 'Andi Wijaya',
+      nama: 'andi_wijaya',
       sessions: 2,
       weekKm: 7.6,
       streak: 7,
@@ -1012,7 +1029,7 @@ class PacerDummyData {
       berhasil: false,
     ),
     (
-      nama: 'Dewi Lestari',
+      nama: 'dewi_lestari',
       sessions: 2,
       weekKm: 8.4,
       streak: 2,
@@ -1020,7 +1037,7 @@ class PacerDummyData {
       berhasil: false,
     ),
     (
-      nama: 'Rizky Pratama',
+      nama: 'rizky_pratama',
       sessions: 5,
       weekKm: 62.5,
       streak: 12,
@@ -1028,7 +1045,7 @@ class PacerDummyData {
       berhasil: true,
     ),
     (
-      nama: 'Farhan Ramadhan',
+      nama: 'farhan_ramadhan',
       sessions: 1,
       weekKm: 4.5,
       streak: 4,
@@ -1036,4 +1053,186 @@ class PacerDummyData {
       berhasil: false,
     ),
   ];
+
+  /// Seeds a complete, ephemeral Demo Account into [store] under [demoUserId]
+  /// across every real local table (profiles, activities, routes, stats,
+  /// streaks, teams, rosters, challenges, participations, notifications,
+  /// leaderboards, and chat) without touching sync_outbox or remote Supabase.
+  static Future<void> seedIntoStore(
+    LocalStore store, {
+    String language = 'id',
+  }) async {
+    await store.wipeUserData(demoUserId);
+    resetDemoTeams();
+
+    final now = DateTime.now();
+    final nowUtc = now.toUtc();
+    final profile = UserProfile(
+      id: demoUserId,
+      nama: 'andi_wijaya',
+      peran: 'user',
+      lahir: DateTime.utc(2002, 5, 14),
+      jenisKelamin: 'Laki-laki',
+      tinggiCm: 172,
+      beratKg: 64,
+      region: 'DKI Jakarta',
+    );
+    await store.upsertProfile(
+      profile,
+      language: language,
+      email: 'demo@pacer.local',
+    );
+
+    await store.mergeRemoteActivities(demoUserId, activities);
+    for (final act in activities.take(4)) {
+      await store.saveRoutePoints(act.id, [
+        RutePoint(
+          aktivitasId: act.id,
+          urutan: 0,
+          lat: -6.2185,
+          lng: 106.8025,
+          elevasiM: 8,
+          kecepatanMs: 3.1,
+          direkamAt: act.mulaiAt,
+        ),
+        RutePoint(
+          aktivitasId: act.id,
+          urutan: 1,
+          lat: -6.2176,
+          lng: 106.8038,
+          elevasiM: 9,
+          kecepatanMs: 3.3,
+          direkamAt: act.mulaiAt?.add(const Duration(minutes: 4)),
+        ),
+        RutePoint(
+          aktivitasId: act.id,
+          urutan: 2,
+          lat: -6.2192,
+          lng: 106.8044,
+          elevasiM: 8,
+          kecepatanMs: 3.2,
+          direkamAt: act.mulaiAt?.add(const Duration(minutes: 8)),
+        ),
+      ]);
+      await store.setSyncTimestamp('route_${act.id}', nowUtc);
+    }
+
+    final weekKey = periodeKey(now);
+    await store.saveStatistikBaseline(
+      demoUserId,
+      weekKey,
+      statistics.km * 1000.0,
+      statistics.seconds,
+    );
+    await store.saveStreakBaseline(demoUserId, 5, now);
+
+    await store.saveTeams(demoUserId, teams, isMine: false, replaceAll: true);
+    await store.saveTeams(demoUserId, demoMyTeams, isMine: true);
+    for (final t in teams) {
+      await store.saveTeamRoster(demoUserId, t.id, getTeamRoster(t.id));
+      await store.setSyncTimestamp('team_${demoUserId}_${t.id}', nowUtc);
+      await store.setSyncTimestamp('team_roster_${demoUserId}_${t.id}', nowUtc);
+    }
+
+    await store.saveChallenges(demoUserId, demoChallenges);
+    await store.saveParticipations(demoUserId, getDemoParticipations());
+    await store.saveNotifications(demoUserId, getDemoNotifications());
+
+    final boards = [
+      Leaderboard(
+        id: 'demo-lb-jarak-week',
+        nama: 'Peringkat Jarak (Mingguan - Km)',
+        periode: 'mingguan',
+        kriteria: 'jarak',
+        createdAt: nowUtc,
+      ),
+      Leaderboard(
+        id: 'demo-lb-jarak-month',
+        nama: 'Peringkat Jarak (Bulanan - Km)',
+        periode: 'bulanan',
+        kriteria: 'jarak',
+        createdAt: nowUtc.subtract(const Duration(minutes: 1)),
+      ),
+      Leaderboard(
+        id: 'demo-lb-kalori-week',
+        nama: 'Kalori Terbakar (Mingguan)',
+        periode: 'mingguan',
+        kriteria: 'kalori',
+        createdAt: nowUtc.subtract(const Duration(minutes: 2)),
+      ),
+      Leaderboard(
+        id: 'demo-lb-durasi-week',
+        nama: 'Total Durasi (Mingguan - Menit)',
+        periode: 'mingguan',
+        kriteria: 'durasi',
+        createdAt: nowUtc.subtract(const Duration(minutes: 3)),
+      ),
+    ];
+    await store.saveLeaderboards(demoUserId, boards);
+
+    for (final b in boards) {
+      final data = getLeaderboardData(
+        metric: b.kriteria,
+        period: b.periode,
+        scope: 'global',
+        uid: demoUserId,
+      );
+      final cleaned = [
+        for (final r in data.rows)
+          (
+            entry: Peringkat(
+              id: '${b.id}_${r.entry.userId}',
+              leaderboardId: b.id,
+              userId: r.entry.userId,
+              nilai: r.entry.nilai,
+              posisi: r.entry.posisi,
+              updatedAt: nowUtc,
+            ),
+            nama: r.entry.userId == demoUserId ? 'andi_wijaya' : r.nama,
+          ),
+      ];
+      await store.saveLeaderboardEntries(demoUserId, b.id, cleaned);
+      await store.setSyncTimestamp('lb_entries_${demoUserId}_${b.id}', nowUtc);
+    }
+    await store.saveLeaderboardScope(demoUserId, 'team', {
+      demoUserId,
+      'demo-user-0',
+      'demo-user-1',
+      'demo-user-3',
+      'demo-user-4',
+    });
+    await store.saveLeaderboardScope(demoUserId, 'region', {
+      demoUserId,
+      'demo-user-0',
+      'demo-user-1',
+      'demo-user-3',
+      'demo-user-4',
+      'demo-user-5',
+      'demo-user-6',
+    });
+
+    await store.mergeChatMessages(
+      demoUserId,
+      '11111111-1111-1111-1111-111111111111',
+      chatMessages,
+    );
+
+    await store.setSyncTimestamp('profile_$demoUserId', nowUtc);
+    await store.setSyncTimestamp('language_$demoUserId', nowUtc);
+    await store.setSyncTimestamp('activities_${demoUserId}_15', nowUtc);
+    await store.setSyncTimestamp('activities_${demoUserId}_20', nowUtc);
+    await store.setSyncTimestamp('activities_${demoUserId}_50', nowUtc);
+    await store.setSyncTimestamp('streak_$demoUserId', nowUtc);
+    await store.setSyncTimestamp('stats_${demoUserId}_$weekKey', nowUtc);
+    await store.setSyncTimestamp('challenges_$demoUserId', nowUtc);
+    await store.setSyncTimestamp('challenge_parts_$demoUserId', nowUtc);
+    await store.setSyncTimestamp('notifications_$demoUserId', nowUtc);
+    await store.setSyncTimestamp('teams_list_$demoUserId', nowUtc);
+    await store.setSyncTimestamp('teams_my_$demoUserId', nowUtc);
+    await store.setSyncTimestamp('lb_boards_$demoUserId', nowUtc);
+    await store.setSyncTimestamp('lb_scope_${demoUserId}_team', nowUtc);
+    await store.setSyncTimestamp('lb_scope_${demoUserId}_region', nowUtc);
+
+    await store.setLastUserId(demoUserId);
+  }
 }

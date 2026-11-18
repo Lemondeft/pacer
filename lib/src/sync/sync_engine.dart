@@ -9,6 +9,7 @@ import 'package:pacer/src/challenge/challenge_model.dart';
 import 'package:pacer/src/chat/chat_model.dart';
 import 'package:pacer/src/local/local_models.dart';
 import 'package:pacer/src/local/local_store.dart';
+import 'package:pacer/src/local/swr_helper.dart' show isDemoUserId;
 import 'package:pacer/src/sync/connectivity_service.dart';
 import 'package:pacer/supabase.dart';
 
@@ -568,10 +569,20 @@ class SyncEngine extends ChangeNotifier {
     }
   }
 
+  /// Clears transient retry/error/auth flags and pending counters when signing
+  /// out or switching accounts so no stale state leaks across sessions.
+  void resetSession() {
+    _retryTimer?.cancel();
+    _retryTimer = null;
+    _rerunRequested = false;
+    _status = SyncStatus(isOnline: _connectivity.value);
+    notifyListeners();
+  }
+
   /// Refreshes outbox pending/failed counters without requiring network.
   Future<void> refreshCounts({String? userId}) async {
     final uid = userId ?? _gateway.currentUserId ?? await _store.getLastUserId();
-    if (uid == null) {
+    if (uid == null || isDemoUserId(uid)) {
       _status = SyncStatus(isOnline: _connectivity.value);
       notifyListeners();
       return;
@@ -614,7 +625,7 @@ class SyncEngine extends ChangeNotifier {
 
   Future<void> _drainOnce({String? userId, required bool retryFailed}) async {
     final uid = userId ?? _gateway.currentUserId ?? await _store.getLastUserId();
-    if (uid == null) {
+    if (uid == null || isDemoUserId(uid)) {
       await refreshCounts(userId: null);
       return;
     }
@@ -811,6 +822,7 @@ class SyncEngine extends ChangeNotifier {
     if (points.isNotEmpty) {
       await _gateway.upsertRoutePoints(activity.id, points);
     }
+    await _store.setSyncTimestamp('route_${activity.id}', _now());
 
     var effectiveActivity = activity;
     final verdict = await _gateway.validateActivityFunction(activity.id);

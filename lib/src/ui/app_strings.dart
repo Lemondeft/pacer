@@ -1,4 +1,5 @@
 import 'package:flutter/foundation.dart';
+import 'package:pacer/src/auth/profile_input.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 /// App language. Default Indonesian (per Figma's mixed copy, unified to ID).
@@ -903,4 +904,27 @@ class S {
   static String get adminExcludeCta => _en ? 'Exclude' : 'Kecualikan';
   static String get adminSaveRoleCta => _en ? 'Save Role' : 'Simpan Peran';
   static String get adminRetryCta => _en ? 'Retry' : 'Coba Lagi';
+
+  // Demo & Session Reset
+  static String get tryDemoAccount =>
+      _en ? 'Try Demo Account' : 'Coba Akun Demo';
+  static String get demoAccountTitle =>
+      _en ? 'Demo Account' : 'Akun Demo';
+  static String get demoModeSubtitle => _en
+      ? 'demo@pacer.local · Wipes on logout'
+      : 'demo@pacer.local · Dihapus saat keluar';
+  static String get errUsernameRequired =>
+      _en ? 'Username is required.' : 'Nama pengguna wajib diisi.';
+  static String get errUsernameNoSpaces => _en
+      ? 'Username cannot contain spaces.'
+      : 'Nama pengguna tidak boleh memakai spasi.';
+  static String get errUsernameTooShort => _en
+      ? 'Username must be at least 3 characters.'
+      : 'Nama pengguna minimal 3 karakter.';
+
+  static String usernameError(UsernameError err) => switch (err) {
+    UsernameError.required => errUsernameRequired,
+    UsernameError.hasWhitespace => errUsernameNoSpaces,
+    UsernameError.tooShort => errUsernameTooShort,
+  };
 }

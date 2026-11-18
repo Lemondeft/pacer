@@ -5,7 +5,7 @@
 
   **Offline-first sports & running tracker built with Flutter and Supabase.**
 
-  [![Release](https://img.shields.io/badge/version-v0.2.7-00CDFA?style=flat-square)](https://github.com/Lemondeft/pacer/releases)
+  [![Release](https://img.shields.io/badge/version-v0.2.9-00CDFA?style=flat-square)](https://github.com/Lemondeft/pacer/releases)
   [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue?style=flat-square)](LICENSE)
   [![Flutter](https://img.shields.io/badge/Flutter-Android%20%7C%20iOS%20%7C%20Desktop%20%7C%20Web-02569B?style=flat-square&logo=flutter&logoColor=white)](https://flutter.dev)
   [![Supabase](https://img.shields.io/badge/Supabase-Postgres%20%2B%20RLS-3ECF8E?style=flat-square&logo=supabase&logoColor=white)](https://supabase.com)
@@ -19,7 +19,7 @@
 
 Pre-built release binaries featuring the Pacer speed-cut brand icon are available on [**GitHub Releases**](https://github.com/Lemondeft/pacer/releases).
 
-> **Try without signing up:** Launch the app and select **Demo Account** on the login screen to explore all features offline with pre-populated workouts, teams, and challenges.
+> **Try without signing up:** Launch the app and select **Try Demo Account** on the Welcome or Login screen to explore a real local SQLite sandbox with pre-populated workouts, teams, and challenges that resets cleanly on logout.
 
 ---
 
@@ -47,8 +47,6 @@ Pre-built release binaries featuring the Pacer speed-cut brand icon are availabl
 ---
 
 ## 📸 Screenshots
-
-> *Tip: Replace these placeholders with actual app captures from `docs/screenshots/` to showcase the Liquid Glass UI and Linux themes.*
 
 | Dashboard & Liquid Glass | Live GPS Tracking | Linux Palettes & Challenges |
 | :---: | :---: | :---: |
@@ -81,10 +79,32 @@ Pacer is designed as an **offline-first** client backed by a multi-tenant relati
 ### 1. Clone & Configure Environment
 
 ```bash
-git clone [https://github.com/Lemondeft/pacer.git](https://github.com/Lemondeft/pacer.git)
+git clone https://github.com/Lemondeft/pacer.git
 cd pacer
 flutter pub get
 cp .env.example .env
-
+# Fill SUPABASE_URL and SUPABASE_ANON_KEY in .env (keep SUPABASE_SERVICE_KEY empty in client builds)
 ```
-basically, clone this repo and setup your own supabase server.
+
+### 2. Supabase Backend Setup
+1. Link your Supabase project and apply forward SQL migrations in [`supabase/migrations/`](supabase/migrations):
+   ```bash
+   supabase db push
+   ```
+2. Deploy the Layer 5 activity validator Edge Function:
+   ```bash
+   supabase functions deploy validate-activity
+   ```
+
+### 3. Run & Verify
+```bash
+flutter analyze
+flutter test
+flutter run
+```
+
+---
+
+## 📄 License
+
+Distributed under the **GNU General Public License v3.0 (GPL-3.0)**. See [LICENSE](LICENSE) for details.

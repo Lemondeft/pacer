@@ -1,11 +1,15 @@
 import 'dart:async';
 
+import 'package:flutter/foundation.dart' show ValueNotifier;
 import 'package:supabase_flutter/supabase_flutter.dart';
 
+import 'package:pacer/src/auth/profile_input.dart' show validateUsername;
 import 'package:pacer/src/auth/user_model.dart';
 import 'package:pacer/src/cache/pacer_cache.dart';
+import 'package:pacer/src/demo/pacer_dummy_data.dart';
 import 'package:pacer/src/local/local_store.dart';
 import 'package:pacer/src/local/swr_helper.dart';
+import 'package:pacer/src/notifications/notification_repository.dart';
 import 'package:pacer/src/sync/connectivity_service.dart';
 import 'package:pacer/src/sync/sync_engine.dart';
 
@@ -17,6 +21,14 @@ class EmailConfirmationRequired implements Exception {
 
 /// Offline-first auth & profile repository (DFD process 1.0 LOGIN/KELOLA USER).
 class AuthRepository {
+  /// Increments on sign-in, sign-up, sign-out, and demo entry so root UI shells
+  /// rebuild with clean per-session state.
+  static final ValueNotifier<int> sessionEpoch = ValueNotifier<int>(0);
+
+  /// Increments strictly on explicit sign-out so mounted auth flows unwind
+  /// pushed screens back to the welcome gate without stale BuildContexts.
+  static final ValueNotifier<int> signOutEpoch = ValueNotifier<int>(0);
+
   final SupabaseClient? _clientOverride;
   final LocalStore? _storeOverride;
   final SyncEngine? _syncOverride;
@@ -39,9 +51,23 @@ class AuthRepository {
     required String password,
     required String nama,
   }) async {
+    final cleanNama = nama.trim();
+    final nameErr = validateUsername(cleanNama);
+    if (nameErr != null) {
+      throw ArgumentError.value(nama, 'nama', nameErr.name);
+    }
     final c = _client;
     if (c == null) throw StateError('No backend configured.');
-    final res = await c.auth.signUp(email: email, password: password);
+    PacerCache.instance.clear();
+    NotificationRepository.resetSession();
+    _sync.resetSession();
+    PacerDummyData.resetDemoTeams();
+    await _store.wipeUserData(demoSandboxUserId);
+    final res = await c.auth.signUp(
+      email: email,
+      password: password,
+      data: {'nama': cleanNama, 'username': cleanNama},
+    );
     final user = res.user;
     if (user == null) {
       throw StateError('Sign-up succeeded without a user session.');
@@ -49,12 +75,13 @@ class AuthRepository {
     if (res.session == null) {
       throw const EmailConfirmationRequired();
     }
-    await c.from('users').insert(buildUserRow(id: user.id, nama: nama));
+    await c.from('users').insert(buildUserRow(id: user.id, nama: cleanNama));
     await _store.setLastUserId(user.id);
     final profile = await getProfile(forceRefresh: true);
-    final resolved = profile ?? UserProfile(id: user.id, nama: nama);
+    final resolved = profile ?? UserProfile(id: user.id, nama: cleanNama);
     await _store.upsertProfile(resolved, email: user.email);
     await _sync.refreshCounts(userId: user.id);
+    sessionEpoch.value++;
     return resolved;
   }
 
@@ -62,15 +89,37 @@ class AuthRepository {
   Future<void> signIn({required String email, required String password}) async {
     final c = _client;
     if (c == null) throw StateError('No backend configured.');
+    PacerCache.instance.clear();
+    NotificationRepository.resetSession();
+    _sync.resetSession();
+    PacerDummyData.resetDemoTeams();
+    await _store.wipeUserData(demoSandboxUserId);
     await c.auth.signInWithPassword(email: email, password: password);
     final id = currentUserId();
     if (id == null) return;
     await _store.setLastUserId(id);
+    final meta = c.auth.currentUser?.userMetadata;
+    final metaNama = ((meta?['nama'] ?? meta?['username']) as String? ?? '')
+        .trim();
     var profile = await getProfile(forceRefresh: true);
     if (profile == null) {
       try {
-        await c.from('users').insert(buildUserRow(id: id, nama: ''));
-        profile = UserProfile(id: id, nama: '');
+        await c.from('users').insert(buildUserRow(id: id, nama: metaNama));
+        profile = UserProfile(id: id, nama: metaNama);
+      } catch (_) {}
+    } else if ((profile.nama ?? '').trim().isEmpty && metaNama.isNotEmpty) {
+      try {
+        await c.from('users').update({'nama': metaNama}).eq('id', id);
+        profile = UserProfile(
+          id: profile.id,
+          nama: metaNama,
+          peran: profile.peran,
+          lahir: profile.lahir,
+          jenisKelamin: profile.jenisKelamin,
+          tinggiCm: profile.tinggiCm,
+          beratKg: profile.beratKg,
+          region: profile.region,
+        );
       } catch (_) {}
     }
     if (profile != null) {
@@ -79,25 +128,56 @@ class AuthRepository {
         email: c.auth.currentUser?.email ?? email,
       );
     }
+    await _sync.refreshCounts(userId: id);
     unawaited(_sync.triggerSync(userId: id));
+    sessionEpoch.value++;
+  }
+
+  /// Signs into an actual ephemeral Demo Account seeded in [LocalStore].
+  /// All edits/workouts run through real SQLite tables and are wiped on logout.
+  static Future<void> prepareDemoSession({
+    LocalStore? store,
+    SyncEngine? sync,
+    String language = 'id',
+  }) async {
+    final targetStore = store ?? LocalStore.instance;
+    PacerCache.instance.clear();
+    NotificationRepository.resetSession();
+    (sync ?? SyncEngine.instance).resetSession();
+    await PacerDummyData.seedIntoStore(targetStore, language: language);
+    final notifs = await targetStore.getNotifications(demoSandboxUserId);
+    NotificationRepository.unreadCountNotifier.value = notifs
+        .where((n) => !n.isRead)
+        .length;
+    NotificationRepository.revisionNotifier.value++;
+    sessionEpoch.value++;
   }
 
   /// Number of local mutations queued in the outbox for the current user.
   Future<int> pendingSyncCount() async {
     final id = await resolveUserId();
-    if (id == null) return 0;
+    if (id == null || isDemoUserId(id)) return 0;
     return _store.getPendingOutboxCount(id);
   }
 
   Future<void> signOut() async {
     PacerCache.instance.clear();
+    NotificationRepository.resetSession();
+    _sync.resetSession();
+    PacerDummyData.resetDemoTeams();
+    await _store.wipeUserData(demoSandboxUserId);
     await _store.setLastUserId(null);
-    try {
-      await _client?.auth.signOut();
-    } catch (_) {
-      // Allow signing out cleanly while offline without failing the UX.
+    final c = _client;
+    if (c != null) {
+      try {
+        await c.auth.signOut().timeout(const Duration(seconds: 3));
+      } catch (_) {
+        // GoTrue clears the local session before network revoke; offline or
+        // timeout failures must not stall local logout.
+      }
     }
-    await _sync.refreshCounts(userId: null);
+    sessionEpoch.value++;
+    signOutEpoch.value++;
   }
 
   String? currentUserId() => _client?.auth.currentUser?.id;
@@ -201,9 +281,11 @@ class AuthRepository {
     final id = await resolveUserId();
     if (id == null) return;
     await _store.queueLanguageUpdate(id, langCode);
-    await _sync.refreshCounts(userId: id);
-    if (ConnectivityService.instance.value && _client != null) {
-      unawaited(_sync.triggerSync(userId: id));
+    if (!isDemoUserId(id)) {
+      await _sync.refreshCounts(userId: id);
+      if (ConnectivityService.instance.value && _client != null) {
+        unawaited(_sync.triggerSync(userId: id));
+      }
     }
   }
 
@@ -251,7 +333,9 @@ class AuthRepository {
     if (region != null || clear.contains('region')) {
       PacerCache.instance.invalidatePrefix('leaderboard_');
     }
-    await _sync.refreshCounts(userId: id);
-    unawaited(_sync.triggerSync(userId: id));
+    if (!isDemoUserId(id)) {
+      await _sync.refreshCounts(userId: id);
+      unawaited(_sync.triggerSync(userId: id));
+    }
   }
 }

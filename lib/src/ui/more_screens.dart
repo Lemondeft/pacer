@@ -48,8 +48,14 @@ import 'widgets.dart';
 /// The first field is the email credential Supabase Auth signs in with.
 class LoginScreen extends StatefulWidget {
   final VoidCallback onLoggedIn;
+  final VoidCallback? onDemo;
   final VoidCallback? onBack;
-  const LoginScreen({super.key, required this.onLoggedIn, this.onBack});
+  const LoginScreen({
+    super.key,
+    required this.onLoggedIn,
+    this.onDemo,
+    this.onBack,
+  });
 
   @override
   State<LoginScreen> createState() => _LoginScreenState();
@@ -144,6 +150,29 @@ class _LoginScreenState extends State<LoginScreen> {
               PrimaryButton(label: S.logIn, onPressed: _busy ? null : _submit),
               const SizedBox(height: 32),
               Divider(color: PacerScheme.of(context).border, height: 1),
+              if (widget.onDemo != null) ...[
+                const SizedBox(height: 20),
+                SizedBox(
+                  width: double.infinity,
+                  height: 48,
+                  child: OutlinedButton.icon(
+                    onPressed: _busy ? null : widget.onDemo,
+                    icon: const Icon(Icons.offline_bolt_outlined, size: 18),
+                    label: Text(
+                      S.tryDemoAccount,
+                      style: GoogleFonts.spaceGrotesk(
+                        fontWeight: FontWeight.w700,
+                        fontSize: 14,
+                      ),
+                    ),
+                    style: OutlinedButton.styleFrom(
+                      foregroundColor: PacerScheme.of(context).ink,
+                      side: BorderSide(color: PacerScheme.of(context).border),
+                      shape: const PacerSquircleBorder(PacerRadii.md),
+                    ),
+                  ),
+                ),
+              ],
               const SizedBox(height: 24),
             ],
           ),
@@ -871,7 +900,7 @@ class _RunTrackerScreenState extends State<RunTrackerScreen> {
       final summary = await _recorder.finish(challengeIds: challengeIds);
       if (summary != null && await isDemoAccount()) {
         final now = DateTime.now().toUtc();
-        PacerDummyData.recordDemoActivityProgress(
+        PacerDummyData.recordDemoActivity(
           Activity(
             id: summary.aktivitasId,
             userId: 'demo-user-me',
@@ -951,6 +980,7 @@ class _RunTrackerScreenState extends State<RunTrackerScreen> {
                 listenable: _recorder,
                 builder: (context, _) => RouteMap(
                   points: _recorder.points,
+                  segmentBreakIndices: _recorder.pauseBreakIndices,
                   height: double.infinity,
                   fitBounds: _mapFocus,
                   showControls: _mapFocus,
@@ -2120,6 +2150,9 @@ class _RunFinishScreenState extends State<RunFinishScreen> {
                         else
                           RouteMap(
                             points: latLngs,
+                            segmentBreakIndices: RouteMap.breakIndicesFromRoute(
+                              routePts,
+                            ),
                             height: 250,
                             fitBounds: true,
                             showControls: true,
@@ -4812,7 +4845,7 @@ class HistoryScreenState extends State<HistoryScreen> {
       _isDemo = true;
       final now = DateTime.now();
       return [
-        for (final a in PacerDummyData.activities)
+        for (final a in PacerDummyData.demoActivities)
           LocalActivity(
             activity: a,
             syncState: SyncState.synced,
@@ -4820,7 +4853,7 @@ class HistoryScreenState extends State<HistoryScreen> {
           ),
       ];
     }
-    _isDemo = false;
+    _isDemo = await isDemoSession();
     try {
       return await ActivityRepository().listLocalActivities(
         limit: 50,
@@ -4909,8 +4942,6 @@ class HistoryScreenState extends State<HistoryScreen> {
                 const SizedBox(height: 16),
               ],
               Text(S.history, style: PacerText.pageTitleOf(context)),
-              if (!_isDemo) const SizedBox(height: 8),
-              if (!_isDemo) const SyncStatusBanner(),
               FutureBuilder<List<LocalActivity>>(
                 future: _future,
                 builder: (context, snap) {
@@ -4926,6 +4957,11 @@ class HistoryScreenState extends State<HistoryScreen> {
                   return Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
+                      if (!_isDemo &&
+                          snap.connectionState == ConnectionState.done) ...[
+                        const SizedBox(height: 8),
+                        const SyncStatusBanner(),
+                      ],
                       // Hero scales down instead of overflowing at 360px.
                       SizedBox(
                         width: double.infinity,
@@ -5834,22 +5870,29 @@ class _AccountScreenState extends State<AccountScreen> {
   _load() async {
     try {
       if (await isDemoAccount()) {
-        return (nama: null, email: null, isDemo: true, peran: 'user');
+        return (
+          nama: S.demoAccountTitle,
+          email: S.demoModeSubtitle,
+          isDemo: true,
+          peran: 'user',
+        );
       }
       final auth = AuthRepository();
+      final uid = await auth.resolveUserId();
+      final demo = isDemoUserId(uid);
       final profile = await auth.getProfile();
       final email = await auth.getSavedEmail();
       return (
         nama: profile?.nama,
-        email: email,
-        isDemo: false,
+        email: demo ? S.demoModeSubtitle : email,
+        isDemo: demo,
         peran: profile?.peran ?? 'user',
       );
     } catch (_) {
       return (
         nama: null,
         email: null,
-        isDemo: await isDemoAccount(),
+        isDemo: await isDemoSession(),
         peran: 'user',
       );
     }
@@ -6024,6 +6067,13 @@ class _AccountScreenState extends State<AccountScreen> {
                 _profile?.nama ?? '–',
                 style: PacerText.cardTitleOf(context),
               ),
+              if (_isDemo && _profile?.nama != S.demoAccountTitle) ...[
+                const SizedBox(height: 4),
+                Text(
+                  S.demoModeSubtitle,
+                  style: PacerText.cardSubOf(context),
+                ),
+              ],
               const SizedBox(height: 12),
               PacerGroupedPanel(
                 children: [
@@ -6105,6 +6155,8 @@ class _AccountScreenState extends State<AccountScreen> {
                     label: S.out,
                     destructive: true,
                     onTap: () async {
+                      final nav = Navigator.of(context);
+                      final hadActiveAuthFlow = PacerAuthFlow.hasActiveFlow;
                       if (!_isDemo) {
                         final pending = await AuthRepository()
                             .pendingSyncCount();
@@ -6132,33 +6184,16 @@ class _AccountScreenState extends State<AccountScreen> {
                           if (confirm != true) return;
                         }
                       }
-                      try {
-                        await AuthRepository().signOut();
-                      } catch (_) {
-                        // Demo mode (no backend): just leave.
-                      }
-                      if (!context.mounted) return;
-                      Navigator.of(context).pushAndRemoveUntil(
-                        MaterialPageRoute(
-                          builder: (_) => GetStartedScreen(
-                            onSignIn: () => Navigator.of(context)
-                                .pushAndRemoveUntil(
-                                  MaterialPageRoute(
-                                    builder: (_) => const MainShell(),
-                                  ),
-                                  (route) => false,
-                                ),
-                            onLogIn: () => Navigator.of(context)
-                                .pushAndRemoveUntil(
-                                  MaterialPageRoute(
-                                    builder: (_) => const MainShell(),
-                                  ),
-                                  (route) => false,
-                                ),
+                      await AuthRepository().signOut();
+                      if (!hadActiveAuthFlow) {
+                        nav.pushAndRemoveUntil(
+                          MaterialPageRoute(
+                            builder: (_) =>
+                                const PacerAuthFlow(startWithSplash: false),
                           ),
-                        ),
-                        (route) => false,
-                      );
+                          (route) => false,
+                        );
+                      }
                     },
                   ),
                 ],
@@ -8141,7 +8176,7 @@ class _ChatScreenState extends State<ChatScreen> {
           constraints: const BoxConstraints(maxWidth: 720),
           child: Column(
             children: [
-              if (!_demo)
+              if (!_demo && !isDemoUserId(_uid))
                 const Padding(
                   padding: EdgeInsets.fromLTRB(12, 8, 12, 0),
                   child: SyncStatusBanner(margin: EdgeInsets.zero),
@@ -8307,7 +8342,7 @@ class _AboutMeScreenState extends State<AboutMeScreen> {
           _demo = true;
           _profile = UserProfile(
             id: 'demo-user-me',
-            nama: 'Pacer Demo',
+            nama: 'pacer_demo',
             lahir: DateTime.utc(2006, 5, 14),
             jenisKelamin: 'Laki-laki',
             tinggiCm: 172,
@@ -8373,7 +8408,8 @@ class _AboutMeScreenState extends State<AboutMeScreen> {
       );
       await _reloadProfile();
       if (!mounted) return;
-      final msg = ConnectivityService.instance.value
+      final msg =
+          ConnectivityService.instance.value || isDemoUserId(_profile?.id)
           ? S.nameSaved
           : S.queuedOfflineSaved;
       ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(msg)));
@@ -8465,7 +8501,7 @@ class _AboutMeScreenState extends State<AboutMeScreen> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               const PageHeader(),
-              if (!_demo) ...[
+              if (!_demo && !isDemoUserId(_profile?.id)) ...[
                 const SizedBox(height: 8),
                 const SyncStatusBanner(),
               ],
@@ -8622,8 +8658,9 @@ class _ProfileEditDialogState extends State<ProfileEditDialog> {
 
   void _save() {
     final nama = _nama.text.trim();
-    if (nama.isEmpty) {
-      setState(() => _error = S.errFillAll);
+    final usernameErr = validateUsername(_nama.text);
+    if (usernameErr != null) {
+      setState(() => _error = S.usernameError(usernameErr));
       return;
     }
     final tinggi = parseDecimal(_tinggi.text);

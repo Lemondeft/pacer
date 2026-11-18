@@ -7,6 +7,8 @@ import 'package:flutter_map_vector_tiles/flutter_map_vector_tiles.dart' as vt;
 import 'package:geolocator/geolocator.dart';
 import 'package:latlong2/latlong.dart' hide Path;
 
+import 'package:pacer/src/aktivitas/activity_model.dart';
+import 'package:pacer/src/tracking/activity_classifier.dart' show haversineMeters;
 import 'package:pacer/src/ui/app_strings.dart';
 
 /// Distraction-free route view powered by OpenFreeMap vector tiles (no API key):
@@ -23,6 +25,7 @@ class RouteMap extends StatefulWidget {
   static const String darkStyleUri = 'https://tiles.openfreemap.org/styles/fiord';
 
   final List<LatLng> points;
+  final Set<int> segmentBreakIndices;
   final double height;
   final bool minimal;
   final bool fitBounds;
@@ -37,6 +40,23 @@ class RouteMap extends StatefulWidget {
   /// Optional test hook to inject a pre-built/fake style loader without network.
   @visibleForTesting
   final Future<vt.Style?> Function(String uri)? styleLoader;
+
+  /// Indices where large pause/relocation gaps (> 60 s and > 100 m) break the polyline.
+  static Set<int> breakIndicesFromRoute(List<RutePoint> pts) {
+    final breaks = <int>{};
+    for (var i = 1; i < pts.length; i++) {
+      final prevAt = pts[i - 1].direkamAt;
+      final currAt = pts[i].direkamAt;
+      if (prevAt == null || currAt == null) continue;
+      final dtSec = currAt.difference(prevAt).inSeconds;
+      if (dtSec > 60 &&
+          haversineMeters(pts[i - 1].lat, pts[i - 1].lng, pts[i].lat, pts[i].lng) >
+              100.0) {
+        breaks.add(i);
+      }
+    }
+    return breaks;
+  }
 
   /// Removes `landuse_residential` from OpenFreeMap Fiord so beige low-zoom
   /// polygons do not obscure the clean slate-blue dark palette.
@@ -63,6 +83,7 @@ class RouteMap extends StatefulWidget {
   const RouteMap({
     super.key,
     required this.points,
+    this.segmentBreakIndices = const {},
     this.height = 300,
     this.minimal = false,
     this.fitBounds = false,
@@ -85,6 +106,7 @@ class _RouteMapState extends State<RouteMap> {
   late bool _minimal = widget.minimal;
   LatLng? _resolvedFallback;
   bool _mapReady = false;
+  bool _userLockedCamera = false;
 
   vt.Style? _style;
   String? _targetStyleUri;
@@ -110,6 +132,24 @@ class _RouteMapState extends State<RouteMap> {
       if (p.longitude > maxLng) maxLng = p.longitude;
     }
     return (maxLat - minLat).abs() > 1e-5 || (maxLng - minLng).abs() > 1e-5;
+  }
+
+  List<List<LatLng>> _routeSegments(List<LatLng> pts) {
+    if (pts.length < 2) return const [];
+    final breaks = widget.segmentBreakIndices;
+    if (breaks.isEmpty) return [pts];
+    final segments = <List<LatLng>>[];
+    var current = <LatLng>[pts.first];
+    for (var i = 1; i < pts.length; i++) {
+      if (breaks.contains(i)) {
+        if (current.length > 1) segments.add(current);
+        current = <LatLng>[pts[i]];
+      } else {
+        current.add(pts[i]);
+      }
+    }
+    if (current.length > 1) segments.add(current);
+    return segments;
   }
 
   void _syncCamera() {
@@ -223,7 +263,9 @@ class _RouteMapState extends State<RouteMap> {
             widget.points.last != oldWidget.points.last);
     final anchorChanged = widget.fallbackCenter != oldWidget.fallbackCenter;
     final fitChanged = widget.fitBounds != oldWidget.fitBounds;
-    if (pointsChanged || anchorChanged || fitChanged) {
+    if (fitChanged) _userLockedCamera = false;
+    if ((pointsChanged || anchorChanged || fitChanged) &&
+        (!_userLockedCamera || fitChanged)) {
       _syncCamera();
     }
   }
@@ -272,6 +314,7 @@ class _RouteMapState extends State<RouteMap> {
                 tooltip: S.recenterRoute,
                 onPressed: () {
                   HapticFeedback.lightImpact();
+                  _userLockedCamera = false;
                   _syncCamera();
                 },
               ),
@@ -345,6 +388,9 @@ class _RouteMapState extends State<RouteMap> {
                         maxZoom: 17.5,
                       )
                     : null,
+                onPositionChanged: (_, hasGesture) {
+                  if (hasGesture) _userLockedCamera = true;
+                },
                 onMapReady: () {
                   _mapReady = true;
                   if (useFitBounds || pts.isEmpty) {
@@ -371,20 +417,22 @@ class _RouteMapState extends State<RouteMap> {
                   PolylineLayer(
                     polylines: [
                       // High-contrast casing ensures legibility on both Positron and Dark themes.
-                      Polyline(
-                        points: pts,
-                        strokeWidth: 7.5,
-                        color: casingColor,
-                        strokeCap: StrokeCap.round,
-                        strokeJoin: StrokeJoin.round,
-                      ),
-                      Polyline(
-                        points: pts,
-                        strokeWidth: 4.5,
-                        color: _route,
-                        strokeCap: StrokeCap.round,
-                        strokeJoin: StrokeJoin.round,
-                      ),
+                      for (final seg in _routeSegments(pts)) ...[
+                        Polyline(
+                          points: seg,
+                          strokeWidth: 7.5,
+                          color: casingColor,
+                          strokeCap: StrokeCap.round,
+                          strokeJoin: StrokeJoin.round,
+                        ),
+                        Polyline(
+                          points: seg,
+                          strokeWidth: 4.5,
+                          color: _route,
+                          strokeCap: StrokeCap.round,
+                          strokeJoin: StrokeJoin.round,
+                        ),
+                      ],
                     ],
                   ),
                 if (pts.isNotEmpty)

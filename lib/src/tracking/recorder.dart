@@ -8,6 +8,7 @@ import 'package:uuid/uuid.dart';
 import 'package:pacer/src/aktivitas/activity_model.dart';
 import 'package:pacer/src/auth/auth_repository.dart';
 import 'package:pacer/src/cache/pacer_cache.dart';
+import 'package:pacer/src/demo/pacer_dummy_data.dart';
 import 'package:pacer/src/local/local_models.dart';
 import 'package:pacer/src/local/local_store.dart';
 import 'package:pacer/src/sync/sync_engine.dart';
@@ -70,6 +71,13 @@ class RunRecorder extends ChangeNotifier {
   int _windowSteps = 0;
   int _totalSteps = 0;
   bool _burstInFlight = false;
+  final Set<int> _pauseBreakIndices = <int>{};
+  bool _needsBreakOnNextFix = false;
+  int _totalWindows = 0;
+  int _cyclingBurstWindows = 0;
+  int _bikeOsWindows = 0;
+  double _peakWindowSpeedKmh = 0;
+  int? _peakWindowCadenceSpm;
 
   String? _aktivitasId;
   String? _userId;
@@ -114,14 +122,15 @@ class RunRecorder extends ChangeNotifier {
 
   List<LatLng> get points => [for (final f in _fixes) LatLng(f.lat, f.lng)];
 
+  Set<int> get pauseBreakIndices => Set<int>.unmodifiable(_pauseBreakIndices);
+
   int get pointCount => _fixes.length;
 
   Future<String> _requireUserId() async {
     final provided = await _resolveUserId?.call();
-    final uid =
-        provided ?? await AuthRepository(store: _store).resolveUserId();
-    if (uid == null) throw StateError('No signed-in user.');
-    return uid;
+    if (provided != null && provided.isNotEmpty) return provided;
+    final resolved = await AuthRepository(store: _store).resolveUserId();
+    return resolved ?? PacerDummyData.demoUserId;
   }
 
   /// Location service + permission gate. False leaves state untouched.
@@ -156,6 +165,13 @@ class RunRecorder extends ChangeNotifier {
     _windowSteps = 0;
     _totalSteps = 0;
     _burstInFlight = false;
+    _pauseBreakIndices.clear();
+    _needsBreakOnNextFix = false;
+    _totalWindows = 0;
+    _cyclingBurstWindows = 0;
+    _bikeOsWindows = 0;
+    _peakWindowSpeedKmh = 0;
+    _peakWindowCadenceSpm = null;
   }
 
   void _startSensors({required bool requestPermission}) {
@@ -250,6 +266,7 @@ class RunRecorder extends ChangeNotifier {
       osConfidence: baseWindow.osConfidence,
       accelBurst: burst,
     );
+    _recordWindowTelemetry(windowWithBurst, stepsInWindow);
     final nextMismatch = _mismatchMonitor.ingestWindow(
       selectedSport: sport,
       window: windowWithBurst,
@@ -258,6 +275,37 @@ class RunRecorder extends ChangeNotifier {
     if (!identical(prevMismatch, nextMismatch) && !_disposed) {
       notifyListeners();
     }
+  }
+
+  void _recordWindowTelemetry(TelemetryWindow w, int? stepsInWindow) {
+    _totalWindows++;
+    if (w.accelBurst?.isCyclingSignature == true) _cyclingBurstWindows++;
+    if (w.osActivity == OsMotionLabel.onBicycle &&
+        w.osConfidence >= DetectionThresholds.minOsConfidence) {
+      _bikeOsWindows++;
+    }
+    if (w.medianSpeedKmh >= _peakWindowSpeedKmh) {
+      _peakWindowSpeedKmh = w.medianSpeedKmh;
+      if (stepsInWindow != null) {
+        _peakWindowCadenceSpm = (stepsInWindow * 2).clamp(0, 240);
+      } else if (w.accelBurst?.estimatedCadenceSpm != null) {
+        _peakWindowCadenceSpm = w.accelBurst!.estimatedCadenceSpm;
+      }
+    }
+  }
+
+  Map<String, dynamic>? _buildMotionSummary() {
+    if (_totalWindows == 0 && _bikeOsWindows == 0 && _cyclingBurstWindows == 0) {
+      return null;
+    }
+    return {
+      'total_windows': _totalWindows,
+      'cycling_burst_windows': _cyclingBurstWindows,
+      'bike_os_windows': _bikeOsWindows,
+      'max_window_kmh': double.parse(_peakWindowSpeedKmh.toStringAsFixed(2)),
+      if (_peakWindowCadenceSpm != null)
+        'peak_window_cadence_spm': _peakWindowCadenceSpm,
+    };
   }
 
   @visibleForTesting
@@ -446,12 +494,16 @@ class RunRecorder extends ChangeNotifier {
     _stopSensors();
     _clock.stop();
     _recording = false;
+    if (_fixes.isNotEmpty) _needsBreakOnNextFix = true;
     unawaited(_flushCheckpoint());
     notifyListeners();
   }
 
   void resume() {
     if (!_started || _recording) return;
+    if (_needsBreakOnNextFix && _fixes.isNotEmpty) {
+      _sanitizer.markPauseBreak();
+    }
     if (_simMode) {
       _armSimTimer();
       _startSensors(requestPermission: false);
@@ -492,10 +544,22 @@ class RunRecorder extends ChangeNotifier {
     try {
       final last = await Geolocator.getLastKnownPosition();
       if (_disposed || !_started || _simMode) return;
-      if (last != null) {
+      if (last != null &&
+          !GpsSanitizer.isNullIsland(last.latitude, last.longitude) &&
+          isValidLatLng(last.latitude, last.longitude)) {
         _anchorLat = last.latitude;
         _anchorLng = last.longitude;
-        if (_fixes.isEmpty && last.accuracy <= maxAccuracyM && _recording) {
+        final ageSec = DateTime.now()
+            .toUtc()
+            .difference(last.timestamp.toUtc())
+            .inSeconds;
+        // Stale cached coordinates (>30s or >15m) center preview map only;
+        // never inject stale fixes into distance or speed calculations.
+        if (_fixes.isEmpty &&
+            _recording &&
+            ageSec >= 0 &&
+            ageSec <= 30 &&
+            last.accuracy <= 15.0) {
           _onFix(last);
         } else {
           notifyListeners();
@@ -508,10 +572,13 @@ class RunRecorder extends ChangeNotifier {
         ),
       );
       if (_disposed || !_started || !_recording || _simMode) return;
-      _anchorLat = current.latitude;
-      _anchorLng = current.longitude;
-      if (_fixes.isEmpty) {
-        _onFix(current);
+      if (!GpsSanitizer.isNullIsland(current.latitude, current.longitude) &&
+          isValidLatLng(current.latitude, current.longitude)) {
+        _anchorLat = current.latitude;
+        _anchorLng = current.longitude;
+        if (_fixes.isEmpty) {
+          _onFix(current);
+        }
       }
     } catch (_) {
       // Optional initial seed; continuous stream remains primary.
@@ -551,6 +618,12 @@ class RunRecorder extends ChangeNotifier {
   }
 
   void _appendAcceptedFix(Position p) {
+    if (_needsBreakOnNextFix) {
+      if (_fixes.isNotEmpty) {
+        _pauseBreakIndices.add(_fixes.length);
+      }
+      _needsBreakOnNextFix = false;
+    }
     _fixes.add(
       _Fix(
         lat: p.latitude,
@@ -690,6 +763,7 @@ class RunRecorder extends ChangeNotifier {
       ];
       final totalDist = _distanceM;
       final sport = _jenis;
+      final motionSummary = _buildMotionSummary();
       final anchorLat = _fixes.isNotEmpty ? _fixes.first.lat : _anchorLat;
       final anchorLng = _fixes.isNotEmpty ? _fixes.first.lng : _anchorLng;
 
@@ -706,13 +780,16 @@ class RunRecorder extends ChangeNotifier {
         suggestedSport: mismatch?.suggestedJenis,
         validationStatus: initialValidationStatus,
         cadenceSpm: cadence,
+        osMotionSummary: motionSummary,
       );
 
       PacerCache.instance.invalidatePrefix('activities_');
       PacerCache.instance.invalidatePrefix('streak_');
       PacerCache.instance.invalidatePrefix('leaderboard_');
-      await _sync.refreshCounts(userId: uid);
-      unawaited(_sync.triggerSync(userId: uid));
+      if (uid != PacerDummyData.demoUserId) {
+        await _sync.refreshCounts(userId: uid);
+        unawaited(_sync.triggerSync(userId: uid));
+      }
 
       _simMode = false;
       _recording = false;
@@ -749,9 +826,11 @@ class RunRecorder extends ChangeNotifier {
     }
   }
 
-  /// Pace min/km from the live totals; null when stationary.
+  /// Pace sec/km from live totals after warmup floor; null before 20 m & 5 s.
   double? get paceSecPerKm =>
-      _distanceM > 0 ? elapsed.inSeconds / (_distanceM / 1000) : null;
+      (_distanceM >= 20.0 && elapsed.inSeconds >= 5)
+          ? elapsed.inSeconds / (_distanceM / 1000)
+          : null;
 
   @override
   void dispose() {

@@ -44,11 +44,11 @@ String fmtKmNum(double? m) {
   return langNotifier.value == Lang.en ? km : km.replaceAll('.', ',');
 }
 
-/// Avatar initials from a display name ('Siti Rahma' → 'SR'); '?' when empty.
+/// Avatar initials from a username/name ('siti_rahma' / 'Siti Rahma' → 'SR'); '?' when empty.
 String initialsOf(String? nama) {
   final parts = (nama ?? '')
       .trim()
-      .split(RegExp(r'\s+'))
+      .split(RegExp(r'[\s_.-]+'))
       .where((s) => s.isNotEmpty)
       .toList();
   if (parts.isEmpty) return '?';

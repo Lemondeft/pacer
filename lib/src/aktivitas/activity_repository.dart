@@ -315,11 +315,15 @@ class ActivityRepository {
     bool forceRefresh = false,
   }) async {
     final c = _client;
+    final localAct = await _store.getActivity(aktivitasId);
+    final isLocallyUnsynced =
+        localAct != null && localAct.syncState != SyncState.synced;
     return offlineRead<List<RutePoint>>(
       store: _store,
       syncKey: 'route_$aktivitasId',
       forceRefresh: forceRefresh,
-      hasBackend: c != null && c.auth.currentUser != null,
+      hasBackend:
+          !isLocallyUnsynced && c != null && c.auth.currentUser != null,
       staleAfter: const Duration(days: 30),
       readLocal: () => _store.getRoutePoints(aktivitasId),
       fetchRemote: () async {
@@ -332,7 +336,12 @@ class ActivityRepository {
           for (final row in rows)
             RutePoint.fromJson(Map<String, dynamic>.from(row)),
         ];
-        await _store.saveRoutePoints(aktivitasId, list);
+        final latestAct = await _store.getActivity(aktivitasId);
+        if (list.isNotEmpty ||
+            latestAct == null ||
+            latestAct.syncState == SyncState.synced) {
+          await _store.saveRoutePoints(aktivitasId, list);
+        }
         return _store.getRoutePoints(aktivitasId);
       },
       writeLocal: (_) async {},

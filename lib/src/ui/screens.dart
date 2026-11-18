@@ -1,4 +1,4 @@
-import 'dart:async' show Timer;
+import 'dart:async' show Timer, unawaited;
 import 'dart:ui' show ImageFilter;
 
 import 'package:flutter/material.dart';
@@ -8,6 +8,7 @@ import 'package:pacer/core/responsive/responsive.dart';
 import 'package:pacer/src/aktivitas/activity_model.dart';
 import 'package:pacer/src/aktivitas/activity_repository.dart';
 import 'package:pacer/src/auth/auth_repository.dart';
+import 'package:pacer/src/auth/profile_input.dart';
 import 'package:pacer/src/challenge/challenge_model.dart';
 import 'package:pacer/src/challenge/challenge_repository.dart';
 import 'package:pacer/src/demo/pacer_dummy_data.dart';
@@ -85,15 +86,175 @@ class LoadingScreen extends StatelessWidget {
   }
 }
 
+/// Root authentication & session gate switching cleanly across splash loading,
+/// onboarding, sign-up, log-in, offline Demo Mode, and [MainShell].
+///
+/// Listens to [AuthRepository.signOutEpoch] so signing out from any pushed
+/// descendant route (e.g. [AccountScreen]) unwinds cleanly back to
+/// [GetStartedScreen] without capturing stale [BuildContext] closures.
+class PacerAuthFlow extends StatefulWidget {
+  final bool startWithSplash;
+  const PacerAuthFlow({super.key, this.startWithSplash = true});
+
+  static final Set<PacerAuthFlowState> _activeFlows = {};
+  static bool get hasActiveFlow => _activeFlows.isNotEmpty;
+
+  @override
+  State<PacerAuthFlow> createState() => PacerAuthFlowState();
+}
+
+class PacerAuthFlowState extends State<PacerAuthFlow> {
+  late String _route;
+  int _lastSignOutEpoch = 0;
+
+  @override
+  void initState() {
+    super.initState();
+    _route = widget.startWithSplash ? 'loading' : 'getStarted';
+    _lastSignOutEpoch = AuthRepository.signOutEpoch.value;
+    PacerAuthFlow._activeFlows.add(this);
+    AuthRepository.signOutEpoch.addListener(_onSignOutEpoch);
+  }
+
+  @override
+  void dispose() {
+    AuthRepository.signOutEpoch.removeListener(_onSignOutEpoch);
+    PacerAuthFlow._activeFlows.remove(this);
+    super.dispose();
+  }
+
+  void _onSignOutEpoch() {
+    final current = AuthRepository.signOutEpoch.value;
+    if (current == _lastSignOutEpoch) return;
+    _lastSignOutEpoch = current;
+    if (!mounted) return;
+    Navigator.maybeOf(context)?.popUntil((r) => r.isFirst);
+    setState(() => _route = 'getStarted');
+  }
+
+  Future<void> _syncUserLanguage(AuthRepository auth) async {
+    if (langUserLocked) return;
+    try {
+      final value = await auth.getLanguage();
+      if (value == 'en' && langNotifier.value != Lang.en) {
+        langNotifier.value = Lang.en;
+      } else if (value == 'id' && langNotifier.value != Lang.id) {
+        langNotifier.value = Lang.id;
+      }
+    } catch (_) {}
+  }
+
+  Future<void> _resolveInitialRoute() async {
+    var next = 'getStarted';
+    try {
+      final auth = AuthRepository();
+      final uid = await auth.resolveUserId();
+      if (uid != null) {
+        next = 'main';
+        await _syncUserLanguage(auth);
+        await SyncEngine.instance.refreshCounts(userId: uid);
+        unawaited(SyncEngine.instance.triggerSync(userId: uid));
+      }
+    } catch (_) {
+      // Demo mode: stay on GetStarted.
+    }
+    if (!mounted) return;
+    setState(() => _route = next);
+  }
+
+  Future<void> _enterMain() async {
+    final auth = AuthRepository();
+    if (!mounted) return;
+    setState(() => _route = 'main');
+    try {
+      final uid = await auth.resolveUserId();
+      if (uid != null) {
+        await _syncUserLanguage(auth);
+        await SyncEngine.instance.refreshCounts(userId: uid);
+        unawaited(SyncEngine.instance.triggerSync(userId: uid));
+      }
+    } catch (_) {}
+  }
+
+  Future<void> _enterDemo() async {
+    await AuthRepository.prepareDemoSession(
+      language: langNotifier.value == Lang.en ? 'en' : 'id',
+    );
+    if (!mounted) return;
+    setState(() => _route = 'main');
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final disableAnims = MediaQuery.disableAnimationsOf(context);
+    final Widget screen = switch (_route) {
+      'loading' => LoadingScreen(
+        key: const ValueKey('loading'),
+        onDone: () {
+          if (!mounted) return;
+          _resolveInitialRoute();
+        },
+      ),
+      'create' => PopScope(
+        key: const ValueKey('create'),
+        canPop: false,
+        onPopInvokedWithResult: (didPop, _) {
+          if (!didPop) {
+            HapticFeedback.lightImpact();
+            setState(() => _route = 'getStarted');
+          }
+        },
+        child: CreateAccountScreen(
+          onSubmitted: _enterMain,
+          // Root-switched screens have no route to pop: back means GetStarted.
+          onBack: () => setState(() => _route = 'getStarted'),
+        ),
+      ),
+      'login' => PopScope(
+        key: const ValueKey('login'),
+        canPop: false,
+        onPopInvokedWithResult: (didPop, _) {
+          if (!didPop) {
+            HapticFeedback.lightImpact();
+            setState(() => _route = 'getStarted');
+          }
+        },
+        child: LoginScreen(
+          onLoggedIn: _enterMain,
+          onDemo: _enterDemo,
+          onBack: () => setState(() => _route = 'getStarted'),
+        ),
+      ),
+      'main' => MainShell(
+        key: ValueKey('main_${AuthRepository.sessionEpoch.value}'),
+      ),
+      _ => GetStartedScreen(
+        key: const ValueKey('getStarted'),
+        onSignIn: () => setState(() => _route = 'create'),
+        onLogIn: () => setState(() => _route = 'login'),
+        onDemo: _enterDemo,
+      ),
+    };
+    return AnimatedSwitcher(
+      duration: disableAnims ? Duration.zero : const Duration(milliseconds: 240),
+      switchInCurve: Curves.easeOutCubic,
+      switchOutCurve: Curves.easeInCubic,
+      child: screen,
+    );
+  }
+}
+
 /// Figma GET STARTED: "Pacer, siap membantu!" + Sign In filled + Log In outlined.
 /// Form-style screen: 720 shell, vertically centered when short.
 class GetStartedScreen extends StatelessWidget {
   final VoidCallback onSignIn;
   final VoidCallback onLogIn;
+  final VoidCallback? onDemo;
   const GetStartedScreen({
     super.key,
     required this.onSignIn,
     required this.onLogIn,
+    this.onDemo,
   });
 
   @override
@@ -159,6 +320,25 @@ class GetStartedScreen extends StatelessWidget {
                       ),
                     ),
                   ),
+                  if (onDemo != null) ...[
+                    const SizedBox(height: 14),
+                    TextButton.icon(
+                      onPressed: onDemo,
+                      icon: Icon(
+                        Icons.offline_bolt_outlined,
+                        size: 18,
+                        color: scheme.muted,
+                      ),
+                      label: Text(
+                        S.tryDemoAccount,
+                        style: GoogleFonts.spaceGrotesk(
+                          fontWeight: FontWeight.w600,
+                          fontSize: 14,
+                          color: scheme.muted,
+                        ),
+                      ),
+                    ),
+                  ],
                 ],
               ),
             ),
@@ -215,7 +395,12 @@ class _CreateAccountScreenState extends State<CreateAccountScreen> {
     setState(() => _error = null);
     final nama = _name.text.trim();
     final email = _email.text.trim();
-    if (nama.isEmpty || email.isEmpty || _password.text.isEmpty) {
+    final usernameErr = validateUsername(_name.text);
+    if (usernameErr != null) {
+      setState(() => _error = S.usernameError(usernameErr));
+      return;
+    }
+    if (email.isEmpty || _password.text.isEmpty || _confirm.text.isEmpty) {
       setState(() => _error = S.errFillAll);
       return;
     }
@@ -371,6 +556,7 @@ class _HomeData {
   final List<Team> teams;
   final String initials;
   final bool isDemo;
+  final bool canOpenLocalActivity;
   final AppNotification? assignedBanner;
   final double weeklyKm;
   final int weeklySeconds;
@@ -387,6 +573,7 @@ class _HomeData {
     this.teams = const [],
     this.initials = '?',
     this.isDemo = false,
+    this.canOpenLocalActivity = false,
     this.assignedBanner,
     this.weeklyKm = 0,
     this.weeklySeconds = 0,
@@ -404,6 +591,7 @@ class _HomeData {
     teams: teams,
     initials: initials,
     isDemo: isDemo,
+    canOpenLocalActivity: canOpenLocalActivity,
     assignedBanner: assignedBanner != null
         ? assignedBanner()
         : this.assignedBanner,
@@ -485,7 +673,7 @@ class HomeScreenState extends State<HomeScreen> {
   Future<_HomeData> _demoData() async {
     final now = DateTime.now();
     final notifs = await _notifRepo.listNotifications();
-    final demoActs = PacerDummyData.activities
+    final demoActs = PacerDummyData.demoActivities
         .take(5)
         .map(
           (a) => LocalActivity(
@@ -654,7 +842,8 @@ class HomeScreenState extends State<HomeScreen> {
         streakLast: streak?.terakhir,
         teams: teams,
         initials: initialsOf(label),
-        isDemo: false,
+        isDemo: isDemoUserId(uid),
+        canOpenLocalActivity: uid != null,
         assignedBanner: NotificationRepository.topAssignedBannerFrom(notifs),
         weeklyKm: (stats?.jarakM ?? 0) / 1000.0,
         weeklySeconds: stats?.waktuS ?? 0,
@@ -1737,9 +1926,9 @@ class HomeScreenState extends State<HomeScreen> {
                           '${S.sportName(item.activity.jenis)} ${fmtDate(item.activity.mulaiAt)}'
                               .trim(),
                       isHistoryDetail: true,
-                      aktivitasId: _data?.isDemo == true
-                          ? null
-                          : item.activity.id,
+                      aktivitasId: _data?.canOpenLocalActivity == true
+                          ? item.activity.id
+                          : null,
                       summary: RunSummary(
                         aktivitasId: item.activity.id,
                         jenis: item.activity.jenis,
@@ -2020,10 +2209,7 @@ class _MainShellState extends State<MainShell> with WidgetsBindingObserver {
   void dispose() {
     _glassScrollTimer?.cancel();
     _glassScrollTimer = null;
-    if (_glassRealtime) {
-      _glassRealtime = false;
-      _glassController.stopRealtimeCapture();
-    }
+    _glassRealtime = false;
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
   }

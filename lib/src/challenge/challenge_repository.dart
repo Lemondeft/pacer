@@ -1,11 +1,13 @@
 import 'dart:async';
 
 import 'package:supabase_flutter/supabase_flutter.dart';
+import 'package:uuid/uuid.dart';
 
 import 'package:pacer/src/challenge/challenge_model.dart';
 import 'package:pacer/src/demo/pacer_dummy_data.dart';
 import 'package:pacer/src/local/local_store.dart';
 import 'package:pacer/src/local/swr_helper.dart';
+import 'package:pacer/src/notifications/notification_model.dart';
 import 'package:pacer/src/notifications/notification_repository.dart';
 import 'package:pacer/src/sync/sync_engine.dart';
 
@@ -143,6 +145,56 @@ class ChallengeRepository {
       );
       if (created.isTeamChallenge) {
         NotificationRepository.syncDemoUnread();
+      }
+      return created;
+    }
+    final activeId = await resolveActiveUserId(client: _client, store: _store);
+    if (isDemoUserId(activeId)) {
+      final cleanTeamId = teamId != null && teamId.isNotEmpty ? teamId : null;
+      final cleanJudul = judul != null && judul.trim().isNotEmpty
+          ? judul.trim()
+          : null;
+      final created = Challenge(
+        id: const Uuid().v4(),
+        dibuatOleh: activeId,
+        teamId: cleanTeamId,
+        judul: cleanJudul,
+        jenis: jenis,
+        targetNilai: targetNilai,
+        targetSatuan: targetSatuan,
+        waktuMulai: waktuMulai ?? DateTime.now().toUtc(),
+        waktuSelesai: waktuSelesai,
+        diumumkan: true,
+        createdAt: DateTime.now().toUtc(),
+      );
+      final existing = await _store.getChallenges(activeId!);
+      await _store.saveChallenges(activeId, [created, ...existing]);
+      await _store.queueJoinChallenge(activeId, created.id);
+      if (cleanTeamId != null) {
+        final team = await _store.getTeam(activeId, cleanTeamId);
+        final existingNotifs = await _store.getNotifications(activeId);
+        final targetText = targetSatuan == 'waktu_s'
+            ? '${(targetNilai / 60).round()} menit'
+            : '${(targetNilai / 1000).toStringAsFixed(targetNilai % 1000 == 0 ? 0 : 1)} km';
+        await _store.saveNotifications(activeId, [
+          AppNotification(
+            id: const Uuid().v4(),
+            userId: activeId,
+            type: 'team_challenge_assigned',
+            title: 'Challenge Tim · ${team?.nama ?? 'Tim'}',
+            body: cleanJudul != null ? '$cleanJudul ($targetText)' : targetText,
+            challengeId: created.id,
+            teamId: cleanTeamId,
+            isRead: false,
+            createdAt: DateTime.now().toUtc(),
+          ),
+          ...existingNotifs,
+        ]);
+        NotificationRepository.unreadCountNotifier.value =
+            (await _store.getNotifications(activeId))
+                .where((n) => !n.isRead)
+                .length;
+        NotificationRepository.revisionNotifier.value++;
       }
       return created;
     }

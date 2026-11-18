@@ -51,6 +51,7 @@ app.*.map.json
 .env
 
 # Graphify and Supabase temp
+.agents/
 graphify-out/
 supabase/.temp/
 GLASSMORPHISM_SPEC.md

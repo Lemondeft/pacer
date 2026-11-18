@@ -34,6 +34,9 @@ class Activity {
   /// Average hardware cadence recorded (steps/min), when available.
   final int? cadenceSpm;
 
+  /// Per-session compact motion telemetry summary uploaded for Layer 5 audit.
+  final Map<String, dynamic>? osMotionSummary;
+
   const Activity({
     required this.id,
     required this.userId,
@@ -46,6 +49,7 @@ class Activity {
     this.suggestedSport,
     this.validationStatus,
     this.cadenceSpm,
+    this.osMotionSummary,
   });
 
   bool get isFlagged =>
@@ -68,6 +72,8 @@ class Activity {
     bool clearValidationStatus = false,
     int? cadenceSpm,
     bool clearCadenceSpm = false,
+    Map<String, dynamic>? osMotionSummary,
+    bool clearOsMotionSummary = false,
   }) => Activity(
     id: id ?? this.id,
     userId: userId ?? this.userId,
@@ -84,21 +90,32 @@ class Activity {
         ? null
         : (validationStatus ?? this.validationStatus),
     cadenceSpm: clearCadenceSpm ? null : (cadenceSpm ?? this.cadenceSpm),
+    osMotionSummary: clearOsMotionSummary
+        ? null
+        : (osMotionSummary ?? this.osMotionSummary),
   );
 
-  factory Activity.fromJson(Map<String, dynamic> json) => Activity(
-    id: json['id'] as String,
-    userId: json['user_id'] as String,
-    jenis: json['jenis'] as String,
-    mulaiAt: _parseDate(json['mulai_at']),
-    selesaiAt: _parseDate(json['selesai_at']),
-    durasiS: (json['durasi_s'] as num?)?.toInt(),
-    jarakM: jsonToDouble(json['jarak_m']),
-    challengeIds: _parseIdList(json['challenge_ids']),
-    suggestedSport: json['suggested_sport'] as String?,
-    validationStatus: json['validation_status'] as String?,
-    cadenceSpm: (json['cadence_spm'] as num?)?.toInt(),
-  );
+  factory Activity.fromJson(Map<String, dynamic> json) {
+    final rawSummary = json['os_motion_summary'];
+    Map<String, dynamic>? motionSummary;
+    if (rawSummary is Map) {
+      motionSummary = Map<String, dynamic>.from(rawSummary);
+    }
+    return Activity(
+      id: json['id'] as String,
+      userId: json['user_id'] as String,
+      jenis: json['jenis'] as String,
+      mulaiAt: _parseDate(json['mulai_at']),
+      selesaiAt: _parseDate(json['selesai_at']),
+      durasiS: (json['durasi_s'] as num?)?.toInt(),
+      jarakM: jsonToDouble(json['jarak_m']),
+      challengeIds: _parseIdList(json['challenge_ids']),
+      suggestedSport: json['suggested_sport'] as String?,
+      validationStatus: json['validation_status'] as String?,
+      cadenceSpm: (json['cadence_spm'] as num?)?.toInt(),
+      osMotionSummary: motionSummary,
+    );
+  }
 
   Map<String, dynamic> toJson() => {
     'id': id,
@@ -112,6 +129,7 @@ class Activity {
     if (suggestedSport != null) 'suggested_sport': suggestedSport,
     if (validationStatus != null) 'validation_status': validationStatus,
     if (cadenceSpm != null) 'cadence_spm': cadenceSpm,
+    if (osMotionSummary != null) 'os_motion_summary': osMotionSummary,
   };
 }
 
