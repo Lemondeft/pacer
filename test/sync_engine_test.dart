@@ -137,6 +137,16 @@ class _FakeGateway implements RemoteSyncGateway {
   }
 
   @override
+  Future<void> deleteActivity(String userId, String aktivitasId) async {
+    ops.add('delete_activity:$aktivitasId');
+  }
+
+  @override
+  Future<void> deleteChatMessage(String userId, String messageId) async {
+    ops.add('delete_chat:$messageId');
+  }
+
+  @override
   Future<List<PartisipasiChallenge>?> recomputeChallengeProgressRpc() async {
     challengeRpcCalls++;
     if (returnNullFromChallengeRpc) return null;

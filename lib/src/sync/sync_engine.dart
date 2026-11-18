@@ -104,6 +104,8 @@ abstract class RemoteSyncGateway {
     required String userId,
     required String body,
   });
+  Future<void> deleteActivity(String userId, String aktivitasId);
+  Future<void> deleteChatMessage(String userId, String messageId);
 }
 
 /// Default Supabase implementation of [RemoteSyncGateway].
@@ -511,6 +513,24 @@ class SupabaseSyncGateway implements RemoteSyncGateway {
       rethrow;
     }
   }
+
+  @override
+  Future<void> deleteActivity(String userId, String aktivitasId) async {
+    await _client!
+        .from('aktivitas')
+        .delete()
+        .eq('id', aktivitasId)
+        .eq('user_id', userId);
+  }
+
+  @override
+  Future<void> deleteChatMessage(String userId, String messageId) async {
+    await _client!
+        .from('chat_messages')
+        .delete()
+        .eq('id', messageId)
+        .eq('user_id', userId);
+  }
 }
 
 /// Coordinates outbox draining across connectivity transitions, app lifecycle
@@ -810,6 +830,12 @@ class SyncEngine extends ChangeNotifier {
           item.entityId,
           serverMsg,
         );
+        await _store.markOutboxSynced(item.id);
+      case OutboxOp.deleteActivity:
+        await _gateway.deleteActivity(item.userId, item.entityId);
+        await _store.markOutboxSynced(item.id);
+      case OutboxOp.deleteChat:
+        await _gateway.deleteChatMessage(item.userId, item.entityId);
         await _store.markOutboxSynced(item.id);
     }
   }

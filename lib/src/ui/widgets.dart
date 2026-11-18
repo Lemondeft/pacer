@@ -329,6 +329,7 @@ class RunSessionCard extends StatelessWidget {
   final String? validationStatus;
   final String? suggestedSport;
   final VoidCallback? onTap;
+  final VoidCallback? onDelete;
   const RunSessionCard({
     super.key,
     this.title = 'Monday Morning Run',
@@ -341,6 +342,7 @@ class RunSessionCard extends StatelessWidget {
     this.validationStatus,
     this.suggestedSport,
     this.onTap,
+    this.onDelete,
   });
 
   @override
@@ -457,15 +459,43 @@ class RunSessionCard extends StatelessWidget {
               crossAxisAlignment: CrossAxisAlignment.end,
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
-                FittedBox(
-                  fit: BoxFit.scaleDown,
-                  alignment: Alignment.centerRight,
-                  child: Text(
-                    distance,
-                    style: PacerText.cardDistanceOf(context).copyWith(
-                      fontFeatures: const [FontFeature.tabularFigures()],
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Flexible(
+                      child: FittedBox(
+                        fit: BoxFit.scaleDown,
+                        alignment: Alignment.centerRight,
+                        child: Text(
+                          distance,
+                          style: PacerText.cardDistanceOf(context).copyWith(
+                            fontFeatures: const [FontFeature.tabularFigures()],
+                          ),
+                        ),
+                      ),
                     ),
-                  ),
+                    if (onDelete != null) ...[
+                      const SizedBox(width: 4),
+                      Tooltip(
+                        message: S.deleteAction,
+                        child: InkWell(
+                          onTap: () {
+                            HapticFeedback.selectionClick();
+                            onDelete!();
+                          },
+                          borderRadius: BorderRadius.circular(12),
+                          child: Padding(
+                            padding: const EdgeInsets.all(4),
+                            child: Icon(
+                              Icons.delete_outline_rounded,
+                              size: 18,
+                              color: scheme.muted,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ],
                 ),
                 const SizedBox(height: 10),
                 // Sleek capsule accent bar under distance.
@@ -509,13 +539,21 @@ class RunSessionCard extends StatelessWidget {
         ],
       ),
     );
-    if (onTap == null) return card;
+    if (onTap == null && onDelete == null) return card;
     return PacerTapScale(
       child: GestureDetector(
-        onTap: () {
-          HapticFeedback.selectionClick();
-          onTap!();
-        },
+        onTap: onTap == null
+            ? null
+            : () {
+                HapticFeedback.selectionClick();
+                onTap!();
+              },
+        onLongPress: onDelete == null
+            ? null
+            : () {
+                HapticFeedback.mediumImpact();
+                onDelete!();
+              },
         child: card,
       ),
     );

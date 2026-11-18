@@ -4,10 +4,12 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'package:pacer/src/aktivitas/activity_model.dart';
 import 'package:pacer/src/cache/pacer_cache.dart';
+import 'package:pacer/src/demo/pacer_dummy_data.dart';
 import 'package:pacer/src/local/local_models.dart';
 import 'package:pacer/src/local/local_store.dart';
 import 'package:pacer/src/local/swr_helper.dart';
 import 'package:pacer/src/sync/connectivity_service.dart';
+import 'package:pacer/src/sync/sync_engine.dart';
 
 /// Offline-first activity repository (DFD process 2.0 AKTIVITAS & STATISTIK).
 ///
@@ -132,27 +134,32 @@ class ActivityRepository {
     return Activity.fromJson(Map<String, dynamic>.from(updated));
   }
 
-  /// Deletes one aktivitas locally and (when synced) remotely.
+  /// Deletes one aktivitas locally (with offline outbox queueing when needed)
+  /// and triggers sync/recomputation when connected.
   Future<void> deleteActivity(String id) async {
     final c = _client;
-    final uid = c?.auth.currentUser?.id;
-    await _store.deleteActivityLocal(id);
-    if (c != null && uid != null && ConnectivityService.instance.value) {
-      try {
-        await c.from('aktivitas').delete().eq('id', id).eq('user_id', uid);
-      } catch (e) {
-        if (!isTransientNetworkError(e)) rethrow;
+    final demo = await isDemoAccount(client: c, store: _store);
+    final uid = await resolveActiveUserId(client: c, store: _store);
+    if (demo) {
+      PacerDummyData.deleteDemoActivity(id);
+      await _store.deleteActivityLocal(id);
+    } else if (uid != null) {
+      await _store.queueDeleteActivityLocal(uid, id);
+      await SyncEngine.instance.refreshCounts(userId: uid);
+      if (ConnectivityService.instance.value && c?.auth.currentUser != null) {
+        unawaited(SyncEngine.instance.triggerSync(userId: uid));
       }
-    }
-    PacerCache.instance.invalidatePrefix('activities_');
-    PacerCache.instance.invalidatePrefix('streak_');
-    PacerCache.instance.invalidatePrefix('leaderboard_');
-    if (uid != null) {
       await _store.setSyncTimestamp(
         'challenge_parts_$uid',
         DateTime.fromMillisecondsSinceEpoch(0),
       );
+    } else {
+      await _store.deleteActivityLocal(id);
     }
+    PacerCache.instance.invalidatePrefix('activities_');
+    PacerCache.instance.invalidatePrefix('streak_');
+    PacerCache.instance.invalidatePrefix('leaderboard_');
+    PacerCache.instance.invalidatePrefix('statistik_');
   }
 
   /// Reclassifies a recorded activity's sport locally and remotely, clearing any

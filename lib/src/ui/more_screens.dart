@@ -1618,13 +1618,19 @@ class _RunFinishScreenState extends State<RunFinishScreen> {
     }
   }
 
-  Future<void> _deleteFlaggedActivity(String id) async {
-    if (_mutating) return;
+  Future<bool> _confirmAndDeleteActivity(
+    BuildContext context,
+    String id, {
+    required String title,
+    required String body,
+    required String confirmLabel,
+    required String notice,
+  }) async {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: Text(S.deleteFlaggedConfirmTitle),
-        content: Text(S.deleteFlaggedConfirmBody),
+        title: Text(title),
+        content: Text(body),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(false),
@@ -1636,20 +1642,48 @@ class _RunFinishScreenState extends State<RunFinishScreen> {
               foregroundColor: Colors.white,
             ),
             onPressed: () => Navigator.of(ctx).pop(true),
-            child: Text(S.deleteFlaggedActivityCta),
+            child: Text(confirmLabel),
           ),
         ],
       ),
     );
-    if (confirmed != true || !mounted) return;
+    if (confirmed != true || !context.mounted) return false;
+    await ActivityRepository().deleteActivity(id);
+    if (!context.mounted) return true;
+    ScaffoldMessenger.of(context)
+      ..hideCurrentSnackBar()
+      ..showSnackBar(SnackBar(content: Text(notice)));
+    return true;
+  }
+
+  Future<void> _deleteFlaggedActivity(String id) => _deleteActivity(
+    id,
+    title: S.deleteFlaggedConfirmTitle,
+    body: S.deleteFlaggedConfirmBody,
+    confirmLabel: S.deleteFlaggedActivityCta,
+    notice: S.flaggedActivityDeletedNotice,
+  );
+
+  Future<void> _deleteActivity(
+    String id, {
+    String? title,
+    String? body,
+    String? confirmLabel,
+    String? notice,
+  }) async {
+    if (_mutating) return;
     setState(() => _mutating = true);
     try {
-      await ActivityRepository().deleteActivity(id);
-      if (!mounted) return;
+      final deleted = await _confirmAndDeleteActivity(
+        context,
+        id,
+        title: title ?? S.deleteActivityTitle,
+        body: body ?? S.deleteActivityBody,
+        confirmLabel: confirmLabel ?? S.deleteAction,
+        notice: notice ?? S.activityDeletedNotice,
+      );
+      if (!deleted || !mounted) return;
       _changed = true;
-      ScaffoldMessenger.of(context)
-        ..hideCurrentSnackBar()
-        ..showSnackBar(SnackBar(content: Text(S.flaggedActivityDeletedNotice)));
       if (widget.onBack != null) {
         widget.onBack!();
       } else {
@@ -2107,6 +2141,20 @@ class _RunFinishScreenState extends State<RunFinishScreen> {
                                 ),
                               ),
                             ),
+                            const Spacer(),
+                            if ((widget.aktivitasId ?? summary?.aktivitasId)
+                                case final deleteId?)
+                              IconButton(
+                                tooltip: S.deleteAction,
+                                onPressed: _mutating
+                                    ? null
+                                    : () => _deleteActivity(deleteId),
+                                icon: Icon(
+                                  Icons.delete_outline_rounded,
+                                  size: 24,
+                                  color: scheme.muted,
+                                ),
+                              ),
                           ],
                         ),
                         const SizedBox(height: 12),
@@ -4915,6 +4963,36 @@ class HistoryScreenState extends State<HistoryScreen> {
         syncState: _isDemo ? null : item.syncState,
         validationStatus: a.validationStatus,
         suggestedSport: a.suggestedSport,
+        onDelete: () async {
+          final confirmed = await showDialog<bool>(
+            context: context,
+            builder: (ctx) => AlertDialog(
+              title: Text(S.deleteActivityTitle),
+              content: Text(S.deleteActivityBody),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(ctx).pop(false),
+                  child: Text(MaterialLocalizations.of(ctx).cancelButtonLabel),
+                ),
+                FilledButton(
+                  style: FilledButton.styleFrom(
+                    backgroundColor: PacerColors.errorRed,
+                    foregroundColor: Colors.white,
+                  ),
+                  onPressed: () => Navigator.of(ctx).pop(true),
+                  child: Text(S.deleteAction),
+                ),
+              ],
+            ),
+          );
+          if (confirmed != true || !mounted) return;
+          await ActivityRepository().deleteActivity(a.id);
+          if (!mounted) return;
+          setState(() => _future = _load());
+          ScaffoldMessenger.of(context)
+            ..hideCurrentSnackBar()
+            ..showSnackBar(SnackBar(content: Text(S.activityDeletedNotice)));
+        },
       ),
     );
   }
@@ -5898,6 +5976,81 @@ class _AccountScreenState extends State<AccountScreen> {
     }
   }
 
+  Future<void> _promptDeleteAccount(BuildContext context) async {
+    final nav = Navigator.of(context);
+    final messenger = ScaffoldMessenger.of(context);
+    final hadActiveAuthFlow = PacerAuthFlow.hasActiveFlow;
+    final ctrl = TextEditingController();
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (ctx, setDialogState) {
+          final matches =
+              ctrl.text.trim().toUpperCase() == S.deleteAccountConfirmWord;
+          return AlertDialog(
+            title: Text(S.deleteAccountTitle),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(S.deleteAccountBody),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: ctrl,
+                  autofocus: true,
+                  textCapitalization: TextCapitalization.characters,
+                  onChanged: (_) => setDialogState(() {}),
+                  decoration: InputDecoration(
+                    hintText: S.deleteAccountConfirmWord,
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                ),
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(ctx).pop(false),
+                child: Text(S.cancelLabel),
+              ),
+              FilledButton(
+                style: FilledButton.styleFrom(
+                  backgroundColor: PacerColors.errorRed,
+                  foregroundColor: Colors.white,
+                ),
+                onPressed: matches ? () => Navigator.of(ctx).pop(true) : null,
+                child: Text(S.deleteAccountAction),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+    ctrl.dispose();
+    if (confirmed != true || !mounted) return;
+    try {
+      await AuthRepository().deleteAccount();
+      messenger
+        ..hideCurrentSnackBar()
+        ..showSnackBar(SnackBar(content: Text(S.accountDeletedNotice)));
+      if (!hadActiveAuthFlow) {
+        nav.pushAndRemoveUntil(
+          MaterialPageRoute(
+            builder: (_) => const PacerAuthFlow(startWithSplash: false),
+          ),
+          (route) => false,
+        );
+      }
+    } catch (e) {
+      if (mounted) {
+        messenger
+          ..hideCurrentSnackBar()
+          ..showSnackBar(SnackBar(content: Text(offlineActionErrorMessage(e))));
+      }
+    }
+  }
+
   Future<void> _promptRedeemCoachCode(BuildContext context) async {
     final ctrl = TextEditingController();
     final code = await showDialog<String>(
@@ -6196,6 +6349,14 @@ class _AccountScreenState extends State<AccountScreen> {
                       }
                     },
                   ),
+                  if (!_isDemo)
+                    _menuRow(
+                      context,
+                      icon: Icons.delete_forever_outlined,
+                      label: S.deleteAccountAction,
+                      destructive: true,
+                      onTap: () => _promptDeleteAccount(context),
+                    ),
                 ],
               ),
               if (!_isDemo) ...[
@@ -8030,6 +8191,7 @@ class _ChatScreenState extends State<ChatScreen> {
         if (mounted) {
           setState(() {
             _demo = true;
+            _uid = uid ?? 'demo-user-me';
             _messages = [
               for (final m in PacerDummyData.chatMessages)
                 LocalChatMessage(message: m, syncState: SyncState.synced),
@@ -8050,17 +8212,28 @@ class _ChatScreenState extends State<ChatScreen> {
         _messages = recent;
         _loading = false;
       });
-      repo.watchTeam(teamId, (msg) {
-        if (!mounted) return;
-        setState(() {
-          if (_messages.any((m) => m.message.id == msg.id)) return;
-          _messages = [
-            ..._messages,
-            LocalChatMessage(message: msg, syncState: SyncState.synced),
-          ];
-        });
-        _jumpToBottom();
-      });
+      repo.watchTeam(
+        teamId,
+        (msg) {
+          if (!mounted) return;
+          setState(() {
+            if (_messages.any((m) => m.message.id == msg.id)) return;
+            _messages = [
+              ..._messages,
+              LocalChatMessage(message: msg, syncState: SyncState.synced),
+            ];
+          });
+          _jumpToBottom();
+        },
+        onDelete: (deletedId) {
+          if (!mounted) return;
+          setState(() {
+            _messages = _messages
+                .where((m) => m.message.id != deletedId)
+                .toList();
+          });
+        },
+      );
       _jumpToBottom();
     } catch (_) {
       if (mounted) {
@@ -8203,72 +8376,229 @@ class _ChatScreenState extends State<ChatScreen> {
       controller: _scroll,
       padding: const EdgeInsets.all(16),
       itemCount: _messages.length,
-      itemBuilder: (context, i) => _bubble(_messages[i]),
+      itemBuilder: (context, i) => _bubble(i),
     );
   }
 
-  Widget _bubble(LocalChatMessage lm) {
+  static const _senderPaletteDark = <Color>[
+    Color(0xFF60A5FA),
+    Color(0xFF34D399),
+    Color(0xFFFBBF24),
+    Color(0xFFF472B6),
+    Color(0xFFA78BFA),
+    Color(0xFF22D3EE),
+    Color(0xFFFB923C),
+  ];
+
+  static const _senderPaletteLight = <Color>[
+    Color(0xFF1D4ED8),
+    Color(0xFF047857),
+    Color(0xFFB45309),
+    Color(0xFFBE185D),
+    Color(0xFF6D28D9),
+    Color(0xFF0E7490),
+    Color(0xFFC2410C),
+  ];
+
+  Color _senderColor(String userId, bool isDark) {
+    final palette = isDark ? _senderPaletteDark : _senderPaletteLight;
+    final hash = userId.codeUnits.fold<int>(0, (h, c) => (h * 31 + c) & 0x7fffffff);
+    return palette[hash % palette.length];
+  }
+
+  bool _sameGroup(ChatMessage a, ChatMessage b) {
+    if (a.userId != b.userId) return false;
+    final ta = a.createdAt;
+    final tb = b.createdAt;
+    if (ta == null || tb == null) return true;
+    return tb.difference(ta).abs() <= const Duration(minutes: 3);
+  }
+
+  String _resolvedSenderName(ChatMessage m) {
+    if (m.userNama.trim().isNotEmpty) return m.userNama.trim();
+    for (final item in _messages) {
+      if (item.message.userId == m.userId &&
+          item.message.userNama.trim().isNotEmpty) {
+        return item.message.userNama.trim();
+      }
+    }
+    return 'Runner';
+  }
+
+  Future<void> _confirmDeleteMessage(LocalChatMessage lm) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(S.deleteMessageTitle),
+        content: Text(S.deleteMessageBody),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: Text(S.cancelLabel),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(
+              backgroundColor: PacerColors.errorRed,
+              foregroundColor: Colors.white,
+            ),
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: Text(S.deleteAction),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    final id = lm.message.id;
+    setState(() {
+      _messages = _messages.where((x) => x.message.id != id).toList();
+    });
+    if (_demo || _repo == null || widget.teamId == null) return;
+    try {
+      await _repo!.deleteMessage(widget.teamId!, id);
+    } catch (_) {
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+          ..hideCurrentSnackBar()
+          ..showSnackBar(SnackBar(content: Text(S.errSaveFailed)));
+      }
+    }
+  }
+
+  Widget _bubble(int index) {
+    final lm = _messages[index];
     final m = lm.message;
     final mine = _uid != null && m.userId == _uid;
+    final prev = index > 0 ? _messages[index - 1].message : null;
+    final next = index + 1 < _messages.length ? _messages[index + 1].message : null;
+    final isGroupStart = prev == null || !_sameGroup(prev, m);
+    final isGroupEnd = next == null || !_sameGroup(m, next);
+
     final scheme = PacerScheme.of(context);
-    return Align(
-      alignment: mine ? Alignment.centerRight : Alignment.centerLeft,
-      child: Container(
-        margin: const EdgeInsets.only(bottom: 8),
-        padding: const EdgeInsets.all(12),
-        decoration: BoxDecoration(
-          color: mine ? PacerColors.chatGreen : scheme.chatBubble,
-          borderRadius: BorderRadius.only(
-            topLeft: const Radius.circular(16),
-            topRight: mine
-                ? const Radius.circular(2)
-                : const Radius.circular(16),
-            bottomLeft: const Radius.circular(16),
-            bottomRight: mine
-                ? const Radius.circular(16)
-                : const Radius.circular(2),
+    final dark = scheme.isDark;
+    final senderName = mine ? S.youLabel : _resolvedSenderName(m);
+    final senderAccent = _senderColor(m.userId, dark);
+    final myBubbleColor = dark ? const Color(0xFF166534) : const Color(0xFF15803D);
+    final metaColor = mine
+        ? Colors.white.withValues(alpha: 0.78)
+        : scheme.subtle;
+
+    final bubble = GestureDetector(
+      onLongPress: mine
+          ? () {
+              HapticFeedback.mediumImpact();
+              _confirmDeleteMessage(lm);
+            }
+          : null,
+      child: ConstrainedBox(
+        constraints: const BoxConstraints(maxWidth: 440, minWidth: 84),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+          decoration: BoxDecoration(
+            color: mine ? myBubbleColor : scheme.chatBubble,
+            border: Border.all(
+              color: mine
+                  ? PacerColors.lime.withValues(alpha: 0.35)
+                  : scheme.softBorder.withValues(alpha: 0.75),
+            ),
+            borderRadius: BorderRadius.only(
+              topLeft: Radius.circular(!mine && !isGroupStart ? 6 : 16),
+              topRight: Radius.circular(mine && !isGroupStart ? 6 : 16),
+              bottomLeft: Radius.circular(!mine && isGroupEnd ? 4 : 16),
+              bottomRight: Radius.circular(mine && isGroupEnd ? 4 : 16),
+            ),
           ),
-        ),
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            if (!mine && m.userNama.isNotEmpty)
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              if (isGroupStart) ...[
+                Text(
+                  senderName,
+                  style: TextStyle(
+                    fontWeight: FontWeight.w700,
+                    fontSize: 12,
+                    color: mine ? PacerColors.lime : senderAccent,
+                    letterSpacing: 0.1,
+                  ),
+                ),
+                const SizedBox(height: 3),
+              ],
               Text(
-                m.userNama,
-                style: const TextStyle(
-                  fontWeight: FontWeight.w700,
-                  fontSize: 12,
+                m.body,
+                style: TextStyle(
+                  fontSize: 14.5,
+                  height: 1.35,
+                  color: mine ? Colors.white : scheme.ink,
                 ),
               ),
-            Text(m.body),
-            Row(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                Text(
-                  _clock(m.createdAt),
-                  style: TextStyle(fontSize: 10, color: scheme.subtle),
-                ),
-                if (mine && lm.syncState != SyncState.synced) ...[
-                  const SizedBox(width: 4),
-                  Icon(
-                    lm.syncState == SyncState.failed
-                        ? Icons.error_outline
-                        : Icons.schedule,
-                    size: 11,
-                    color: scheme.subtle,
+              const SizedBox(height: 4),
+              Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    _clock(m.createdAt),
+                    style: TextStyle(fontSize: 10.5, color: metaColor),
                   ),
+                  if (mine && lm.syncState != SyncState.synced) ...[
+                    const SizedBox(width: 4),
+                    Icon(
+                      lm.syncState == SyncState.failed
+                          ? Icons.error_outline
+                          : Icons.schedule,
+                      size: 11,
+                      color: metaColor,
+                    ),
+                  ],
                 ],
-              ],
-            ),
-          ],
+              ),
+            ],
+          ),
         ),
+      ),
+    );
+
+    return Padding(
+      padding: EdgeInsets.only(bottom: isGroupEnd ? 10 : 3),
+      child: Row(
+        mainAxisAlignment:
+            mine ? MainAxisAlignment.end : MainAxisAlignment.start,
+        crossAxisAlignment: CrossAxisAlignment.end,
+        children: [
+          if (!mine) ...[
+            if (isGroupStart)
+              Container(
+                width: 30,
+                height: 30,
+                margin: const EdgeInsets.only(right: 8, bottom: 2),
+                decoration: BoxDecoration(
+                  color: senderAccent.withValues(alpha: dark ? 0.22 : 0.14),
+                  shape: BoxShape.circle,
+                  border: Border.all(
+                    color: senderAccent.withValues(alpha: 0.65),
+                    width: 1.2,
+                  ),
+                ),
+                alignment: Alignment.center,
+                child: Text(
+                  initialsOf(senderName),
+                  style: TextStyle(
+                    fontSize: 11,
+                    fontWeight: FontWeight.w800,
+                    color: senderAccent,
+                  ),
+                ),
+              )
+            else
+              const SizedBox(width: 38),
+          ],
+          Flexible(child: bubble),
+        ],
       ),
     );
   }
 
   Widget _composerBar() {
-    final live = _repo != null;
+    final live = _repo != null || (_demo && (widget.teamId != null || widget.teamName != null));
     return ValueListenableBuilder<bool>(
       valueListenable: ConnectivityService.instance.isOnline,
       builder: (context, _, _) {
@@ -9334,6 +9664,63 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
     }
   }
 
+  Future<void> _clearAll() async {
+    if (_busy || _items.isEmpty) return;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Text(S.clearNotificationsTitle),
+        content: Text(S.clearNotificationsBody),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: Text(S.cancelLabel),
+          ),
+          FilledButton(
+            style: FilledButton.styleFrom(
+              backgroundColor: PacerColors.errorRed,
+              foregroundColor: Colors.white,
+            ),
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: Text(S.clearAllNotifications),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    setState(() => _busy = true);
+    try {
+      await _repo.clearAllNotifications();
+      await _load(forceRefresh: false);
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+          ..hideCurrentSnackBar()
+          ..showSnackBar(
+            SnackBar(content: Text(S.notificationsClearedNotice)),
+          );
+      }
+    } catch (e) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(offlineActionErrorMessage(e))),
+        );
+      }
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _deleteOneNotification(AppNotification n) async {
+    setState(() {
+      _items = _items.where((x) => x.id != n.id).toList();
+    });
+    try {
+      await _repo.deleteNotification(n.id);
+    } catch (_) {
+      if (mounted) await _load(forceRefresh: false);
+    }
+  }
+
   Future<void> _markAllRead() async {
     if (_busy) return;
     setState(() => _busy = true);
@@ -9427,6 +9814,14 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                       onPressed: _busy ? null : _markAllRead,
                       child: Text(S.markAllRead),
                     ),
+                  if (_items.isNotEmpty)
+                    TextButton(
+                      onPressed: _busy ? null : _clearAll,
+                      style: TextButton.styleFrom(
+                        foregroundColor: PacerColors.errorRed,
+                      ),
+                      child: Text(S.clearAllNotifications),
+                    ),
                 ],
               ),
               const SizedBox(height: 10),
@@ -9468,86 +9863,104 @@ class _NotificationsScreenState extends State<NotificationsScreen> {
                       final timeLabel = n.createdAt == null
                           ? ''
                           : fmtDate(n.createdAt!);
-                      return InkWell(
-                        borderRadius: BorderRadius.circular(16),
-                        onTap: () => _openNotification(n),
-                        child: Container(
+                      return Dismissible(
+                        key: ValueKey('notif_${n.id}'),
+                        direction: DismissDirection.endToStart,
+                        background: Container(
                           margin: const EdgeInsets.only(bottom: 12),
-                          padding: const EdgeInsets.all(16),
+                          padding: const EdgeInsets.symmetric(horizontal: 20),
                           decoration: BoxDecoration(
-                            color: scheme.card,
+                            color: PacerColors.errorRed,
                             borderRadius: BorderRadius.circular(16),
-                            border: Border.all(
-                              color: n.isRead ? scheme.border : PacerColors.lime,
-                              width: n.isRead ? 1 : 1.4,
-                            ),
-                            boxShadow: [scheme.shadowBox],
                           ),
-                          child: Row(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Container(
-                                padding: const EdgeInsets.all(10),
-                                decoration: BoxDecoration(
-                                  color: color.withValues(alpha: 0.16),
-                                  shape: BoxShape.circle,
-                                ),
-                                child: Icon(icon, size: 22, color: color),
+                          alignment: Alignment.centerRight,
+                          child: const Icon(
+                            Icons.delete_outline_rounded,
+                            color: Colors.white,
+                          ),
+                        ),
+                        onDismissed: (_) => _deleteOneNotification(n),
+                        child: InkWell(
+                          borderRadius: BorderRadius.circular(16),
+                          onTap: () => _openNotification(n),
+                          child: Container(
+                            margin: const EdgeInsets.only(bottom: 12),
+                            padding: const EdgeInsets.all(16),
+                            decoration: BoxDecoration(
+                              color: scheme.card,
+                              borderRadius: BorderRadius.circular(16),
+                              border: Border.all(
+                                color: n.isRead ? scheme.border : PacerColors.lime,
+                                width: n.isRead ? 1 : 1.4,
                               ),
-                              const SizedBox(width: 14),
-                              Expanded(
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                    Row(
-                                      children: [
-                                        if (!n.isRead)
-                                          Container(
-                                            width: 8,
-                                            height: 8,
-                                            margin: const EdgeInsets.only(
-                                              right: 6,
+                              boxShadow: [scheme.shadowBox],
+                            ),
+                            child: Row(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Container(
+                                  padding: const EdgeInsets.all(10),
+                                  decoration: BoxDecoration(
+                                    color: color.withValues(alpha: 0.16),
+                                    shape: BoxShape.circle,
+                                  ),
+                                  child: Icon(icon, size: 22, color: color),
+                                ),
+                                const SizedBox(width: 14),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Row(
+                                        children: [
+                                          if (!n.isRead)
+                                            Container(
+                                              width: 8,
+                                              height: 8,
+                                              margin: const EdgeInsets.only(
+                                                right: 6,
+                                              ),
+                                              decoration: const BoxDecoration(
+                                                color: PacerColors.lime,
+                                                shape: BoxShape.circle,
+                                              ),
                                             ),
-                                            decoration: const BoxDecoration(
-                                              color: PacerColors.lime,
-                                              shape: BoxShape.circle,
+                                          Expanded(
+                                            child: Text(
+                                              n.title,
+                                              style: GoogleFonts.spaceGrotesk(
+                                                fontWeight: FontWeight.w700,
+                                                fontSize: 15,
+                                                color: scheme.chipFg,
+                                              ),
                                             ),
                                           ),
-                                        Expanded(
-                                          child: Text(
-                                            n.title,
-                                            style: GoogleFonts.spaceGrotesk(
-                                              fontWeight: FontWeight.w700,
-                                              fontSize: 15,
-                                              color: scheme.chipFg,
+                                          if (timeLabel.isNotEmpty) ...[
+                                            const SizedBox(width: 8),
+                                            Text(
+                                              timeLabel,
+                                              style: TextStyle(
+                                                fontSize: 11,
+                                                color: scheme.muted,
+                                              ),
                                             ),
-                                          ),
-                                        ),
-                                        if (timeLabel.isNotEmpty) ...[
-                                          const SizedBox(width: 8),
-                                          Text(
-                                            timeLabel,
-                                            style: TextStyle(
-                                              fontSize: 11,
-                                              color: scheme.muted,
-                                            ),
-                                          ),
+                                          ],
                                         ],
-                                      ],
-                                    ),
-                                    const SizedBox(height: 4),
-                                    Text(
-                                      n.body,
-                                      style: TextStyle(
-                                        fontSize: 13,
-                                        color: scheme.bodyGray,
-                                        height: 1.4,
                                       ),
-                                    ),
-                                  ],
+                                      const SizedBox(height: 4),
+                                      Text(
+                                        n.body,
+                                        style: TextStyle(
+                                          fontSize: 13,
+                                          color: scheme.bodyGray,
+                                          height: 1.4,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
                                 ),
-                              ),
-                            ],
+                              ],
+                            ),
                           ),
                         ),
                       );

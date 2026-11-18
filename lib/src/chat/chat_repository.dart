@@ -18,6 +18,7 @@ class ChatRepository {
   final SupabaseClient? _clientOverride;
   final LocalStore? _storeOverride;
   final SyncEngine? _syncOverride;
+  final Map<String, String> _nameCache = {};
   RealtimeChannel? _channel;
 
   ChatRepository({
@@ -64,12 +65,53 @@ class ChatRepository {
           for (final row in rows)
             ChatMessage.fromJson(Map<String, dynamic>.from(row as Map)),
         ];
+        _rememberNames(list);
         await _store.mergeChatMessages(userId, teamId, list);
-        return _store.getChatMessages(userId, teamId, limit: limit);
+        final merged = await _store.getChatMessages(userId, teamId, limit: limit);
+        _rememberNames(merged.map((e) => e.message));
+        return merged;
       },
       writeLocal: (_) async {},
       isEmpty: (list) => list.isEmpty,
     );
+  }
+
+  void _rememberNames(Iterable<ChatMessage> msgs) {
+    for (final m in msgs) {
+      if (m.userNama.trim().isNotEmpty) {
+        _nameCache[m.userId] = m.userNama.trim();
+      }
+    }
+  }
+
+  /// Resolves sender display name when Realtime payloads omit joined `users(nama)`.
+  Future<String> resolveSenderName(String userId) async {
+    final cached = _nameCache[userId];
+    if (cached != null && cached.isNotEmpty) return cached;
+    final localProfile = await _store.getProfile(userId);
+    final localName = (localProfile?.nama ?? '').trim();
+    if (localName.isNotEmpty) {
+      _nameCache[userId] = localName;
+      return localName;
+    }
+    final c = _client;
+    if (c != null && ConnectivityService.instance.value) {
+      try {
+        final row = await c
+            .from('users')
+            .select('nama')
+            .eq('id', userId)
+            .maybeSingle();
+        final remoteName = (row?['nama'] as String?)?.trim() ?? '';
+        if (remoteName.isNotEmpty) {
+          _nameCache[userId] = remoteName;
+          return remoteName;
+        }
+      } catch (_) {
+        // Offline / RLS / transient failure: leave empty rather than blocking chat.
+      }
+    }
+    return '';
   }
 
   Future<List<ChatMessage>> fetchRecent(
@@ -117,8 +159,20 @@ class ChatRepository {
     return msg.message;
   }
 
-  /// Live inserts for one team when connected; safely no-ops offline.
-  void watchTeam(String teamId, void Function(ChatMessage) onMessage) {
+  /// Deletes one authored message locally and queues remote deletion (or runs immediately online).
+  Future<void> deleteMessage(String teamId, String messageId) async {
+    final userId = await _requireUserId();
+    await _store.deleteChatMessageLocal(userId, messageId);
+    await _sync.refreshCounts(userId: userId);
+    unawaited(_sync.triggerSync(userId: userId));
+  }
+
+  /// Live inserts & deletes for one team when connected; safely no-ops offline.
+  void watchTeam(
+    String teamId,
+    void Function(ChatMessage) onMessage, {
+    void Function(String messageId)? onDelete,
+  }) {
     dispose();
     final c = _client;
     if (c == null ||
@@ -138,12 +192,42 @@ class ChatRepository {
             column: 'team_id',
             value: teamId,
           ),
-          callback: (payload) {
-            final msg = ChatMessage.fromJson(
+          callback: (payload) async {
+            var msg = ChatMessage.fromJson(
               Map<String, dynamic>.from(payload.newRecord),
             );
+            if (msg.userNama.trim().isEmpty) {
+              final resolved = await resolveSenderName(msg.userId);
+              if (resolved.isNotEmpty) {
+                msg = msg.copyWith(userNama: resolved);
+              }
+            } else {
+              _nameCache[msg.userId] = msg.userNama.trim();
+            }
             unawaited(_store.mergeChatMessages(ownerId, teamId, [msg]));
             onMessage(msg);
+          },
+        )
+        .onPostgresChanges(
+          event: PostgresChangeEvent.delete,
+          schema: 'public',
+          table: 'chat_messages',
+          filter: PostgresChangeFilter(
+            type: PostgresChangeFilterType.eq,
+            column: 'team_id',
+            value: teamId,
+          ),
+          callback: (payload) {
+            final deletedId = payload.oldRecord['id'] as String?;
+            if (deletedId == null || deletedId.isEmpty) return;
+            unawaited(
+              _store.deleteChatMessageLocal(
+                ownerId,
+                deletedId,
+                queueRemoteDelete: false,
+              ),
+            );
+            onDelete?.call(deletedId);
           },
         )
         .subscribe();

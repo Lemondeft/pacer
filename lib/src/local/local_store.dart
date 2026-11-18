@@ -97,6 +97,7 @@ abstract class LocalStore {
   });
   Future<void> mergeRemoteActivities(String userId, List<Activity> remote);
   Future<void> deleteActivityLocal(String id);
+  Future<void> queueDeleteActivityLocal(String userId, String id);
   Future<List<RutePoint>> getRoutePoints(String aktivitasId);
   Future<void> saveRoutePoints(String aktivitasId, List<RutePoint> points);
 
@@ -180,6 +181,8 @@ abstract class LocalStore {
   Future<List<AppNotification>> getNotifications(String userId);
   Future<void> markNotificationReadLocal(String userId, String notificationId);
   Future<void> markAllNotificationsReadLocal(String userId);
+  Future<void> deleteNotificationLocal(String userId, String notificationId);
+  Future<void> clearNotificationsLocal(String userId);
 
   // ---- Leaderboards ----
   Future<void> saveLeaderboards(String userId, List<Leaderboard> boards);
@@ -224,6 +227,11 @@ abstract class LocalStore {
     String tempId,
     ChatMessage serverMsg,
   );
+  Future<void> deleteChatMessageLocal(
+    String userId,
+    String messageId, {
+    bool queueRemoteDelete = true,
+  });
 
   // ---- Outbox ----
   Future<List<OutboxItem>> getDueOutboxItems(String userId, DateTime now);

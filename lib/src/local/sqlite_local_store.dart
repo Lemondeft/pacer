@@ -912,10 +912,17 @@ class SqliteLocalStore implements LocalStore {
         where: 'user_id = ?',
         whereArgs: [userId],
       );
+      final pendingDeletes = await txn.query(
+        'sync_outbox',
+        columns: ['entity_id'],
+        where: 'user_id = ? AND op_type = ? AND status = ?',
+        whereArgs: [userId, OutboxOp.deleteActivity, 'pending'],
+      );
       final protectedIds = <String>{
         for (final r in existingRows)
           if (r['sync_state'] != 'synced' || r['status'] == 'draft')
             r['id'] as String,
+        for (final r in pendingDeletes) r['entity_id'] as String,
       };
       final batch = txn.batch();
       final now = _nowIso();
@@ -955,6 +962,59 @@ class SqliteLocalStore implements LocalStore {
         }
       }
       await _deleteActivityRowsTxn(txn, id);
+    });
+  }
+
+  @override
+  Future<void> queueDeleteActivityLocal(String userId, String id) async {
+    final demo = isDemoUserId(userId);
+    await _db.transaction((txn) async {
+      final rows = await txn.query(
+        'activities',
+        where: 'id = ?',
+        whereArgs: [id],
+        limit: 1,
+      );
+      final pendingSyncRows = await txn.query(
+        'sync_outbox',
+        columns: ['id'],
+        where: 'user_id = ? AND op_type = ? AND entity_id = ? AND status = ?',
+        whereArgs: [userId, OutboxOp.syncActivity, id, 'pending'],
+        limit: 1,
+      );
+      var needsRemoteDelete = !demo && pendingSyncRows.isEmpty;
+      if (rows.isNotEmpty) {
+        final local = _localActivityFromRow(rows.first);
+        if (local.status == RunStatus.finished &&
+            local.syncState == SyncState.synced) {
+          await _applyChallengeDeltaTxn(
+            txn,
+            local.activity.userId,
+            local.activity,
+            sign: -1,
+          );
+        }
+        if (local.syncState != SyncState.synced && pendingSyncRows.isNotEmpty) {
+          needsRemoteDelete = false;
+        }
+      }
+      await _deleteActivityRowsTxn(txn, id);
+      if (needsRemoteDelete) {
+        await txn.delete(
+          'sync_outbox',
+          where: 'user_id = ? AND op_type = ? AND entity_id = ? AND status = ?',
+          whereArgs: [userId, OutboxOp.deleteActivity, id, 'pending'],
+        );
+        await txn.insert('sync_outbox', {
+          'user_id': userId,
+          'op_type': OutboxOp.deleteActivity,
+          'entity_id': id,
+          'payload_json': jsonEncode({'id': id}),
+          'status': 'pending',
+          'attempts': 0,
+          'created_at': _nowIso(),
+        });
+      }
     });
   }
 
@@ -1858,8 +1918,18 @@ class SqliteLocalStore implements LocalStore {
   ) async {
     if (remote.isEmpty) return;
     await _db.transaction((txn) async {
+      final pendingDeletes = await txn.query(
+        'sync_outbox',
+        columns: ['entity_id'],
+        where: 'user_id = ? AND op_type = ? AND status = ?',
+        whereArgs: [userId, OutboxOp.deleteChat, 'pending'],
+      );
+      final deletedIds = {
+        for (final r in pendingDeletes) r['entity_id'] as String,
+      };
       final batch = txn.batch();
       for (final m in remote) {
+        if (deletedIds.contains(m.id)) continue;
         batch.insert('chat_messages', {
           'owner_user_id': userId,
           'id': m.id,
@@ -1986,6 +2056,59 @@ class SqliteLocalStore implements LocalStore {
             (serverMsg.createdAt ?? DateTime.now()).toUtc().toIso8601String(),
         'sync_state': 'synced',
       }, conflictAlgorithm: ConflictAlgorithm.replace);
+    });
+  }
+
+  @override
+  Future<void> deleteChatMessageLocal(
+    String userId,
+    String messageId, {
+    bool queueRemoteDelete = true,
+  }) async {
+    final demo = isDemoUserId(userId);
+    await _db.transaction((txn) async {
+      final existing = await txn.query(
+        'chat_messages',
+        columns: ['sync_state'],
+        where: 'owner_user_id = ? AND id = ?',
+        whereArgs: [userId, messageId],
+        limit: 1,
+      );
+      final pendingSend = await txn.query(
+        'sync_outbox',
+        columns: ['id'],
+        where: 'user_id = ? AND op_type = ? AND entity_id = ? AND status = ?',
+        whereArgs: [userId, OutboxOp.sendChat, messageId, 'pending'],
+        limit: 1,
+      );
+      await txn.delete(
+        'sync_outbox',
+        where: 'user_id = ? AND op_type = ? AND entity_id = ?',
+        whereArgs: [userId, OutboxOp.sendChat, messageId],
+      );
+      await txn.delete(
+        'chat_messages',
+        where: 'owner_user_id = ? AND id = ?',
+        whereArgs: [userId, messageId],
+      );
+      final wasSynced = existing.isEmpty ||
+          (existing.first['sync_state'] as String? ?? 'synced') == 'synced';
+      if (queueRemoteDelete && !demo && pendingSend.isEmpty && wasSynced) {
+        await txn.delete(
+          'sync_outbox',
+          where: 'user_id = ? AND op_type = ? AND entity_id = ? AND status = ?',
+          whereArgs: [userId, OutboxOp.deleteChat, messageId, 'pending'],
+        );
+        await txn.insert('sync_outbox', {
+          'user_id': userId,
+          'op_type': OutboxOp.deleteChat,
+          'entity_id': messageId,
+          'payload_json': jsonEncode({'id': messageId}),
+          'status': 'pending',
+          'attempts': 0,
+          'created_at': _nowIso(),
+        });
+      }
     });
   }
 
@@ -2318,6 +2441,27 @@ class SqliteLocalStore implements LocalStore {
     await _db.update(
       'user_notifications',
       {'is_read': 1},
+      where: 'user_id = ?',
+      whereArgs: [userId],
+    );
+  }
+
+  @override
+  Future<void> deleteNotificationLocal(
+    String userId,
+    String notificationId,
+  ) async {
+    await _db.delete(
+      'user_notifications',
+      where: 'user_id = ? AND id = ?',
+      whereArgs: [userId, notificationId],
+    );
+  }
+
+  @override
+  Future<void> clearNotificationsLocal(String userId) async {
+    await _db.delete(
+      'user_notifications',
       where: 'user_id = ?',
       whereArgs: [userId],
     );

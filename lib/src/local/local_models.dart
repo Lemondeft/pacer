@@ -14,12 +14,14 @@ class OutboxOp {
   OutboxOp._();
 
   static const String syncActivity = 'sync_activity';
+  static const String deleteActivity = 'delete_activity';
   static const String updateProfile = 'update_profile';
   static const String updateLanguage = 'update_language';
   static const String joinChallenge = 'join_challenge';
   static const String activateChallenge = 'activate_challenge';
   static const String leaveChallenge = 'leave_challenge';
   static const String sendChat = 'send_chat';
+  static const String deleteChat = 'delete_chat';
 }
 
 /// Locally stored workout with lifecycle and sync state metadata.

@@ -927,4 +927,41 @@ class S {
     UsernameError.hasWhitespace => errUsernameNoSpaces,
     UsernameError.tooShort => errUsernameTooShort,
   };
+
+  // User Deletion Controls
+  static String get deleteAction => _en ? 'Delete' : 'Hapus';
+  static String get deleteActivityTitle =>
+      _en ? 'Delete activity?' : 'Hapus aktivitas?';
+  static String get deleteActivityBody => _en
+      ? 'This removes the workout, route, and challenge progress associated with it.'
+      : 'Ini akan menghapus sesi latihan, rute, serta progres tantangan terkait.';
+  static String get activityDeletedNotice =>
+      _en ? 'Activity deleted' : 'Aktivitas dihapus';
+  static String get deleteMessageAction =>
+      _en ? 'Delete message' : 'Hapus pesan';
+  static String get deleteMessageTitle =>
+      _en ? 'Delete message?' : 'Hapus pesan?';
+  static String get deleteMessageBody => _en
+      ? 'Remove this message from the team chat?'
+      : 'Hapus pesan ini dari obrolan tim?';
+  static String get youLabel => _en ? 'You' : 'Kamu';
+  static String get clearAllNotifications =>
+      _en ? 'Clear all' : 'Hapus semua';
+  static String get clearNotificationsTitle =>
+      _en ? 'Clear all notifications?' : 'Hapus semua notifikasi?';
+  static String get clearNotificationsBody => _en
+      ? 'Remove every notification from your inbox?'
+      : 'Hapus seluruh notifikasi dari kotak masuk?';
+  static String get notificationsClearedNotice =>
+      _en ? 'Notifications cleared' : 'Semua notifikasi dihapus';
+  static String get deleteAccountAction =>
+      _en ? 'Delete Account' : 'Hapus Akun';
+  static String get deleteAccountTitle =>
+      _en ? 'Delete your account?' : 'Hapus akun permanen?';
+  static String get deleteAccountBody => _en
+      ? 'This permanently deletes your profile, run history, routes, and team data. Type DELETE to confirm.'
+      : 'Ini menghapus permanen profil, riwayat lari, rute, dan data tim Anda. Ketik DELETE untuk konfirmasi.';
+  static String get deleteAccountConfirmWord => 'DELETE';
+  static String get accountDeletedNotice =>
+      _en ? 'Account deleted' : 'Akun berhasil dihapus';
 }

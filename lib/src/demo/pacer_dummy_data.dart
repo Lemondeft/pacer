@@ -186,19 +186,28 @@ class PacerDummyData {
   static final Set<String> _demoRemovedMembers = {};
   static final Map<String, String> _demoMemberRoleOverrides = {};
   static final List<Activity> _customDemoActivities = [];
+  static final Set<String> _deletedDemoActivityIds = {};
   static final List<Challenge> _customDemoChallenges = [];
   static Map<String, PartisipasiChallenge>? _demoParticipationsState;
   static List<AppNotification>? _demoNotificationsState;
 
   static List<Activity> get demoActivities => [
-    ..._customDemoActivities,
-    ...activities,
+    for (final a in _customDemoActivities)
+      if (!_deletedDemoActivityIds.contains(a.id)) a,
+    for (final a in activities)
+      if (!_deletedDemoActivityIds.contains(a.id)) a,
   ];
 
   static void recordDemoActivity(Activity activity) {
+    _deletedDemoActivityIds.remove(activity.id);
     _customDemoActivities.removeWhere((a) => a.id == activity.id);
     _customDemoActivities.insert(0, activity);
     recordDemoActivityProgress(activity);
+  }
+
+  static void deleteDemoActivity(String id) {
+    _customDemoActivities.removeWhere((a) => a.id == id);
+    _deletedDemoActivityIds.add(id);
   }
 
   static void resetDemoTeams() {
@@ -211,6 +220,7 @@ class PacerDummyData {
     _demoRemovedMembers.clear();
     _demoMemberRoleOverrides.clear();
     _customDemoActivities.clear();
+    _deletedDemoActivityIds.clear();
     _customDemoChallenges.clear();
     _demoParticipationsState = null;
     _demoNotificationsState = null;
@@ -859,6 +869,14 @@ class PacerDummyData {
     for (var i = 0; i < list.length; i++) {
       list[i] = list[i].copyWith(isRead: true);
     }
+  }
+
+  static void deleteDemoNotification(String notificationId) {
+    _ensureDemoNotifications().removeWhere((n) => n.id == notificationId);
+  }
+
+  static void clearDemoNotifications() {
+    _ensureDemoNotifications().clear();
   }
 
   /// Realistic leaderboard rankings across metrics and periods

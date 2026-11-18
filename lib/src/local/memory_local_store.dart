@@ -391,7 +391,15 @@ class MemoryLocalStore implements LocalStore {
     String userId,
     List<Activity> remote,
   ) async {
+    final pendingDeleteIds = {
+      for (final o in _outbox)
+        if (o.userId == userId &&
+            o.opType == OutboxOp.deleteActivity &&
+            o.status == SyncState.pending)
+          o.entityId,
+    };
     for (final a in remote) {
+      if (pendingDeleteIds.contains(a.id)) continue;
       final existing = _activities[a.id];
       if (existing != null &&
           (existing.syncState != SyncState.synced ||
@@ -424,6 +432,36 @@ class MemoryLocalStore implements LocalStore {
         existing.activity.userId,
         existing.activity,
         sign: -1,
+      );
+    }
+  }
+
+  @override
+  Future<void> queueDeleteActivityLocal(String userId, String id) async {
+    final demo = isDemoUserId(userId);
+    final hadPendingCreate = _outbox.any(
+      (o) =>
+          o.userId == userId &&
+          o.opType == OutboxOp.syncActivity &&
+          o.entityId == id &&
+          o.status == SyncState.pending,
+    );
+    final existing = _activities[id];
+    final wasSynced = existing == null || existing.syncState == SyncState.synced;
+    await deleteActivityLocal(id);
+    if (!demo && !hadPendingCreate && wasSynced) {
+      _outbox.removeWhere(
+        (o) =>
+            o.userId == userId &&
+            o.opType == OutboxOp.deleteActivity &&
+            o.entityId == id &&
+            o.status == SyncState.pending,
+      );
+      _enqueue(
+        userId: userId,
+        opType: OutboxOp.deleteActivity,
+        entityId: id,
+        payload: {'id': id},
       );
     }
   }
@@ -869,9 +907,17 @@ class MemoryLocalStore implements LocalStore {
     String teamId,
     List<ChatMessage> remote,
   ) async {
+    final deletedIds = {
+      for (final o in _outbox)
+        if (o.userId == userId &&
+            o.opType == OutboxOp.deleteChat &&
+            o.status == SyncState.pending)
+          o.entityId,
+    };
     final key = '${userId}_$teamId';
     final map = _chats.putIfAbsent(key, () => {});
     for (final m in remote) {
+      if (deletedIds.contains(m.id)) continue;
       map[m.id] = LocalChatMessage(message: m, syncState: SyncState.synced);
     }
   }
@@ -946,6 +992,50 @@ class MemoryLocalStore implements LocalStore {
           createdAt: serverMsg.createdAt,
         ),
         syncState: SyncState.synced,
+      );
+    }
+  }
+
+  @override
+  Future<void> deleteChatMessageLocal(
+    String userId,
+    String messageId, {
+    bool queueRemoteDelete = true,
+  }) async {
+    final demo = isDemoUserId(userId);
+    final hadPendingSend = _outbox.any(
+      (o) =>
+          o.userId == userId &&
+          o.opType == OutboxOp.sendChat &&
+          o.entityId == messageId &&
+          o.status == SyncState.pending,
+    );
+    _outbox.removeWhere(
+      (o) =>
+          o.userId == userId &&
+          o.opType == OutboxOp.sendChat &&
+          o.entityId == messageId,
+    );
+    LocalChatMessage? removed;
+    for (final entry in _chats.entries) {
+      if (!entry.key.startsWith('${userId}_')) continue;
+      final hit = entry.value.remove(messageId);
+      if (hit != null) removed = hit;
+    }
+    final wasSynced = removed == null || removed.syncState == SyncState.synced;
+    if (queueRemoteDelete && !demo && !hadPendingSend && wasSynced) {
+      _outbox.removeWhere(
+        (o) =>
+            o.userId == userId &&
+            o.opType == OutboxOp.deleteChat &&
+            o.entityId == messageId &&
+            o.status == SyncState.pending,
+      );
+      _enqueue(
+        userId: userId,
+        opType: OutboxOp.deleteChat,
+        entityId: messageId,
+        payload: {'id': messageId},
       );
     }
   }
@@ -1178,6 +1268,19 @@ class MemoryLocalStore implements LocalStore {
     for (var i = 0; i < list.length; i++) {
       list[i] = list[i].copyWith(isRead: true);
     }
+  }
+
+  @override
+  Future<void> deleteNotificationLocal(
+    String userId,
+    String notificationId,
+  ) async {
+    _notifications[userId]?.removeWhere((n) => n.id == notificationId);
+  }
+
+  @override
+  Future<void> clearNotificationsLocal(String userId) async {
+    _notifications[userId]?.clear();
   }
 
   void _enqueue({

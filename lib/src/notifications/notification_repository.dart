@@ -167,6 +167,51 @@ class NotificationRepository {
     }
   }
 
+  Future<void> deleteNotification(String notificationId) async {
+    if (await isDemoAccount(client: _client, store: _store)) {
+      PacerDummyData.deleteDemoNotification(notificationId);
+      _syncUnreadCount(PacerDummyData.getDemoNotifications());
+      revisionNotifier.value++;
+      return;
+    }
+    final userId = await resolveActiveUserId(client: _client, store: _store);
+    if (userId == null) return;
+    await _store.deleteNotificationLocal(userId, notificationId);
+    final updated = await _store.getNotifications(userId);
+    _syncUnreadCount(updated);
+    revisionNotifier.value++;
+    final c = _client;
+    if (c != null && c.auth.currentUser != null) {
+      try {
+        await c
+            .from('user_notifications')
+            .delete()
+            .eq('id', notificationId)
+            .eq('user_id', userId);
+      } catch (_) {}
+    }
+  }
+
+  Future<void> clearAllNotifications() async {
+    if (await isDemoAccount(client: _client, store: _store)) {
+      PacerDummyData.clearDemoNotifications();
+      _syncUnreadCount(const []);
+      revisionNotifier.value++;
+      return;
+    }
+    final userId = await resolveActiveUserId(client: _client, store: _store);
+    if (userId == null) return;
+    await _store.clearNotificationsLocal(userId);
+    unreadCountNotifier.value = 0;
+    revisionNotifier.value++;
+    final c = _client;
+    if (c != null && c.auth.currentUser != null) {
+      try {
+        await c.from('user_notifications').delete().eq('user_id', userId);
+      } catch (_) {}
+    }
+  }
+
   Future<void> refreshUnreadCount({bool forceRefresh = false}) async {
     try {
       await listNotifications(forceRefresh: forceRefresh);

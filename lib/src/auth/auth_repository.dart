@@ -180,6 +180,20 @@ class AuthRepository {
     signOutEpoch.value++;
   }
 
+  /// Permanently deletes the signed-in user account via the `delete-account`
+  /// Edge Function, wipes local SQLite data, and signs out.
+  Future<void> deleteAccount() async {
+    final c = _client;
+    final uid = c?.auth.currentUser?.id;
+    if (c == null || uid == null) throw StateError('Not signed in');
+    final res = await c.functions.invoke('delete-account');
+    if (res.status < 200 || res.status >= 300) {
+      throw StateError('Failed to delete account (${res.status})');
+    }
+    await _store.wipeUserData(uid);
+    await signOut();
+  }
+
   String? currentUserId() => _client?.auth.currentUser?.id;
 
   Future<String?> resolveUserId() async =>

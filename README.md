@@ -5,7 +5,7 @@
 
   **Offline-first sports & running tracker built with Flutter and Supabase.**
 
-  [![Release](https://img.shields.io/badge/version-v0.2.9-00CDFA?style=flat-square)](https://github.com/Lemondeft/pacer/releases)
+  [![Release](https://img.shields.io/badge/version-v0.2.10-00CDFA?style=flat-square)](https://github.com/Lemondeft/pacer/releases)
   [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue?style=flat-square)](LICENSE)
   [![Flutter](https://img.shields.io/badge/Flutter-Android%20%7C%20iOS%20%7C%20Desktop%20%7C%20Web-02569B?style=flat-square&logo=flutter&logoColor=white)](https://flutter.dev)
   [![Supabase](https://img.shields.io/badge/Supabase-Postgres%20%2B%20RLS-3ECF8E?style=flat-square&logo=supabase&logoColor=white)](https://supabase.com)

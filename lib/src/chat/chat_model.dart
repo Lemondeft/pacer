@@ -21,6 +21,15 @@ class ChatMessage {
     this.createdAt,
   });
 
+  ChatMessage copyWith({String? userNama}) => ChatMessage(
+    id: id,
+    teamId: teamId,
+    userId: userId,
+    userNama: userNama ?? this.userNama,
+    body: body,
+    createdAt: createdAt,
+  );
+
   factory ChatMessage.fromJson(Map<String, dynamic> json) {
     final nested = json['users'];
     final candidate = nested is Map
