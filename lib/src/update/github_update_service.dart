@@ -89,7 +89,7 @@ class GitHubUpdateService {
   GitHubUpdateService._();
   static final GitHubUpdateService instance = GitHubUpdateService._();
 
-  static const String currentVersion = '0.2.10';
+  static const String currentVersion = '0.2.11';
   static const String latestReleaseEndpoint =
       'https://api.github.com/repos/Lemondeft/pacer/releases/latest';
   static const String _dismissedTagPrefKey = 'pacer.dismissed_update_tag';
