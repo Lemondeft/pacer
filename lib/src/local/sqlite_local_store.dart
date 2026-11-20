@@ -918,6 +918,9 @@ class SqliteLocalStore implements LocalStore {
         where: 'user_id = ? AND op_type = ? AND status = ?',
         whereArgs: [userId, OutboxOp.deleteActivity, 'pending'],
       );
+      final existingIds = <String>{
+        for (final r in existingRows) r['id'] as String,
+      };
       final protectedIds = <String>{
         for (final r in existingRows)
           if (r['sync_state'] != 'synced' || r['status'] == 'draft')
@@ -928,13 +931,31 @@ class SqliteLocalStore implements LocalStore {
       final now = _nowIso();
       for (final a in remote) {
         if (protectedIds.contains(a.id)) continue;
-        batch.insert('activities', {
+        final rowMap = {
           ..._activityToSqliteRow(a),
           'status': 'finished',
           'sync_state': 'synced',
           'statistik_applied': 1,
           'updated_at': now,
-        }, conflictAlgorithm: ConflictAlgorithm.replace);
+        };
+        if (existingIds.contains(a.id)) {
+          // Update in place instead of ConflictAlgorithm.replace so SQLite does
+          // not delete-and-reinsert the parent row and trigger ON DELETE CASCADE
+          // on child route_points.
+          batch.update(
+            'activities',
+            rowMap,
+            where: 'id = ?',
+            whereArgs: [a.id],
+          );
+        } else {
+          batch.insert(
+            'activities',
+            rowMap,
+            conflictAlgorithm: ConflictAlgorithm.ignore,
+          );
+          existingIds.add(a.id);
+        }
       }
       await batch.commit(noResult: true);
     });
@@ -1036,6 +1057,7 @@ class SqliteLocalStore implements LocalStore {
     String aktivitasId,
     List<RutePoint> points,
   ) async {
+    if (points.isEmpty) return;
     await _db.transaction((txn) async {
       final exists = await txn.query(
         'activities',
@@ -1045,15 +1067,11 @@ class SqliteLocalStore implements LocalStore {
         limit: 1,
       );
       if (exists.isEmpty) return;
-      final syncState = exists.first['sync_state'] as String?;
-      // Never wipe unsynced local route points with an empty remote list.
-      if (points.isEmpty && syncState != 'synced') return;
       await txn.delete(
         'route_points',
         where: 'aktivitas_id = ?',
         whereArgs: [aktivitasId],
       );
-      if (points.isEmpty) return;
       final batch = txn.batch();
       for (final p in points) {
         batch.insert('route_points', {

@@ -491,5 +491,67 @@ void main() {
         192,
       );
     });
+
+    test('mergeRemoteActivities and saveRoutePoints([], ...) never cascade-delete existing SQLite route_points', () async {
+      final sqlStore = await openInMemorySqliteStore();
+      addTearDown(() async {
+        await sqlStore.close();
+      });
+
+      final now = DateTime.utc(2026, 11, 20, 20, 45);
+      const actId = '358381cc-8795-4dc4-9d5e-71d8ef7f4052';
+      const userId = '9e6823f1-ca06-4733-ba74-050040b9a151';
+
+      final initialPoints = <RutePoint>[
+        RutePoint(
+          aktivitasId: actId,
+          urutan: 0,
+          lat: -7.9510,
+          lng: 112.6140,
+          elevasiM: 500,
+          kecepatanMs: 1.2,
+          direkamAt: now,
+        ),
+        RutePoint(
+          aktivitasId: actId,
+          urutan: 1,
+          lat: -7.9520,
+          lng: 112.6145,
+          elevasiM: 501,
+          kecepatanMs: 1.3,
+          direkamAt: now.add(const Duration(seconds: 60)),
+        ),
+      ];
+
+      final activity = Activity(
+        id: actId,
+        userId: userId,
+        jenis: 'berjalan',
+        mulaiAt: now,
+        selesaiAt: now.add(const Duration(seconds: 238)),
+        durasiS: 238,
+        jarakM: 191.55,
+        cadenceSpm: 72,
+      );
+
+      // Insert synced activity and its route points into SQLite.
+      await sqlStore.mergeRemoteActivities(userId, [activity]);
+      await sqlStore.saveRoutePoints(actId, initialPoints);
+      expect((await sqlStore.getRoutePoints(actId)).length, 2);
+
+      // Simulate listLocalActivities refreshing from Supabase and calling mergeRemoteActivities.
+      await sqlStore.mergeRemoteActivities(userId, [
+        activity.copyWith(validationStatus: 'verified'),
+      ]);
+
+      // Route points must NOT be cascade-deleted by mergeRemoteActivities!
+      final afterMergePoints = await sqlStore.getRoutePoints(actId);
+      expect(afterMergePoints.length, 2);
+      expect(afterMergePoints.first.lat, closeTo(-7.9510, 1e-6));
+
+      // Calling saveRoutePoints with an empty list must also preserve existing points.
+      await sqlStore.saveRoutePoints(actId, const []);
+      expect((await sqlStore.getRoutePoints(actId)).length, 2);
+    });
   });
 }

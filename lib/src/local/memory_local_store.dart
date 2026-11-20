@@ -475,12 +475,7 @@ class MemoryLocalStore implements LocalStore {
     String aktivitasId,
     List<RutePoint> points,
   ) async {
-    final existingAct = _activities[aktivitasId];
-    if (points.isEmpty &&
-        existingAct != null &&
-        existingAct.syncState != SyncState.synced) {
-      return;
-    }
+    if (points.isEmpty) return;
     _routes[aktivitasId] = List<RutePoint>.from(points);
   }
 
