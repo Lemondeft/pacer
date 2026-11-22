@@ -95,7 +95,12 @@ abstract class LocalStore {
     String? validationStatus,
     int? cadenceSpm,
   });
-  Future<void> mergeRemoteActivities(String userId, List<Activity> remote);
+  Future<void> mergeRemoteActivities(
+    String userId,
+    List<Activity> remote, {
+    bool pruneDeleted = false,
+    int? pageLimit,
+  });
   Future<void> deleteActivityLocal(String id);
   Future<void> queueDeleteActivityLocal(String userId, String id);
   Future<List<RutePoint>> getRoutePoints(String aktivitasId);

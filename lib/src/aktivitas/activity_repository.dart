@@ -231,13 +231,19 @@ class ActivityRepository {
         final rows = await c!
             .from('aktivitas')
             .select()
+            .eq('user_id', userId)
             .order('mulai_at', ascending: false)
             .limit(limit);
         final list = [
           for (final row in rows)
             Activity.fromJson(Map<String, dynamic>.from(row)),
         ];
-        await _store.mergeRemoteActivities(userId, list);
+        await _store.mergeRemoteActivities(
+          userId,
+          list,
+          pruneDeleted: true,
+          pageLimit: limit,
+        );
         return _store.listActivities(userId, limit: limit);
       },
       writeLocal: (_) async {

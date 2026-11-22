@@ -389,8 +389,10 @@ class MemoryLocalStore implements LocalStore {
   @override
   Future<void> mergeRemoteActivities(
     String userId,
-    List<Activity> remote,
-  ) async {
+    List<Activity> remote, {
+    bool pruneDeleted = false,
+    int? pageLimit,
+  }) async {
     final pendingDeleteIds = {
       for (final o in _outbox)
         if (o.userId == userId &&
@@ -398,6 +400,7 @@ class MemoryLocalStore implements LocalStore {
             o.status == SyncState.pending)
           o.entityId,
     };
+    final remoteIds = <String>{for (final a in remote) a.id};
     for (final a in remote) {
       if (pendingDeleteIds.contains(a.id)) continue;
       final existing = _activities[a.id];
@@ -415,6 +418,41 @@ class MemoryLocalStore implements LocalStore {
         statistikApplied: true,
         updatedAt: DateTime.now().toUtc(),
       );
+    }
+    if (pruneDeleted) {
+      final isCompleteList = pageLimit == null || remote.length < pageLimit;
+      DateTime? oldestRemoteMulai;
+      if (!isCompleteList) {
+        for (final a in remote) {
+          final m = a.mulaiAt?.toUtc();
+          if (m == null) continue;
+          if (oldestRemoteMulai == null || m.isBefore(oldestRemoteMulai)) {
+            oldestRemoteMulai = m;
+          }
+        }
+      }
+      final staleIds = <String>[];
+      for (final entry in _activities.entries) {
+        final local = entry.value;
+        if (local.activity.userId != userId) continue;
+        if (local.syncState != SyncState.synced ||
+            local.status == RunStatus.draft) {
+          continue;
+        }
+        if (remoteIds.contains(entry.key)) continue;
+        if (!isCompleteList) {
+          if (oldestRemoteMulai == null) continue;
+          final localMulai = local.activity.mulaiAt?.toUtc();
+          if (localMulai == null || localMulai.isBefore(oldestRemoteMulai)) {
+            continue;
+          }
+        }
+        staleIds.add(entry.key);
+      }
+      for (final id in staleIds) {
+        _activities.remove(id);
+        _routes.remove(id);
+      }
     }
   }
 

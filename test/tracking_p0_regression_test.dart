@@ -552,6 +552,54 @@ void main() {
       // Calling saveRoutePoints with an empty list must also preserve existing points.
       await sqlStore.saveRoutePoints(actId, const []);
       expect((await sqlStore.getRoutePoints(actId)).length, 2);
+
+      // Pruning server-deleted synced ghost activities while preserving pending runs
+      // and older runs outside a full page window.
+      final ghostAct = Activity(
+        id: 'f5a646e7-f25b-4382-980b-e9f4fb1ae65c',
+        userId: userId,
+        jenis: 'berjalan',
+        mulaiAt: now.subtract(const Duration(days: 9)),
+        selesaiAt: now.subtract(const Duration(days: 9)).add(const Duration(seconds: 518)),
+        durasiS: 518,
+        jarakM: 274.67,
+      );
+      await sqlStore.mergeRemoteActivities(userId, [ghostAct]);
+      expect(await sqlStore.getActivity(ghostAct.id), isNotNull);
+
+      // Add a locally pending run that hasn't synced yet.
+      await sqlStore.finalizeRunAtomic(
+        id: 'pending-local-run',
+        userId: userId,
+        jenis: 'lari',
+        mulaiAt: now.add(const Duration(minutes: 5)),
+        selesaiAt: now.add(const Duration(minutes: 10)),
+        durasiS: 300,
+        jarakM: 800,
+        allPoints: const [],
+      );
+
+      // Full-page fetch (length == pageLimit == 1) containing only `activity`
+      // must NOT prune `ghostAct` because `ghostAct.mulaiAt` is older than the page floor.
+      await sqlStore.mergeRemoteActivities(
+        userId,
+        [activity],
+        pruneDeleted: true,
+        pageLimit: 1,
+      );
+      expect(await sqlStore.getActivity(ghostAct.id), isNotNull);
+
+      // Complete list fetch (length 1 < pageLimit 50) containing only `activity`
+      // MUST prune `ghostAct`, preserve `pending-local-run`, and preserve `activity` route_points.
+      await sqlStore.mergeRemoteActivities(
+        userId,
+        [activity],
+        pruneDeleted: true,
+        pageLimit: 50,
+      );
+      expect(await sqlStore.getActivity(ghostAct.id), isNull);
+      expect(await sqlStore.getActivity('pending-local-run'), isNotNull);
+      expect((await sqlStore.getRoutePoints(actId)).length, 2);
     });
   });
 }

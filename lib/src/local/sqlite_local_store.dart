@@ -902,13 +902,15 @@ class SqliteLocalStore implements LocalStore {
   @override
   Future<void> mergeRemoteActivities(
     String userId,
-    List<Activity> remote,
-  ) async {
-    if (remote.isEmpty) return;
+    List<Activity> remote, {
+    bool pruneDeleted = false,
+    int? pageLimit,
+  }) async {
+    if (remote.isEmpty && !pruneDeleted) return;
     await _db.transaction((txn) async {
       final existingRows = await txn.query(
         'activities',
-        columns: ['id', 'sync_state', 'status'],
+        columns: ['id', 'sync_state', 'status', 'mulai_at'],
         where: 'user_id = ?',
         whereArgs: [userId],
       );
@@ -927,6 +929,7 @@ class SqliteLocalStore implements LocalStore {
             r['id'] as String,
         for (final r in pendingDeletes) r['entity_id'] as String,
       };
+      final remoteIds = <String>{for (final a in remote) a.id};
       final batch = txn.batch();
       final now = _nowIso();
       for (final a in remote) {
@@ -955,6 +958,36 @@ class SqliteLocalStore implements LocalStore {
             conflictAlgorithm: ConflictAlgorithm.ignore,
           );
           existingIds.add(a.id);
+        }
+      }
+
+      if (pruneDeleted) {
+        final isCompleteList = pageLimit == null || remote.length < pageLimit;
+        DateTime? oldestRemoteMulai;
+        if (!isCompleteList) {
+          for (final a in remote) {
+            final m = a.mulaiAt?.toUtc();
+            if (m == null) continue;
+            if (oldestRemoteMulai == null || m.isBefore(oldestRemoteMulai)) {
+              oldestRemoteMulai = m;
+            }
+          }
+        }
+        for (final r in existingRows) {
+          final id = r['id'] as String;
+          if (protectedIds.contains(id) || remoteIds.contains(id)) continue;
+          if (!isCompleteList) {
+            if (oldestRemoteMulai == null) continue;
+            final rawMulai = r['mulai_at'] as String?;
+            final localMulai = rawMulai == null
+                ? null
+                : DateTime.tryParse(rawMulai)?.toUtc();
+            if (localMulai == null || localMulai.isBefore(oldestRemoteMulai)) {
+              continue;
+            }
+          }
+          batch.delete('route_points', where: 'aktivitas_id = ?', whereArgs: [id]);
+          batch.delete('activities', where: 'id = ?', whereArgs: [id]);
         }
       }
       await batch.commit(noResult: true);
