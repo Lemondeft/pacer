@@ -117,6 +117,12 @@ class S {
       : 'Nyalakan layanan lokasi untuk merekam.';
   static String get gpsDenied =>
       _en ? 'Location permission denied.' : 'Izin lokasi ditolak.';
+  static String get bgTrackingChannelName =>
+      _en ? 'Workout Tracking' : 'Pelacakan Olahraga';
+  static String bgTrackingTitle(String jenis) => 'Pacer · ${sportName(jenis)}';
+  static String get bgTrackingBody => _en
+      ? 'Recording GPS route and activity in the background.'
+      : 'Merekam rute GPS dan aktivitas di latar belakang.';
   static String get distanceKm => _en ? 'Distance (Km)' : 'Jarak (Km)';
   static String get avgPace => _en ? 'Avg Pace' : 'Pace Rata-rata';
   static String get duration => _en ? 'Duration' : 'Durasi';

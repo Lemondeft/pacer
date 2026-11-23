@@ -851,6 +851,9 @@ class _WidgetFakeMotionSensors implements MotionSensorProvider {
   Future<bool> ensureMotionPermission() async => true;
 
   @override
+  Future<bool> ensureNotificationPermission() async => true;
+
+  @override
   Future<void> startMonitoring() async {}
 
   @override

@@ -1,4 +1,4 @@
-import 'dart:async' show unawaited;
+import 'dart:async' show Timer, unawaited;
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -680,10 +680,12 @@ class RunTrackerScreen extends StatefulWidget {
   State<RunTrackerScreen> createState() => _RunTrackerScreenState();
 }
 
-class _RunTrackerScreenState extends State<RunTrackerScreen> {
+class _RunTrackerScreenState extends State<RunTrackerScreen>
+    with WidgetsBindingObserver {
   // _running == true means the session is paused (shows LANJUTKAN+SELESAI);
   // _started gates the initial MULAI action.
   late final RunRecorder _recorder = widget.recorder ?? RunRecorder();
+  Timer? _clockTicker;
   bool _running = false;
   bool _started = false;
   bool _finished = false;
@@ -699,6 +701,8 @@ class _RunTrackerScreenState extends State<RunTrackerScreen> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    _recorder.addListener(_syncClockTicker);
     final draft = widget.initialDraft;
     if (draft != null) {
       _recorder.restoreDraft(draft);
@@ -708,10 +712,35 @@ class _RunTrackerScreenState extends State<RunTrackerScreen> {
       _started = true;
       _running = !_recorder.recording;
     }
+    _syncClockTicker();
+  }
+
+  void _syncClockTicker() {
+    final shouldTick = _recorder.started && _recorder.recording && !_finished;
+    if (shouldTick && _clockTicker == null) {
+      _clockTicker = Timer.periodic(const Duration(seconds: 1), (_) {
+        if (mounted) setState(() {});
+      });
+    } else if (!shouldTick && _clockTicker != null) {
+      _clockTicker?.cancel();
+      _clockTicker = null;
+    }
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed && mounted) {
+      _syncClockTicker();
+      setState(() {});
+    }
   }
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    _recorder.removeListener(_syncClockTicker);
+    _clockTicker?.cancel();
+    _clockTicker = null;
     if (widget.recorder == null) {
       _recorder.dispose();
     }

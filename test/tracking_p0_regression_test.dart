@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:math' as math;
 
+import 'package:flutter/foundation.dart' show TargetPlatform;
 import 'package:flutter_test/flutter_test.dart';
 import 'package:geolocator/geolocator.dart';
 import 'package:pacer/src/aktivitas/activity_model.dart';
@@ -22,6 +23,9 @@ class _FakeMotionSensors implements MotionSensorProvider {
 
   @override
   Future<bool> ensureMotionPermission() async => true;
+
+  @override
+  Future<bool> ensureNotificationPermission() async => true;
 
   @override
   Future<void> startMonitoring() async {}
@@ -600,6 +604,42 @@ void main() {
       expect(await sqlStore.getActivity(ghostAct.id), isNull);
       expect(await sqlStore.getActivity('pending-local-run'), isNotNull);
       expect((await sqlStore.getRoutePoints(actId)).length, 2);
+    });
+
+    test('Android locationSettings enables foreground service + wakeLock while desktop uses base LocationSettings', () async {
+      final androidSettings = RunRecorder.buildLocationSettings(
+        platform: TargetPlatform.android,
+        notificationTitle: 'Pacer · Outdoor Run',
+        notificationText: 'Recording GPS route and activity in the background.',
+        channelName: 'Workout Tracking',
+      );
+      expect(androidSettings, isA<AndroidSettings>());
+      final cfg = (androidSettings as AndroidSettings).foregroundNotificationConfig;
+      expect(cfg, isNotNull);
+      expect(cfg!.enableWakeLock, isTrue);
+      expect(cfg.enableWifiLock, isFalse);
+      expect(cfg.setOngoing, isTrue);
+      expect(cfg.notificationIcon.name, 'ic_stat_pacer');
+      expect(cfg.notificationIcon.defType, 'drawable');
+
+      final linuxSettings = RunRecorder.buildLocationSettings(
+        platform: TargetPlatform.linux,
+        notificationTitle: 'Pacer · Outdoor Run',
+        notificationText: 'Recording GPS route and activity in the background.',
+        channelName: 'Workout Tracking',
+      );
+      expect(linuxSettings, isNot(isA<AndroidSettings>()));
+
+      final webSettings = RunRecorder.buildLocationSettings(
+        platform: TargetPlatform.android,
+        isWeb: true,
+        notificationTitle: 'Pacer · Outdoor Run',
+        notificationText: 'Recording GPS route and activity in the background.',
+        channelName: 'Workout Tracking',
+      );
+      expect(webSettings, isNot(isA<AndroidSettings>()));
+
+      expect(await const NoopMotionSensorProvider().ensureNotificationPermission(), isTrue);
     });
   });
 }

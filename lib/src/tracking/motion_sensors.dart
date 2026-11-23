@@ -22,6 +22,7 @@ class OsMotionEvent {
 /// Abstract hardware sensor & OS activity recognition boundary for [RunRecorder].
 abstract class MotionSensorProvider {
   Future<bool> ensureMotionPermission();
+  Future<bool> ensureNotificationPermission() async => true;
   Future<void> startMonitoring() async {}
   Future<void> stopMonitoring() async {}
 
@@ -44,6 +45,9 @@ class NoopMotionSensorProvider implements MotionSensorProvider {
 
   @override
   Future<bool> ensureMotionPermission() async => false;
+
+  @override
+  Future<bool> ensureNotificationPermission() async => true;
 
   @override
   Future<void> startMonitoring() async {}
@@ -95,6 +99,21 @@ class PlatformMotionSensorProvider implements MotionSensorProvider {
     try {
       final granted = await _methodChannel.invokeMethod<bool>(
         'ensurePermission',
+      );
+      return granted ?? false;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  @override
+  Future<bool> ensureNotificationPermission() async {
+    if (kIsWeb || defaultTargetPlatform != TargetPlatform.android) {
+      return true;
+    }
+    try {
+      final granted = await _methodChannel.invokeMethod<bool>(
+        'ensureNotificationPermission',
       );
       return granted ?? false;
     } catch (_) {

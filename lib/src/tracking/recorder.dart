@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:ui' show Color;
 
 import 'package:flutter/foundation.dart';
 import 'package:geolocator/geolocator.dart';
@@ -14,6 +15,7 @@ import 'package:pacer/src/local/local_store.dart';
 import 'package:pacer/src/sync/sync_engine.dart';
 import 'package:pacer/src/tracking/activity_classifier.dart';
 import 'package:pacer/src/tracking/motion_sensors.dart';
+import 'package:pacer/src/ui/app_strings.dart';
 
 /// Foreground GPS run recorder (DFD 2.0 tracking). Offline-first & crash-safe.
 ///
@@ -275,6 +277,10 @@ class RunRecorder extends ChangeNotifier {
     if (!identical(prevMismatch, nextMismatch) && !_disposed) {
       notifyListeners();
     }
+    if (DateTime.now().difference(_lastCheckpointAt) >=
+        const Duration(seconds: 15)) {
+      unawaited(_flushCheckpoint());
+    }
   }
 
   void _recordWindowTelemetry(TelemetryWindow w, int? stepsInWindow) {
@@ -340,6 +346,7 @@ class RunRecorder extends ChangeNotifier {
     }
     _starting = true;
     try {
+      await _sensors.ensureNotificationPermission().catchError((_) => false);
       final uid = await _requireUserId();
       final id = const Uuid().v4();
       final now = DateTime.now().toUtc();
@@ -516,14 +523,51 @@ class RunRecorder extends ChangeNotifier {
     notifyListeners();
   }
 
+  @visibleForTesting
+  static LocationSettings buildLocationSettings({
+    required TargetPlatform platform,
+    bool isWeb = false,
+    required String notificationTitle,
+    required String notificationText,
+    required String channelName,
+  }) {
+    if (!isWeb && platform == TargetPlatform.android) {
+      return AndroidSettings(
+        accuracy: LocationAccuracy.high,
+        distanceFilter: distanceFilterM,
+        intervalDuration: const Duration(seconds: 2),
+        foregroundNotificationConfig: ForegroundNotificationConfig(
+          notificationTitle: notificationTitle,
+          notificationText: notificationText,
+          notificationChannelName: channelName,
+          notificationIcon: const AndroidResource(
+            name: 'ic_stat_pacer',
+            defType: 'drawable',
+          ),
+          color: const Color(0xFFB8E635),
+          enableWakeLock: true,
+          enableWifiLock: false,
+          setOngoing: true,
+        ),
+      );
+    }
+    return const LocationSettings(
+      accuracy: LocationAccuracy.high,
+      distanceFilter: distanceFilterM,
+    );
+  }
+
   void _resumeStream() {
     _sub?.cancel();
     if (_gpsStreamEnabled) {
       _sub =
           Geolocator.getPositionStream(
-            locationSettings: const LocationSettings(
-              accuracy: LocationAccuracy.high,
-              distanceFilter: distanceFilterM,
+            locationSettings: buildLocationSettings(
+              platform: defaultTargetPlatform,
+              isWeb: kIsWeb,
+              notificationTitle: S.bgTrackingTitle(_jenis),
+              notificationText: S.bgTrackingBody,
+              channelName: S.bgTrackingChannelName,
             ),
           ).listen(
             _onFix,

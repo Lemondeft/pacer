@@ -30,11 +30,13 @@ class MainActivity : FlutterActivity(), SensorEventListener {
         private const val STEPS_CHANNEL = "com.example.pacer/motion/steps"
         private const val ACTION_ACTIVITY_UPDATE = "com.example.pacer.ACTION_ACTIVITY_UPDATE"
         private const val MOTION_PERMISSION_REQUEST_CODE = 4201
+        private const val NOTIFICATION_PERMISSION_REQUEST_CODE = 4202
     }
 
     private var activitySink: EventChannel.EventSink? = null
     private var stepsSink: EventChannel.EventSink? = null
     private var pendingPermissionResult: MethodChannel.Result? = null
+    private var pendingNotificationPermissionResult: MethodChannel.Result? = null
 
     private var activityReceiver: BroadcastReceiver? = null
     private var activityPendingIntent: PendingIntent? = null
@@ -50,6 +52,7 @@ class MainActivity : FlutterActivity(), SensorEventListener {
         MethodChannel(messenger, METHOD_CHANNEL).setMethodCallHandler { call, result ->
             when (call.method) {
                 "ensurePermission" -> handleEnsurePermission(result)
+                "ensureNotificationPermission" -> handleEnsureNotificationPermission(result)
                 "startMonitoring" -> {
                     startMonitoring()
                     result.success(null)
@@ -108,16 +111,48 @@ class MainActivity : FlutterActivity(), SensorEventListener {
         )
     }
 
+    private fun handleEnsureNotificationPermission(result: MethodChannel.Result) {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.TIRAMISU) {
+            result.success(true)
+            return
+        }
+        if (ContextCompat.checkSelfPermission(
+                this,
+                Manifest.permission.POST_NOTIFICATIONS
+            ) == PackageManager.PERMISSION_GRANTED
+        ) {
+            result.success(true)
+            return
+        }
+        if (pendingNotificationPermissionResult != null) {
+            result.success(false)
+            return
+        }
+        pendingNotificationPermissionResult = result
+        ActivityCompat.requestPermissions(
+            this,
+            arrayOf(Manifest.permission.POST_NOTIFICATIONS),
+            NOTIFICATION_PERMISSION_REQUEST_CODE
+        )
+    }
+
     override fun onRequestPermissionsResult(
         requestCode: Int,
         permissions: Array<out String>,
         grantResults: IntArray
     ) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
-        if (requestCode == MOTION_PERMISSION_REQUEST_CODE) {
-            val granted = grantResults.isNotEmpty() && grantResults[0] == PackageManager.PERMISSION_GRANTED
-            pendingPermissionResult?.success(granted)
-            pendingPermissionResult = null
+        when (requestCode) {
+            MOTION_PERMISSION_REQUEST_CODE -> {
+                val granted = grantResults.isNotEmpty() && grantResults[0] == PackageManager.PERMISSION_GRANTED
+                pendingPermissionResult?.success(granted)
+                pendingPermissionResult = null
+            }
+            NOTIFICATION_PERMISSION_REQUEST_CODE -> {
+                val granted = grantResults.isNotEmpty() && grantResults[0] == PackageManager.PERMISSION_GRANTED
+                pendingNotificationPermissionResult?.success(granted)
+                pendingNotificationPermissionResult = null
+            }
         }
     }
 
