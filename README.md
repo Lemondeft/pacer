@@ -1,110 +1,86 @@
-<div align="center">
-  <img src="web/icons/Icon-192.png" alt="Pacer Logo" width="96" height="96" />
+![Pacer](web/icons/Icon-192.png)
 
-  # Pacer
+# Pacer
 
-  **Offline-first sports & running tracker built with Flutter and Supabase.**
+Offline-first running and multi-sport tracker built with Flutter and Supabase.
 
-  [![Release](https://img.shields.io/badge/version-v0.2.11-00CDFA?style=flat-square)](https://github.com/Lemondeft/pacer/releases)
-  [![License: GPL v3](https://img.shields.io/badge/License-GPLv3-blue?style=flat-square)](LICENSE)
-  [![Flutter](https://img.shields.io/badge/Flutter-Android%20%7C%20iOS%20%7C%20Desktop%20%7C%20Web-02569B?style=flat-square&logo=flutter&logoColor=white)](https://flutter.dev)
-  [![Supabase](https://img.shields.io/badge/Supabase-Postgres%20%2B%20RLS-3ECF8E?style=flat-square&logo=supabase&logoColor=white)](https://supabase.com)
+[![Release](https://img.shields.io/badge/release-v0.2.11-00CDFA?style=flat-square)](https://github.com/Lemondeft/pacer/releases)
+[![License: GPL v3](https://img.shields.io/badge/license-GPLv3-blue?style=flat-square)](LICENSE)
 
-  [Download](#-download) • [Features](#-features) • [Screenshots](#-screenshots) • [Architecture](#-architecture) • [Quick Start](#-quick-start) • [License](#-license)
-</div>
-
----
-
-## 📦 Download
-
-Pre-built release binaries featuring the Pacer speed-cut brand icon are available on [**GitHub Releases**](https://github.com/Lemondeft/pacer/releases).
-
-> **Try without signing up:** Launch the app and select **Try Demo Account** on the Welcome or Login screen to explore a real local SQLite sandbox with pre-populated workouts, teams, and challenges that resets cleanly on logout.
-
----
-
-## ✨ Features
-
-### 🏃 GPS & Multi-Sport Tracking
-- **4 Dedicated Activity Modes:** Track **Running**, **Jogging**, **Cycling**, and **Walking** with live pace, distance, duration, and calorie metrics.
-- **Crash-Safe Draft Recovery:** Active sessions persist continuously so unexpected app closures never lose workout progress.
-- **Distraction-Free Vector Maps:** Powered by **OpenFreeMap** (`Positron` in Light mode, `Dark` in Dark mode) with a one-tap street-label toggle and full-bleed post-run route summaries.
-
-### 📊 Athletic Dashboard & Liquid Glass UI
-- **At-a-Glance Telemetry:** Quick-start sport grid, 7-day volume and pace overview, personal leaderboard standing, and recent workout history.
-- **Impeller Liquid Glass Navigation:** Floating navigation pill (`liquid_glass_easy`) featuring optical edge-border refraction and chromatic dispersion.
-
-### 🏆 Clubs, Challenges & Coach Grading
-- **Running Clubs:** Join public teams or create invite-code private clubs with built-in real-time team chat.
-- **Solo & Team Challenges:** Automatic workout contribution toward active challenge slots and shared team goals.
-- **Role-Based Workflows:** Tailored permissions and views for **Admin / Coach**, **Captain (*Ketua*)**, and **Member (*Anggota*)**—including dedicated PE coach grading boards and member notifications.
-
-### 🎨 Themes & Localization
-- **Adaptive Appearance:** Supports **Dark**, **Light**, and **System** theme modes.
-- **Classic Linux Desktop Palettes:** Switch between **Pacer Argon** *(default)*, **KDE Breeze**, **Mint-Y Cinnamon**, **GNOME Adwaita**, **Ubuntu Yaru**, and **Arch Nord** across both Dark and Light variants.
-- **Bilingual Support:** Full **English (`EN`)** and **Indonesian (`ID`)** localization.
-
----
-
-## 📸 Screenshots
-
-| Dashboard & Liquid Glass | Live GPS Tracking | Linux Palettes & Challenges |
+| Dashboard | Live Tracking | Themes & Challenges |
 | :---: | :---: | :---: |
 | ![Dashboard](docs/screenshots/dashboard.png) | ![Tracking](docs/screenshots/tracking.png) | ![Themes](docs/screenshots/themes.png) |
 
----
+## Download
 
-## 🏗️ Architecture
+Grab the latest build from [GitHub Releases](https://github.com/Lemondeft/pacer/releases).
 
-Pacer is designed as an **offline-first** client backed by a multi-tenant relational database:
+> **No account needed to test:** Select **Try Demo Account** on the Welcome or Login screen to launch a local SQLite sandbox with sample workouts, teams, and challenges. It resets automatically on logout.
 
-1. **Local Single Source of Truth (`LocalStore`):** All workouts, drafts, and cached views read/write directly to SQLite (`sqflite` on mobile, `sqflite_common_ffi` on desktop) using a stale-while-revalidate strategy.
-2. **Background Outbox Sync:** Offline mutations queue safely in a local outbox and synchronize automatically with Supabase once network connectivity returns.
-3. **Database Security:** Supabase PostgreSQL enforces strict **Row Level Security (RLS)** policies across user workouts, team chats, and coach grading records.
+## Features
 
-### Tech Stack
+**Tracking & Maps**
+- Records **Running**, **Jogging**, **Cycling**, and **Walking** with live pace, distance, duration, and calories.
+- Writes active workout drafts continuously to disk so crashes or killed processes don't drop sessions.
+- Vector maps via OpenFreeMap (`Positron` / `Dark`) with toggleable street labels and post-run route summaries.
+- Dashboard with 7-day volume/pace stats, leaderboard rank, recent history, and quick-start buttons.
 
-| Layer | Technologies |
+**Clubs, Challenges & Coaching**
+- Public clubs and invite-code private teams with real-time chat.
+- Solo and team challenges that tally qualifying workouts automatically.
+- Role-based views and permissions for **Admin / Coach**, **Captain (*Ketua*)**, and **Member (*Anggota*)**, including PE coach grading boards and member notifications.
+
+**Interface & Localization**
+- Floating glass navigation bar rendered with Impeller (`liquid_glass_easy`).
+- Light, Dark, and System modes with Linux desktop color palettes: **Pacer Argon** (default), **KDE Breeze**, **Mint-Y Cinnamon**, **GNOME Adwaita**, **Ubuntu Yaru**, and **Arch Nord**.
+- Full **English (`EN`)** and **Indonesian (`ID`)** UI translations.
+
+## Architecture
+
+Pacer treats local SQLite as the primary source of truth (`LocalStore`) rather than waiting on network calls:
+
+1. **Local storage:** Workouts, drafts, and cached views read/write directly to SQLite using a stale-while-revalidate pattern.
+2. **Outbox sync:** Offline writes queue in a local outbox and sync to Supabase once a connection is available.
+3. **Database access:** Supabase PostgreSQL enforces Row Level Security (RLS) across workouts, team chat, and coach grading records.
+
+| Layer | Stack |
 | :--- | :--- |
-| **Framework** | Flutter (`Android`, `iOS`, `Linux`, `Windows`, `macOS`, `Web`) |
-| **Backend & Auth** | Supabase (`PostgreSQL`, `Auth`, `Realtime`, `Row Level Security`) |
-| **Local Persistence** | `sqflite`, `sqflite_common_ffi`, `shared_preferences` |
-| **Maps & Routing** | `flutter_map`, `flutter_map_vector_tiles` (OpenFreeMap / OSM) |
-| **Shaders & Typography** | `liquid_glass_easy` (Impeller optical shaders), `google_fonts` |
+| Client | Flutter (Android, iOS, Linux, Windows, macOS, Web) |
+| Backend | Supabase (PostgreSQL, Auth, Realtime, RLS, Edge Functions) |
+| Local DB | `sqflite`, `sqflite_common_ffi`, `shared_preferences` |
+| Maps | `flutter_map`, `flutter_map_vector_tiles` (OpenFreeMap / OSM) |
+| UI | `liquid_glass_easy`, `google_fonts` |
 
----
+## Development
 
-## 🚀 Quick Start
-
-### 1. Clone & Configure Environment
+### 1. Setup
 
 ```bash
-git clone https://github.com/Lemondeft/pacer.git
+git clone [https://github.com/Lemondeft/pacer.git](https://github.com/Lemondeft/pacer.git)
 cd pacer
 flutter pub get
 cp .env.example .env
-# Fill SUPABASE_URL and SUPABASE_ANON_KEY in .env (keep SUPABASE_SERVICE_KEY empty in client builds)
 ```
 
-### 2. Supabase Backend Setup
-1. Link your Supabase project and apply forward SQL migrations in [`supabase/migrations/`](supabase/migrations):
-   ```bash
-   supabase db push
-   ```
-2. Deploy the Layer 5 activity validator Edge Function:
-   ```bash
-   supabase functions deploy validate-activity
-   ```
+Fill in `SUPABASE_URL` and `SUPABASE_ANON_KEY` in `.env` (leave `SUPABASE_SERVICE_KEY` empty for client builds).
 
-### 3. Run & Verify
+### 2. Supabase
+
+Link your Supabase project, push migrations from [`supabase/migrations/`](supabase/migrations), and deploy the activity validator Edge Function:
+
+```bash
+supabase db push
+supabase functions deploy validate-activity
+```
+
+### 3. Run
+
 ```bash
 flutter analyze
 flutter test
 flutter run
 ```
 
----
+## License
 
-## 📄 License
-
-Distributed under the **GNU General Public License v3.0 (GPL-3.0)**. See [LICENSE](LICENSE) for details.
+[GNU General Public License v3.0](LICENSE)
