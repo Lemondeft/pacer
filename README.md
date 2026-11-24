@@ -1,4 +1,4 @@
-![Pacer](web/icons/Icon-192.png)
+<img src="web/icons/Icon-192.png" alt="Pacer" width="72" />
 
 # Pacer
 
@@ -7,9 +7,7 @@ Offline-first running and multi-sport tracker built with Flutter and Supabase.
 [![Release](https://img.shields.io/badge/release-v0.2.11-00CDFA?style=flat-square)](https://github.com/Lemondeft/pacer/releases)
 [![License: GPL v3](https://img.shields.io/badge/license-GPLv3-blue?style=flat-square)](LICENSE)
 
-| Dashboard | Live Tracking | Themes & Challenges |
-| :---: | :---: | :---: |
-| ![Dashboard](docs/screenshots/dashboard.png) | ![Tracking](docs/screenshots/tracking.png) | ![Themes](docs/screenshots/themes.png) |
+<img src="docs/screenshots/dashboard.png" alt="Dashboard" width="210" /> <img src="docs/screenshots/tracking.png" alt="Live Tracking" width="210" /> <img src="docs/screenshots/themes.png" alt="Themes" width="210" />
 
 ## Download
 
