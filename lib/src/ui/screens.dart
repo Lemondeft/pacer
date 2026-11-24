@@ -1,4 +1,4 @@
-import 'dart:async' show Timer, unawaited;
+import 'dart:async' show StreamSubscription, Timer, unawaited;
 import 'dart:ui' show ImageFilter;
 
 import 'package:flutter/material.dart';
@@ -106,6 +106,8 @@ class PacerAuthFlow extends StatefulWidget {
 class PacerAuthFlowState extends State<PacerAuthFlow> {
   late String _route;
   int _lastSignOutEpoch = 0;
+  StreamSubscription<AuthState>? _authSub;
+  bool _handlingExternalAuth = false;
 
   @override
   void initState() {
@@ -114,13 +116,132 @@ class PacerAuthFlowState extends State<PacerAuthFlow> {
     _lastSignOutEpoch = AuthRepository.signOutEpoch.value;
     PacerAuthFlow._activeFlows.add(this);
     AuthRepository.signOutEpoch.addListener(_onSignOutEpoch);
+    final client = safeSupabaseClient(null);
+    if (client != null) {
+      _authSub = client.auth.onAuthStateChange.listen((data) {
+        if (data.event == AuthChangeEvent.passwordRecovery &&
+            !_handlingExternalAuth) {
+          unawaited(_onPasswordRecovery());
+        } else if (data.event == AuthChangeEvent.signedIn &&
+            _route != 'main' &&
+            _route != 'loading' &&
+            !_handlingExternalAuth) {
+          unawaited(_onExternalSignIn());
+        }
+      });
+    }
+  }
+
+  Future<void> _onPasswordRecovery() async {
+    if (_handlingExternalAuth || !mounted) return;
+    _handlingExternalAuth = true;
+    String? err;
+    var saving = false;
+    try {
+      await showDialog<void>(
+        context: context,
+        barrierDismissible: false,
+        builder: (ctx) => DialogTextControllers(
+          initialTexts: const ['', ''],
+          builder: (ctx, ctrls) {
+            final passCtrl = ctrls[0];
+            final confirmCtrl = ctrls[1];
+            return StatefulBuilder(
+              builder: (ctx, setDlg) => AlertDialog(
+                title: Text(S.setNewPasswordTitle),
+                content: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    AuthField(
+                      hint: S.newPasswordHint,
+                      icon: Icons.lock_outline,
+                      obscure: true,
+                      controller: passCtrl,
+                    ),
+                    const SizedBox(height: 12),
+                    AuthField(
+                      hint: S.confirmPassword,
+                      icon: Icons.lock_outline,
+                      obscure: true,
+                      controller: confirmCtrl,
+                    ),
+                    if (err != null) ...[
+                      const SizedBox(height: 10),
+                      AuthErrorText(err!),
+                    ],
+                  ],
+                ),
+                actions: [
+                  FilledButton(
+                    onPressed: saving
+                        ? null
+                        : () async {
+                            if (passCtrl.text.length <
+                                AuthRepository.minPasswordLength) {
+                              setDlg(() => err = S.errPasswordLength);
+                              return;
+                            }
+                            if (passCtrl.text != confirmCtrl.text) {
+                              setDlg(() => err = S.errPasswordMatch);
+                              return;
+                            }
+                            setDlg(() {
+                              saving = true;
+                              err = null;
+                            });
+                            try {
+                              await AuthRepository().updatePasswordAndEnter(
+                                newPassword: passCtrl.text,
+                              );
+                              if (ctx.mounted) Navigator.of(ctx).pop();
+                              if (mounted) {
+                                await _enterMain();
+                              }
+                            } on AuthException catch (e) {
+                              if (ctx.mounted) setDlg(() => err = e.message);
+                            } catch (_) {
+                              if (ctx.mounted) {
+                                setDlg(() => err = S.errLoginFailed);
+                              }
+                            } finally {
+                              if (ctx.mounted) setDlg(() => saving = false);
+                            }
+                          },
+                    child: Text(S.updatePasswordButton),
+                  ),
+                ],
+              ),
+            );
+          },
+        ),
+      );
+    } finally {
+      _handlingExternalAuth = false;
+    }
   }
 
   @override
   void dispose() {
+    _authSub?.cancel();
     AuthRepository.signOutEpoch.removeListener(_onSignOutEpoch);
     PacerAuthFlow._activeFlows.remove(this);
     super.dispose();
+  }
+
+  Future<void> _onExternalSignIn() async {
+    if (_handlingExternalAuth || !mounted || _route == 'main') return;
+    _handlingExternalAuth = true;
+    try {
+      await Future<void>.delayed(const Duration(milliseconds: 150));
+      if (!mounted || _route == 'main') return;
+      await AuthRepository().completeExternalSignIn();
+      if (mounted && _route != 'main') {
+        await _enterMain();
+      }
+    } catch (_) {
+    } finally {
+      _handlingExternalAuth = false;
+    }
   }
 
   void _onSignOutEpoch() {
@@ -206,6 +327,7 @@ class PacerAuthFlowState extends State<PacerAuthFlow> {
         },
         child: CreateAccountScreen(
           onSubmitted: _enterMain,
+          onGoLogin: () => setState(() => _route = 'login'),
           // Root-switched screens have no route to pop: back means GetStarted.
           onBack: () => setState(() => _route = 'getStarted'),
         ),
@@ -349,14 +471,16 @@ class GetStartedScreen extends StatelessWidget {
   }
 }
 
-/// Figma SIGN IN: "Create an account" 40 + 4 fields + Sign In + divider + icon row.
+/// Figma SIGN IN: "Create an account" 40 + 4 fields + Sign In + email verify step.
 /// Form-style screen: 720 shell, fields fill the shell width.
 class CreateAccountScreen extends StatefulWidget {
   final VoidCallback onSubmitted;
+  final VoidCallback? onGoLogin;
   final VoidCallback? onBack;
   const CreateAccountScreen({
     super.key,
     required this.onSubmitted,
+    this.onGoLogin,
     this.onBack,
   });
 
@@ -370,6 +494,8 @@ class _CreateAccountScreenState extends State<CreateAccountScreen> {
   final _password = TextEditingController();
   final _confirm = TextEditingController();
   String? _error;
+  String? _infoMessage;
+  String? _pendingVerificationEmail;
   bool _busy = false;
 
   @override
@@ -392,7 +518,10 @@ class _CreateAccountScreenState extends State<CreateAccountScreen> {
   }
 
   Future<void> _submit() async {
-    setState(() => _error = null);
+    setState(() {
+      _error = null;
+      _infoMessage = null;
+    });
     final nama = _name.text.trim();
     final email = _email.text.trim();
     final usernameErr = validateUsername(_name.text);
@@ -404,8 +533,12 @@ class _CreateAccountScreenState extends State<CreateAccountScreen> {
       setState(() => _error = S.errFillAll);
       return;
     }
-    if (!email.contains('@')) {
+    if (!AuthRepository.isValidEmail(email)) {
       setState(() => _error = S.errEmail);
+      return;
+    }
+    if (_password.text.length < AuthRepository.minPasswordLength) {
+      setState(() => _error = S.errPasswordLength);
       return;
     }
     if (_password.text != _confirm.text) {
@@ -423,13 +556,41 @@ class _CreateAccountScreenState extends State<CreateAccountScreen> {
         password: _password.text,
         nama: nama,
       );
-      widget.onSubmitted();
+      if (mounted) widget.onSubmitted();
     } on EmailConfirmationRequired catch (_) {
-      setState(() => _error = S.confirmEmail);
+      if (mounted) {
+        setState(() {
+          _pendingVerificationEmail = email;
+          _infoMessage = null;
+          _error = null;
+        });
+      }
     } on AuthException catch (e) {
-      setState(() => _error = e.message);
+      if (mounted) setState(() => _error = e.message);
     } catch (_) {
-      setState(() => _error = S.errSignupFailed);
+      if (mounted) setState(() => _error = S.errSignupFailed);
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _resendEmail() async {
+    final email = _pendingVerificationEmail;
+    if (email == null || _busy) return;
+    setState(() {
+      _busy = true;
+      _error = null;
+      _infoMessage = null;
+    });
+    try {
+      await AuthRepository().resendConfirmation(email: email);
+      if (mounted) {
+        setState(() => _infoMessage = S.verificationResent);
+      }
+    } on AuthException catch (e) {
+      if (mounted) setState(() => _error = e.message);
+    } catch (_) {
+      if (mounted) setState(() => _error = S.errSignupFailed);
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -437,75 +598,147 @@ class _CreateAccountScreenState extends State<CreateAccountScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final scheme = PacerScheme.of(context);
+    final pendingEmail = _pendingVerificationEmail;
     return Scaffold(
       body: SafeArea(
         child: ResponsiveScroll(
           maxWidth: 720,
           padding: const EdgeInsets.only(top: 12, bottom: 24),
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              PageHeader(onBack: widget.onBack),
-              const SizedBox(height: 16),
-              Text(S.createAccount, style: PacerText.authTitleOf(context)),
-              const SizedBox(height: 28),
-              AuthField(
-                hint: S.username,
-                icon: Icons.person_outline,
-                controller: _name,
-              ),
-              const SizedBox(height: 16),
-              AuthField(
-                hint: S.email,
-                icon: Icons.mail_outline,
-                keyboardType: TextInputType.emailAddress,
-                controller: _email,
-              ),
-              const SizedBox(height: 16),
-              AuthField(
-                hint: S.password,
-                icon: Icons.lock_outline,
-                obscure: true,
-                controller: _password,
-              ),
-              const SizedBox(height: 16),
-              AuthField(
-                hint: S.confirmPassword,
-                icon: Icons.lock_outline,
-                obscure: true,
-                controller: _confirm,
-              ),
-              if (_error != null) ...[
-                const SizedBox(height: 16),
-                AuthErrorText(_error!),
-              ],
-              const SizedBox(height: 32),
-              PrimaryButton(label: S.signIn, onPressed: _busy ? null : _submit),
-              const SizedBox(height: 32),
-              Divider(color: PacerScheme.of(context).border, height: 1),
-              const SizedBox(height: 16),
-              Center(
-                child: Text(
-                  S.orSignUpWith,
-                  style: const TextStyle(fontSize: 15),
+          child: pendingEmail != null
+              ? Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    PageHeader(
+                      onBack: () {
+                        setState(() {
+                          _pendingVerificationEmail = null;
+                          _error = null;
+                          _infoMessage = null;
+                        });
+                      },
+                    ),
+                    const SizedBox(height: 16),
+                    Text(
+                      S.verifyEmailTitle,
+                      style: PacerText.authTitleOf(context),
+                    ),
+                    const SizedBox(height: 16),
+                    PacerSurface(
+                      padding: const EdgeInsets.all(16),
+                      radius: PacerRadii.md,
+                      color: scheme.accent.withValues(alpha: 0.1),
+                      borderColor: scheme.accent.withValues(alpha: 0.35),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Icon(
+                            Icons.mark_email_read_outlined,
+                            color: scheme.brandAccent,
+                            size: 22,
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Text(
+                              S.verifyEmailSubtitle(pendingEmail),
+                              style: TextStyle(
+                                fontSize: 14,
+                                height: 1.4,
+                                color: scheme.ink,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 24),
+                    if (_infoMessage != null) ...[
+                      Text(
+                        _infoMessage!,
+                        style: TextStyle(
+                          fontSize: 13,
+                          fontWeight: FontWeight.w600,
+                          color: scheme.brandAccent,
+                        ),
+                      ),
+                      const SizedBox(height: 12),
+                    ],
+                    if (_error != null) ...[
+                      AuthErrorText(_error!),
+                      const SizedBox(height: 12),
+                    ],
+                    if (widget.onGoLogin != null) ...[
+                      PrimaryButton(
+                        label: S.iveVerifiedLogin,
+                        onPressed: _busy ? null : widget.onGoLogin,
+                      ),
+                      const SizedBox(height: 12),
+                    ],
+                    SizedBox(
+                      width: double.infinity,
+                      height: 48,
+                      child: OutlinedButton.icon(
+                        onPressed: _busy ? null : _resendEmail,
+                        icon: const Icon(Icons.refresh, size: 18),
+                        label: Text(S.resendVerification),
+                      ),
+                    ),
+                  ],
+                )
+              : Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    PageHeader(onBack: widget.onBack),
+                    const SizedBox(height: 16),
+                    Text(S.createAccount, style: PacerText.authTitleOf(context)),
+                    const SizedBox(height: 28),
+                    AuthField(
+                      hint: S.username,
+                      icon: Icons.person_outline,
+                      controller: _name,
+                    ),
+                    const SizedBox(height: 16),
+                    AuthField(
+                      hint: S.email,
+                      icon: Icons.mail_outline,
+                      keyboardType: TextInputType.emailAddress,
+                      controller: _email,
+                    ),
+                    const SizedBox(height: 16),
+                    AuthField(
+                      hint: S.password,
+                      icon: Icons.lock_outline,
+                      obscure: true,
+                      controller: _password,
+                    ),
+                    const SizedBox(height: 16),
+                    AuthField(
+                      hint: S.confirmPassword,
+                      icon: Icons.lock_outline,
+                      obscure: true,
+                      controller: _confirm,
+                    ),
+                    if (_error != null) ...[
+                      const SizedBox(height: 16),
+                      AuthErrorText(_error!),
+                    ],
+                    const SizedBox(height: 32),
+                    PrimaryButton(
+                      label: S.signIn,
+                      onPressed: _busy ? null : _submit,
+                    ),
+                    if (widget.onGoLogin != null) ...[
+                      const SizedBox(height: 16),
+                      Center(
+                        child: TextButton(
+                          onPressed: _busy ? null : widget.onGoLogin,
+                          child: Text(S.alreadyHaveAccount),
+                        ),
+                      ),
+                    ],
+                    const SizedBox(height: 24),
+                  ],
                 ),
-              ),
-              const SizedBox(height: 12),
-              Center(
-                child: PacerSurface(
-                  width: 48,
-                  height: 48,
-                  radius: PacerRadii.md,
-                  child: Icon(
-                    Icons.person_add_alt_outlined,
-                    color: PacerScheme.of(context).ink,
-                    size: 20,
-                  ),
-                ),
-              ),
-              const SizedBox(height: 24),
-            ],
-          ),
         ),
       ),
     );

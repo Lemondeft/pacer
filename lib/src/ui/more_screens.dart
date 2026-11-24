@@ -65,6 +65,8 @@ class _LoginScreenState extends State<LoginScreen> {
   final _email = TextEditingController();
   final _password = TextEditingController();
   String? _error;
+  String? _infoMessage;
+  bool _needsEmailVerify = false;
   bool _busy = false;
 
   @override
@@ -85,13 +87,17 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 
   Future<void> _submit() async {
-    setState(() => _error = null);
+    setState(() {
+      _error = null;
+      _infoMessage = null;
+      _needsEmailVerify = false;
+    });
     final email = _email.text.trim();
     if (email.isEmpty || _password.text.isEmpty) {
       setState(() => _error = S.errFillAll);
       return;
     }
-    if (!email.contains('@')) {
+    if (!AuthRepository.isValidEmail(email)) {
       setState(() => _error = S.errEmail);
       return;
     }
@@ -104,16 +110,159 @@ class _LoginScreenState extends State<LoginScreen> {
       await AuthRepository().signIn(email: email, password: _password.text);
       if (mounted) widget.onLoggedIn();
     } on AuthException catch (e) {
-      setState(() => _error = e.message);
+      if (mounted) {
+        setState(() {
+          _error = e.message;
+          _needsEmailVerify = AuthRepository.isEmailNotConfirmedError(e);
+        });
+      }
     } catch (_) {
-      setState(() => _error = S.errLoginFailed);
+      if (mounted) setState(() => _error = S.errLoginFailed);
     } finally {
       if (mounted) setState(() => _busy = false);
     }
   }
 
+  Future<void> _resendConfirmation() async {
+    final email = _email.text.trim();
+    if (!AuthRepository.isValidEmail(email) || _busy) return;
+    setState(() {
+      _busy = true;
+      _infoMessage = null;
+    });
+    try {
+      await AuthRepository().resendConfirmation(email: email);
+      if (mounted) {
+        setState(() {
+          _error = null;
+          _infoMessage = S.verificationResent;
+        });
+      }
+    } on AuthException catch (e) {
+      if (mounted) setState(() => _error = e.message);
+    } catch (_) {
+      if (mounted) setState(() => _error = S.errLoginFailed);
+    } finally {
+      if (mounted) setState(() => _busy = false);
+    }
+  }
+
+  Future<void> _showForgotPasswordSheet() async {
+    var resetSent = false;
+    var sheetBusy = false;
+    String? sheetError;
+
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (ctx) => DialogTextControllers(
+        initialTexts: [_email.text.trim()],
+        builder: (ctx, ctrls) {
+          final emailCtrl = ctrls.first;
+          return StatefulBuilder(
+            builder: (ctx, setSheet) {
+              final scheme = PacerScheme.of(ctx);
+              final targetEmail = emailCtrl.text.trim();
+              return Padding(
+                padding: EdgeInsets.fromLTRB(
+                  24,
+                  20,
+                  24,
+                  MediaQuery.of(ctx).viewInsets.bottom + 24,
+                ),
+                child: SingleChildScrollView(
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        S.resetPasswordTitle,
+                        style: PacerText.authTitleOf(ctx).copyWith(fontSize: 26),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        resetSent
+                            ? S.resetEmailSent(targetEmail)
+                            : S.resetPasswordSubtitle,
+                        style: TextStyle(fontSize: 14, color: scheme.muted),
+                      ),
+                      if (!resetSent) ...[
+                        const SizedBox(height: 20),
+                        AuthField(
+                          hint: S.email,
+                          icon: Icons.mail_outline,
+                          keyboardType: TextInputType.emailAddress,
+                          controller: emailCtrl,
+                        ),
+                      ],
+                      if (sheetError != null) ...[
+                        const SizedBox(height: 12),
+                        AuthErrorText(sheetError!),
+                      ],
+                      const SizedBox(height: 20),
+                      PrimaryButton(
+                        label: resetSent ? S.doneButton : S.sendResetLink,
+                        onPressed: sheetBusy
+                            ? null
+                            : () async {
+                                if (resetSent) {
+                                  Navigator.of(ctx).pop();
+                                  return;
+                                }
+                                final mail = emailCtrl.text.trim();
+                                if (!AuthRepository.isValidEmail(mail)) {
+                                  setSheet(() => sheetError = S.errEmail);
+                                  return;
+                                }
+                                if (!_backend) {
+                                  Navigator.of(ctx).pop();
+                                  return;
+                                }
+                                setSheet(() {
+                                  sheetBusy = true;
+                                  sheetError = null;
+                                });
+                                try {
+                                  await AuthRepository().sendPasswordReset(
+                                    email: mail,
+                                  );
+                                  if (ctx.mounted) {
+                                    setSheet(() => resetSent = true);
+                                  }
+                                } on AuthException catch (e) {
+                                  if (ctx.mounted) {
+                                    setSheet(() => sheetError = e.message);
+                                  }
+                                } catch (_) {
+                                  if (ctx.mounted) {
+                                    setSheet(
+                                      () => sheetError = S.errLoginFailed,
+                                    );
+                                  }
+                                } finally {
+                                  if (ctx.mounted) {
+                                    setSheet(() => sheetBusy = false);
+                                  }
+                                }
+                              },
+                      ),
+                    ],
+                  ),
+                ),
+              );
+            },
+          );
+        },
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
+    final scheme = PacerScheme.of(context);
     return Scaffold(
       body: SafeArea(
         child: ResponsiveScroll(
@@ -142,9 +291,42 @@ class _LoginScreenState extends State<LoginScreen> {
                 obscure: true,
                 controller: _password,
               ),
-              const SizedBox(height: 32),
+              Align(
+                alignment: Alignment.centerRight,
+                child: TextButton(
+                  onPressed: _busy ? null : _showForgotPasswordSheet,
+                  child: Text(
+                    S.forgotPassword,
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.w600,
+                      color: scheme.brandAccent,
+                    ),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 12),
+              if (_infoMessage != null) ...[
+                Text(
+                  _infoMessage!,
+                  style: TextStyle(
+                    fontSize: 13,
+                    fontWeight: FontWeight.w600,
+                    color: scheme.brandAccent,
+                  ),
+                ),
+                const SizedBox(height: 12),
+              ],
               if (_error != null) ...[
                 AuthErrorText(_error!),
+                if (_needsEmailVerify) ...[
+                  const SizedBox(height: 6),
+                  TextButton.icon(
+                    onPressed: _busy ? null : _resendConfirmation,
+                    icon: const Icon(Icons.mark_email_unread_outlined, size: 16),
+                    label: Text(S.resendVerification),
+                  ),
+                ],
                 const SizedBox(height: 16),
               ],
               PrimaryButton(label: S.logIn, onPressed: _busy ? null : _submit),
@@ -2455,30 +2637,35 @@ class _TeamsScreenState extends State<TeamsScreen> {
 
   /// Private teams are not listed publicly: members join with an invite code.
   Future<void> _joinByCode() async {
-    final controller = TextEditingController();
     final code = await showDialog<String>(
       context: context,
-      builder: (context) => AlertDialog(
-        title: Text(S.joinByCode),
-        content: TextField(
-          controller: controller,
-          autofocus: true,
-          textCapitalization: TextCapitalization.characters,
-          decoration: InputDecoration(hintText: S.teamCodeLabel),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(),
-            child: Text(S.cancelLabel),
-          ),
-          TextButton(
-            onPressed: () => Navigator.of(context).pop(controller.text.trim()),
-            child: Text(S.join),
-          ),
-        ],
+      builder: (context) => DialogTextControllers(
+        initialTexts: const [''],
+        builder: (context, ctrls) {
+          final controller = ctrls.first;
+          return AlertDialog(
+            title: Text(S.joinByCode),
+            content: TextField(
+              controller: controller,
+              autofocus: true,
+              textCapitalization: TextCapitalization.characters,
+              decoration: InputDecoration(hintText: S.teamCodeLabel),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(),
+                child: Text(S.cancelLabel),
+              ),
+              TextButton(
+                onPressed: () =>
+                    Navigator.of(context).pop(controller.text.trim()),
+                child: Text(S.join),
+              ),
+            ],
+          );
+        },
       ),
     );
-    controller.dispose();
     if (code == null || code.isEmpty || !mounted) return;
     final messenger = ScaffoldMessenger.of(context);
     try {
@@ -6009,54 +6196,58 @@ class _AccountScreenState extends State<AccountScreen> {
     final nav = Navigator.of(context);
     final messenger = ScaffoldMessenger.of(context);
     final hadActiveAuthFlow = PacerAuthFlow.hasActiveFlow;
-    final ctrl = TextEditingController();
     final confirmed = await showDialog<bool>(
       context: context,
-      builder: (ctx) => StatefulBuilder(
-        builder: (ctx, setDialogState) {
-          final matches =
-              ctrl.text.trim().toUpperCase() == S.deleteAccountConfirmWord;
-          return AlertDialog(
-            title: Text(S.deleteAccountTitle),
-            content: Column(
-              mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(S.deleteAccountBody),
-                const SizedBox(height: 12),
-                TextField(
-                  controller: ctrl,
-                  autofocus: true,
-                  textCapitalization: TextCapitalization.characters,
-                  onChanged: (_) => setDialogState(() {}),
-                  decoration: InputDecoration(
-                    hintText: S.deleteAccountConfirmWord,
-                    border: OutlineInputBorder(
-                      borderRadius: BorderRadius.circular(12),
+      builder: (ctx) => DialogTextControllers(
+        initialTexts: const [''],
+        builder: (ctx, ctrls) {
+          final ctrl = ctrls.first;
+          return StatefulBuilder(
+            builder: (ctx, setDialogState) {
+              final matches =
+                  ctrl.text.trim().toUpperCase() == S.deleteAccountConfirmWord;
+              return AlertDialog(
+                title: Text(S.deleteAccountTitle),
+                content: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(S.deleteAccountBody),
+                    const SizedBox(height: 12),
+                    TextField(
+                      controller: ctrl,
+                      autofocus: true,
+                      textCapitalization: TextCapitalization.characters,
+                      onChanged: (_) => setDialogState(() {}),
+                      decoration: InputDecoration(
+                        hintText: S.deleteAccountConfirmWord,
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
                     ),
+                  ],
+                ),
+                actions: [
+                  TextButton(
+                    onPressed: () => Navigator.of(ctx).pop(false),
+                    child: Text(S.cancelLabel),
                   ),
-                ),
-              ],
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.of(ctx).pop(false),
-                child: Text(S.cancelLabel),
-              ),
-              FilledButton(
-                style: FilledButton.styleFrom(
-                  backgroundColor: PacerColors.errorRed,
-                  foregroundColor: Colors.white,
-                ),
-                onPressed: matches ? () => Navigator.of(ctx).pop(true) : null,
-                child: Text(S.deleteAccountAction),
-              ),
-            ],
+                  FilledButton(
+                    style: FilledButton.styleFrom(
+                      backgroundColor: PacerColors.errorRed,
+                      foregroundColor: Colors.white,
+                    ),
+                    onPressed: matches ? () => Navigator.of(ctx).pop(true) : null,
+                    child: Text(S.deleteAccountAction),
+                  ),
+                ],
+              );
+            },
           );
         },
       ),
     );
-    ctrl.dispose();
     if (confirmed != true || !mounted) return;
     try {
       await AuthRepository().deleteAccount();
@@ -6081,33 +6272,39 @@ class _AccountScreenState extends State<AccountScreen> {
   }
 
   Future<void> _promptRedeemCoachCode(BuildContext context) async {
-    final ctrl = TextEditingController();
     final code = await showDialog<String>(
       context: context,
-      builder: (ctx) => AlertDialog(
-        title: Text(S.redeemCoachCode),
-        content: TextField(
-          controller: ctrl,
-          autofocus: true,
-          textCapitalization: TextCapitalization.characters,
-          decoration: InputDecoration(
-            hintText: S.redeemCoachCodeHint,
-            border: OutlineInputBorder(borderRadius: BorderRadius.circular(12)),
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(ctx).pop(),
-            child: Text(MaterialLocalizations.of(ctx).cancelButtonLabel),
-          ),
-          FilledButton(
-            onPressed: () => Navigator.of(ctx).pop(ctrl.text.trim()),
-            child: Text(S.redeemCoachSubmit),
-          ),
-        ],
+      builder: (ctx) => DialogTextControllers(
+        initialTexts: const [''],
+        builder: (ctx, ctrls) {
+          final ctrl = ctrls.first;
+          return AlertDialog(
+            title: Text(S.redeemCoachCode),
+            content: TextField(
+              controller: ctrl,
+              autofocus: true,
+              textCapitalization: TextCapitalization.characters,
+              decoration: InputDecoration(
+                hintText: S.redeemCoachCodeHint,
+                border: OutlineInputBorder(
+                  borderRadius: BorderRadius.circular(12),
+                ),
+              ),
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(ctx).pop(),
+                child: Text(MaterialLocalizations.of(ctx).cancelButtonLabel),
+              ),
+              FilledButton(
+                onPressed: () => Navigator.of(ctx).pop(ctrl.text.trim()),
+                child: Text(S.redeemCoachSubmit),
+              ),
+            ],
+          );
+        },
       ),
     );
-    ctrl.dispose();
     if (code == null || code.isEmpty || !context.mounted) return;
     try {
       await AdminRepository().claimCoachInvite(code);

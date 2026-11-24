@@ -61,6 +61,9 @@ class S {
   static String get errFillAll =>
       _en ? 'Fill in all fields.' : 'Lengkapi semua kolom.';
   static String get errEmail => _en ? 'Invalid email.' : 'Email tidak valid.';
+  static String get errPasswordLength => _en
+      ? 'Password must be at least 6 characters.'
+      : 'Kata sandi minimal 6 karakter.';
   static String get errPasswordMatch =>
       _en ? 'Passwords do not match.' : 'Kata sandi tidak cocok.';
   static String get errSignupFailed =>
@@ -73,6 +76,42 @@ class S {
   static String get confirmEmail => _en
       ? 'Account created — check your email to verify, then log in.'
       : 'Akun dibuat — cek email untuk verifikasi, lalu masuk.';
+  static String get verifyEmailTitle =>
+      _en ? 'Verify your email' : 'Verifikasi email kamu';
+  static String verifyEmailSubtitle(String email) => _en
+      ? 'We sent a confirmation link to $email. Tap "Confirm email address" in your inbox, then log in.'
+      : 'Kami mengirim tautan konfirmasi ke $email. Klik "Confirm email address" di kotak masuk, lalu masuk.';
+  static String get iveVerifiedLogin =>
+      _en ? "I've Confirmed — Log In" : 'Sudah Verifikasi — Masuk';
+  static String get resendVerification =>
+      _en ? 'Resend confirmation email' : 'Kirim ulang email verifikasi';
+  static String get verificationResent => _en
+      ? 'Confirmation email sent. Check your inbox and spam folder.'
+      : 'Email verifikasi dikirim. Cek kotak masuk dan folder spam.';
+  static String get alreadyHaveAccount =>
+      _en ? 'Already have an account? Log In' : 'Sudah punya akun? Masuk';
+  static String get forgotPassword =>
+      _en ? 'Forgot password?' : 'Lupa kata sandi?';
+  static String get resetPasswordTitle =>
+      _en ? 'Reset password' : 'Atur ulang kata sandi';
+  static String get resetPasswordSubtitle => _en
+      ? 'Enter your email and we will send you a password reset link.'
+      : 'Masukkan email Anda dan kami akan mengirim tautan atur ulang kata sandi.';
+  static String get sendResetLink =>
+      _en ? 'Send Reset Link' : 'Kirim Tautan Reset';
+  static String resetEmailSent(String email) => _en
+      ? 'Reset link sent to $email. Open your email and tap the link to set a new password.'
+      : 'Tautan reset dikirim ke $email. Buka email Anda lalu klik tautan untuk mengatur sandi baru.';
+  static String get setNewPasswordTitle =>
+      _en ? 'Set new password' : 'Atur kata sandi baru';
+  static String get newPasswordHint =>
+      _en ? 'New password (min 6 chars)' : 'Kata sandi baru (min 6 karakter)';
+  static String get updatePasswordButton =>
+      _en ? 'Update Password' : 'Simpan Kata Sandi';
+  static String get passwordUpdatedNotice => _en
+      ? 'Password updated! Welcome back.'
+      : 'Kata sandi diperbarui! Selamat datang kembali.';
+  static String get doneButton => _en ? 'Done' : 'Selesai';
   static String get discardTitle =>
       _en ? 'Discard recording?' : 'Buang rekaman?';
   static String get discardBody => _en

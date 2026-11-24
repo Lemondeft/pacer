@@ -316,6 +316,43 @@ class _AuthFieldState extends State<AuthField> {
   }
 }
 
+/// Owns modal/dialog [TextEditingController] instances so they stay valid
+/// through the route's entire exit animation and dispose only on unmount.
+class DialogTextControllers extends StatefulWidget {
+  final List<String> initialTexts;
+  final Widget Function(
+    BuildContext context,
+    List<TextEditingController> controllers,
+  )
+  builder;
+
+  const DialogTextControllers({
+    super.key,
+    required this.initialTexts,
+    required this.builder,
+  });
+
+  @override
+  State<DialogTextControllers> createState() => _DialogTextControllersState();
+}
+
+class _DialogTextControllersState extends State<DialogTextControllers> {
+  late final List<TextEditingController> _controllers = [
+    for (final text in widget.initialTexts) TextEditingController(text: text),
+  ];
+
+  @override
+  void dispose() {
+    for (final c in _controllers) {
+      c.dispose();
+    }
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => widget.builder(context, _controllers);
+}
+
 /// Run session card. Fills its parent width (grid cell or column);
 /// flexible internals — no fixed pixel size.
 class RunSessionCard extends StatelessWidget {

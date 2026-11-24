@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 import 'package:pacer/src/aktivitas/activity_model.dart';
 import 'package:pacer/src/auth/auth_repository.dart';
 import 'package:pacer/src/auth/user_model.dart';
@@ -328,6 +329,78 @@ void main() {
       );
       PacerDummyData.recordDemoActivity(demoAct);
       expect(PacerDummyData.demoActivities.first.id, summary.aktivitasId);
+    });
+  });
+
+  group('Email validation, verification, and Forgot Password UX', () {
+    test('AuthRepository.isValidEmail and isEmailNotConfirmedError validate inputs accurately', () {
+      expect(AuthRepository.isValidEmail('runner@example.com'), isTrue);
+      expect(AuthRepository.isValidEmail('a@b'), isFalse);
+      expect(AuthRepository.isValidEmail('not-an-email'), isFalse);
+
+      expect(
+        AuthRepository.isEmailNotConfirmedError(
+          const AuthException('Email not confirmed', code: 'email_not_confirmed'),
+        ),
+        isTrue,
+      );
+      expect(
+        AuthRepository.isEmailNotConfirmedError(
+          const AuthException('Invalid login credentials'),
+        ),
+        isFalse,
+      );
+    });
+
+    testWidgets('CreateAccountScreen rejects short password and malformed email', (tester) async {
+      tester.view.physicalSize = const Size(720, 1400);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: PacerTheme.dark(),
+          home: CreateAccountScreen(
+            onBack: () {},
+            onGoLogin: () {},
+            onSubmitted: () {},
+          ),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.enterText(find.byType(TextField).at(0), 'andi_wijaya');
+      await tester.enterText(find.byType(TextField).at(1), 'a@b');
+      await tester.enterText(find.byType(TextField).at(2), '123');
+      await tester.enterText(find.byType(TextField).at(3), '123');
+      await tester.tap(find.text(S.signIn));
+      await tester.pumpAndSettle();
+      expect(find.text(S.errEmail), findsOneWidget);
+
+      await tester.enterText(find.byType(TextField).at(1), 'andi@example.com');
+      await tester.tap(find.text(S.signIn));
+      await tester.pumpAndSettle();
+      expect(find.text(S.errPasswordLength), findsOneWidget);
+      expect(find.text(S.alreadyHaveAccount), findsOneWidget);
+    });
+
+    testWidgets('LoginScreen exposes Forgot password sheet cleanly', (tester) async {
+      tester.view.physicalSize = const Size(720, 1400);
+      tester.view.devicePixelRatio = 1.0;
+      addTearDown(tester.view.reset);
+
+      await tester.pumpWidget(
+        MaterialApp(
+          theme: PacerTheme.dark(),
+          home: LoginScreen(onLoggedIn: () {}),
+        ),
+      );
+      await tester.pumpAndSettle();
+
+      await tester.tap(find.text(S.forgotPassword));
+      await tester.pumpAndSettle();
+      expect(find.text(S.resetPasswordTitle), findsOneWidget);
+      expect(find.text(S.sendResetLink), findsOneWidget);
     });
   });
 }

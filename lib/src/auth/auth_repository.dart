@@ -1,6 +1,6 @@
 import 'dart:async';
 
-import 'package:flutter/foundation.dart' show ValueNotifier;
+import 'package:flutter/foundation.dart' show ValueNotifier, kIsWeb;
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'package:pacer/src/auth/profile_input.dart' show validateUsername;
@@ -21,6 +21,22 @@ class EmailConfirmationRequired implements Exception {
 
 /// Offline-first auth & profile repository (DFD process 1.0 LOGIN/KELOLA USER).
 class AuthRepository {
+  static const String authRedirectUrl = 'dev.lemondeft.pacer://login-callback';
+  static const int minPasswordLength = 6;
+  static final RegExp _emailPattern = RegExp(r'^[^@\s]+@[^@\s]+\.[^@\s]+$');
+
+  static bool isValidEmail(String raw) => _emailPattern.hasMatch(raw.trim());
+
+  /// True when [e] is Supabase rejecting login due to unverified email.
+  static bool isEmailNotConfirmedError(Object e) {
+    if (e is AuthException) {
+      final code = e.code?.toLowerCase() ?? '';
+      final msg = e.message.toLowerCase();
+      return code == 'email_not_confirmed' || msg.contains('not confirmed');
+    }
+    return false;
+  }
+
   /// Increments on sign-in, sign-up, sign-out, and demo entry so root UI shells
   /// rebuild with clean per-session state.
   static final ValueNotifier<int> sessionEpoch = ValueNotifier<int>(0);
@@ -58,15 +74,12 @@ class AuthRepository {
     }
     final c = _client;
     if (c == null) throw StateError('No backend configured.');
-    PacerCache.instance.clear();
-    NotificationRepository.resetSession();
-    _sync.resetSession();
-    PacerDummyData.resetDemoTeams();
-    await _store.wipeUserData(demoSandboxUserId);
+    await _resetLocalTransientState();
     final res = await c.auth.signUp(
-      email: email,
+      email: email.trim(),
       password: password,
       data: {'nama': cleanNama, 'username': cleanNama},
+      emailRedirectTo: kIsWeb ? null : authRedirectUrl,
     );
     final user = res.user;
     if (user == null) {
@@ -89,12 +102,60 @@ class AuthRepository {
   Future<void> signIn({required String email, required String password}) async {
     final c = _client;
     if (c == null) throw StateError('No backend configured.');
+    await _resetLocalTransientState();
+    await c.auth.signInWithPassword(email: email.trim(), password: password);
+    await _hydrateSignedInUser(c, fallbackEmail: email.trim());
+  }
+
+  /// Re-sends the signup confirmation email (link + OTP).
+  Future<void> resendConfirmation({required String email}) async {
+    final c = _client;
+    if (c == null) throw StateError('No backend configured.');
+    await c.auth.resend(
+      type: OtpType.signup,
+      email: email.trim(),
+      emailRedirectTo: kIsWeb ? null : authRedirectUrl,
+    );
+  }
+
+  /// Sends a password recovery link to [email] redirecting back into Pacer.
+  Future<void> sendPasswordReset({required String email}) async {
+    final c = _client;
+    if (c == null) throw StateError('No backend configured.');
+    await c.auth.resetPasswordForEmail(
+      email.trim(),
+      redirectTo: kIsWeb ? null : authRedirectUrl,
+    );
+  }
+
+  /// Updates password during an active Supabase password-recovery session.
+  Future<void> updatePasswordAndEnter({required String newPassword}) async {
+    final c = _client;
+    if (c == null) throw StateError('No backend configured.');
+    await c.auth.updateUser(UserAttributes(password: newPassword));
+    await completeExternalSignIn();
+  }
+
+  /// Hydrates local SQLite/profile after an external deep-link sign-in callback.
+  Future<void> completeExternalSignIn() async {
+    final c = _client;
+    if (c == null || c.auth.currentUser == null) return;
+    await _resetLocalTransientState();
+    await _hydrateSignedInUser(c, fallbackEmail: c.auth.currentUser?.email);
+  }
+
+  Future<void> _resetLocalTransientState() async {
     PacerCache.instance.clear();
     NotificationRepository.resetSession();
     _sync.resetSession();
     PacerDummyData.resetDemoTeams();
     await _store.wipeUserData(demoSandboxUserId);
-    await c.auth.signInWithPassword(email: email, password: password);
+  }
+
+  Future<void> _hydrateSignedInUser(
+    SupabaseClient c, {
+    String? fallbackEmail,
+  }) async {
     final id = currentUserId();
     if (id == null) return;
     await _store.setLastUserId(id);
@@ -125,7 +186,7 @@ class AuthRepository {
     if (profile != null) {
       await _store.upsertProfile(
         profile,
-        email: c.auth.currentUser?.email ?? email,
+        email: c.auth.currentUser?.email ?? fallbackEmail,
       );
     }
     await _sync.refreshCounts(userId: id);
