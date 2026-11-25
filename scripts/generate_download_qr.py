@@ -19,9 +19,12 @@ from pathlib import Path
 from PIL import Image
 
 DEFAULT_URL = "https://lemondeft.github.io/pacer/"
+DEFAULT_RELEASES_URL = "https://github.com/Lemondeft/pacer/releases/latest"
+DEFAULT_APK_URL = "https://github.com/Lemondeft/pacer/releases/download/v0.2.15/pacer-v0.2.15-android.apk"
 REPO_ROOT = Path(__file__).resolve().parent.parent
 OUT_SVG = REPO_ROOT / "docs" / "assets" / "pacer-download-qr.svg"
 OUT_PNG = REPO_ROOT / "docs" / "assets" / "pacer-download-qr.png"
+LOCAL_QR_DIR = REPO_ROOT / "qr"
 JS_QR_PATH = REPO_ROOT / "docs" / "qr.js"
 
 # Official ISO/IEC 18004 Level M tables for versions 1..12:
@@ -447,21 +450,28 @@ def verify_js_parity(urls: list[str]) -> None:
 
 
 def main() -> None:
-    parser = argparse.ArgumentParser(description="Generate Pacer download page QR assets.")
-    parser.add_argument("--url", default=DEFAULT_URL, help="Target URL encoded into standalone QR files.")
+    parser = argparse.ArgumentParser(description="Generate Pacer download page and release QR assets.")
+    parser.add_argument("--url", default=DEFAULT_URL, help="Target download page URL.")
+    parser.add_argument("--apk-url", default=DEFAULT_APK_URL, help="Direct latest Android APK URL.")
+    parser.add_argument("--releases-url", default=DEFAULT_RELEASES_URL, help="GitHub Releases latest URL.")
     parser.add_argument("--verify", action="store_true", help="Verify exact matrix parity against docs/qr.js.")
     args = parser.parse_args()
 
-    version, mask, modules = encode_matrix(args.url)
-    write_svg(args.url, modules, OUT_SVG)
-    write_png(modules, OUT_PNG)
-    print(f"Generated {OUT_SVG} & {OUT_PNG} (QR v{version}, mask {mask}, {len(modules)}x{len(modules)} modules)")
+    targets = [
+        (args.url, [(OUT_SVG, OUT_PNG), (LOCAL_QR_DIR / "pacer-download-page-qr.svg", LOCAL_QR_DIR / "pacer-download-page-qr.png")]),
+        (args.apk_url, [(LOCAL_QR_DIR / "pacer-latest-apk-qr.svg", LOCAL_QR_DIR / "pacer-latest-apk-qr.png")]),
+        (args.releases_url, [(LOCAL_QR_DIR / "pacer-releases-qr.svg", LOCAL_QR_DIR / "pacer-releases-qr.png")]),
+    ]
+
+    for url, pairs in targets:
+        version, mask, modules = encode_matrix(url)
+        for svg_path, png_path in pairs:
+            write_svg(url, modules, svg_path)
+            write_png(modules, png_path)
+            print(f"Generated {svg_path.relative_to(REPO_ROOT)} & {png_path.relative_to(REPO_ROOT)} (QR v{version}, mask {mask}, {len(modules)}x{len(modules)} modules)")
 
     if args.verify:
-        verify_js_parity([
-            args.url,
-            "https://github.com/Lemondeft/pacer/releases/download/v0.2.15/pacer-v0.2.15-android.apk",
-        ])
+        verify_js_parity([args.url, args.apk_url, args.releases_url])
 
 
 if __name__ == "__main__":
