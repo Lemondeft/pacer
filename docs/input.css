@@ -1,0 +1,185 @@
+@import "tailwindcss";
+@custom-variant dark (&:where(.dark, .dark *));
+
+/* Pacer Argon Trackside design tokens mirrored from lib/src/ui/app_theme.dart
+ * Rebuild static CSS:
+ *   npm --prefix /tmp/tw install --no-save tailwindcss @tailwindcss/cli && \
+ *   NODE_PATH=/tmp/tw/node_modules /tmp/tw/node_modules/.bin/tailwindcss -i docs/input.css -o docs/styles.css --minify
+ */
+@theme {
+  --font-sans: "Outfit", ui-sans-serif, system-ui, -apple-system, sans-serif;
+  --font-display: "Fugaz One", "Outfit", ui-sans-serif, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+
+  --color-pacer-navy: #0F172A;
+  --color-pacer-slate: #1E293B;
+  --color-pacer-lime: #BAFF29;
+  --color-pacer-lime-hover: #CCF754;
+  --color-pacer-sky: #64B5F6;
+  --color-pacer-sky-deep: #0B5CAD;
+  --color-pacer-light-bg: #E8EEF5;
+  --color-pacer-light-card: #F3F7FC;
+  --color-pacer-light-ink: #16202E;
+}
+
+:root {
+  --bg: #E8EEF5;
+  --surface: #F3F7FC;
+  --surface-subtle: #DCE5F0;
+  --ink: #16202E;
+  --muted: #475569;
+  --border: #64748B;
+  --border-soft: rgba(100, 116, 139, 0.35);
+  --link: #0B5CAD;
+  --header-bg: rgba(232, 238, 245, 0.86);
+  --focus-ring: #0B5CAD;
+}
+
+.dark {
+  --bg: #0F172A;
+  --surface: #1E293B;
+  --surface-subtle: #162235;
+  --ink: #F8FAFC;
+  --muted: #94A3B8;
+  --border: #64748B;
+  --border-soft: rgba(148, 163, 184, 0.28);
+  --link: #64B5F6;
+  --header-bg: rgba(15, 23, 42, 0.84);
+  --focus-ring: #BAFF29;
+}
+
+@layer base {
+  html {
+    background-color: var(--bg);
+    color: var(--ink);
+    font-family: var(--font-sans);
+    scroll-behavior: smooth;
+    scroll-padding-top: 5rem;
+  }
+
+  body {
+    background-color: var(--bg);
+    color: var(--ink);
+    line-height: 1.55;
+    -webkit-font-smoothing: antialiased;
+    overflow-x: clip;
+  }
+
+  /* Interactive pointer affordance set once in base layer (antislop R-39) */
+  a[href],
+  button:not(:disabled),
+  summary,
+  select:not(:disabled),
+  label[for],
+  [role="tab"]:not([aria-disabled="true"]),
+  [role="button"]:not([aria-disabled="true"]) {
+    cursor: pointer;
+  }
+
+  button:disabled,
+  [aria-disabled="true"] {
+    cursor: not-allowed;
+  }
+
+  /* Visible high-contrast keyboard focus ring across both themes (R-32, R-34) */
+  :where(a, button, summary, [tabindex]):focus-visible {
+    outline: 2px solid var(--focus-ring);
+    outline-offset: 3px;
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    html {
+      scroll-behavior: auto;
+    }
+    *,
+    *::before,
+    *::after {
+      transition-duration: 0.01ms !important;
+      animation-duration: 0.01ms !important;
+    }
+  }
+}
+
+.pacer-surface {
+  background-color: var(--surface);
+  border: 1px solid var(--border-soft);
+}
+
+.pacer-surface-subtle {
+  background-color: var(--surface-subtle);
+  border: 1px solid var(--border-soft);
+}
+
+.pacer-header-glass {
+  background-color: var(--header-bg);
+  border-bottom: 1px solid var(--border-soft);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+
+.pacer-link {
+  color: var(--link);
+}
+
+.pacer-muted {
+  color: var(--muted);
+}
+
+/* Identity motif: -16 deg skewed speed-cut rule echoing PacerMark in pacer_logo.dart */
+.pacer-speed-rule {
+  display: inline-flex;
+  gap: 6px;
+  transform: skewX(-16deg);
+}
+
+.pacer-speed-rule > span {
+  display: block;
+  height: 4px;
+  border-radius: 1px;
+}
+
+.pacer-hero-title {
+  font-size: clamp(2.125rem, 4.4vw, 3.375rem);
+  line-height: 1.06;
+  letter-spacing: -0.025em;
+}
+
+.pacer-version-display {
+  font-family: var(--font-display);
+  font-size: clamp(1.75rem, 3.2vw, 2.5rem);
+  line-height: 1;
+}
+
+/* Safe-rendered GitHub release markdown styling */
+.pacer-changelog h2,
+.pacer-changelog h3 {
+  font-weight: 700;
+  color: var(--ink);
+  margin-top: 1.25rem;
+  margin-bottom: 0.5rem;
+}
+
+.pacer-changelog h2:first-child,
+.pacer-changelog h3:first-child {
+  margin-top: 0;
+}
+
+.pacer-changelog ul {
+  list-style-type: disc;
+  padding-left: 1.25rem;
+  display: grid;
+  gap: 0.5rem;
+}
+
+.pacer-changelog p {
+  margin-bottom: 0.75rem;
+}
+
+.pacer-changelog code {
+  font-family: var(--font-mono);
+  font-size: 0.85em;
+  background-color: var(--surface-subtle);
+  padding: 0.125rem 0.375rem;
+  border-radius: 0.375rem;
+  word-break: break-word;
+}

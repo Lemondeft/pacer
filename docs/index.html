@@ -1,0 +1,398 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Download Pacer for Android | Offline-First Sports Tracker</title>
+  <meta name="description" content="Download the latest Pacer Android APK directly from GitHub Releases. Offline-first GPS tracking for running, jogging, cycling, and walking.">
+  <meta property="og:title" content="Download Pacer for Android">
+  <meta property="og:description" content="Offline-first GPS running, jogging, cycling, and walking tracker with OpenFreeMap vector routes, clubs, and live challenge progress.">
+  <meta property="og:type" content="website">
+  <meta property="og:url" content="https://lemondeft.github.io/pacer/">
+  <meta name="theme-color" content="#0F172A">
+
+  <link rel="icon" type="image/png" href="assets/icon-192.png">
+  <link rel="apple-touch-icon" href="assets/icon-192.png">
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fugaz+One&family=JetBrains+Mono:wght@500&family=Montserrat:ital,wght@1,900&family=Outfit:wght@400;500;600;700;800&display=swap">
+
+  <link rel="stylesheet" href="styles.css">
+
+  <script>
+    /* Pre-paint theme hydration to prevent light/dark flash (no network request). */
+    (function () {
+      try {
+        var saved = localStorage.getItem('pacer.theme');
+        var useDark = saved ? saved === 'dark' : true;
+        document.documentElement.classList.toggle('dark', useDark);
+        var meta = document.querySelector('meta[name="theme-color"]');
+        if (meta) meta.setAttribute('content', useDark ? '#0F172A' : '#E8EEF5');
+      } catch (_) {}
+    })();
+  </script>
+</head>
+<body class="min-h-screen flex flex-col">
+  <a href="#main-content" class="sr-only focus:not-sr-only focus:fixed focus:top-3 focus:left-3 focus:z-50 focus:rounded-lg focus:bg-pacer-lime focus:px-4 focus:py-2.5 focus:text-sm focus:font-bold focus:text-pacer-navy">
+    Skip to download content
+  </a>
+
+  <!-- Single frosted glass surface on the page (GLASSMORPHISM_SPEC: one surface, one blur) -->
+  <header class="pacer-header-glass sticky top-0 z-40">
+    <div class="mx-auto flex h-16 max-w-6xl items-center justify-between gap-4 px-4 sm:px-6 lg:px-8">
+      <a href="#download" class="inline-flex min-h-11 items-center rounded-lg px-1" aria-label="Pacer Download Home">
+        <!-- Exact vector reproduction of PacerLogoLockup from lib/src/ui/pacer_logo.dart -->
+        <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 262 80" width="124" height="38" role="img" aria-label="Pacer" class="block h-8 w-auto">
+          <defs>
+            <linearGradient id="pacer-brand-grad" x1="0%" y1="100%" x2="100%" y2="0%">
+              <stop offset="0%" stop-color="#64B5F6"/>
+              <stop offset="100%" stop-color="#BAFF29"/>
+            </linearGradient>
+            <mask id="pacer-mark-cutouts">
+              <rect x="-40" y="0" width="220" height="140" fill="#FFFFFF"/>
+              <path d="M 10 38 L 65 38 A 12 12 0 0 1 65 62 L 10 62 Z" fill="#000000"/>
+              <rect x="-20" y="49" width="120" height="4" fill="#000000"/>
+              <rect x="-20" y="67" width="120" height="4" fill="#000000"/>
+              <rect x="-20" y="85" width="120" height="4" fill="#000000"/>
+            </mask>
+          </defs>
+          <g transform="translate(-25.33 -20) skewX(-16) translate(30 0)">
+            <g mask="url(#pacer-mark-cutouts)" fill="url(#pacer-brand-grad)">
+              <rect x="24" y="20" width="20" height="80" rx="4" ry="4"/>
+              <path d="M 34 20 L 65 20 A 30 30 0 0 1 65 80 L 34 80 Z"/>
+            </g>
+          </g>
+          <text x="74.67" y="75" font-family="'Montserrat', 'Outfit', sans-serif" font-size="78" font-weight="900" font-style="italic" letter-spacing="-4.6" fill="currentColor">acer</text>
+        </svg>
+      </a>
+
+      <nav aria-label="Primary navigation" class="hidden sm:flex items-center gap-1 md:gap-2">
+        <a href="#download" class="inline-flex min-h-11 items-center rounded-lg px-3 text-sm font-semibold hover:bg-black/5 dark:hover:bg-white/10 transition-colors duration-150">Download</a>
+        <a href="#qr-verify" class="inline-flex min-h-11 items-center rounded-lg px-3 text-sm font-semibold hover:bg-black/5 dark:hover:bg-white/10 transition-colors duration-150">QR &amp; Checksum</a>
+        <a href="#releases" class="inline-flex min-h-11 items-center rounded-lg px-3 text-sm font-semibold hover:bg-black/5 dark:hover:bg-white/10 transition-colors duration-150">Releases</a>
+        <a href="https://github.com/Lemondeft/pacer" target="_blank" rel="noopener noreferrer" class="pacer-link inline-flex min-h-11 items-center rounded-lg px-3 text-sm font-semibold hover:bg-black/5 dark:hover:bg-white/10 transition-colors duration-150">GitHub</a>
+      </nav>
+
+      <div class="flex items-center gap-2">
+        <button id="theme-toggle" type="button" aria-pressed="true" aria-label="Switch to light theme" class="pacer-surface inline-flex min-h-11 min-w-11 items-center justify-center gap-2 rounded-lg px-3 text-sm font-semibold hover:border-pacer-sky-deep dark:hover:border-pacer-lime active:scale-[0.98] transition-colors duration-150">
+          <svg id="theme-icon-sun" class="hidden h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="square" aria-hidden="true">
+            <circle cx="12" cy="12" r="4"/>
+            <path d="M12 2v3M12 19v3M4.93 4.93l2.12 2.12M16.95 16.95l2.12 2.12M2 12h3M19 12h3M4.93 19.07l2.12-2.12M16.95 7.05l2.12-2.12"/>
+          </svg>
+          <svg id="theme-icon-moon" class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="square" aria-hidden="true">
+            <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>
+          </svg>
+          <span id="theme-label" class="hidden md:inline">Dark</span>
+        </button>
+
+        <button id="mobile-menu-btn" type="button" aria-expanded="false" aria-controls="mobile-nav" class="pacer-surface sm:hidden inline-flex min-h-11 items-center gap-2 rounded-lg px-3.5 text-sm font-semibold active:scale-[0.98] transition-colors duration-150">
+          <svg class="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true">
+            <path d="M3 6h18M3 12h18M3 18h18"/>
+          </svg>
+          <span>Menu</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- Collapsible mobile navigation drawer -->
+    <nav id="mobile-nav" aria-label="Mobile navigation" hidden class="border-t border-slate-500/30 bg-[var(--surface)] px-4 py-3 sm:hidden">
+      <div class="flex flex-col gap-1">
+        <a href="#download" class="mobile-nav-link inline-flex min-h-11 items-center rounded-lg px-3 text-base font-semibold hover:bg-black/5 dark:hover:bg-white/10">Download</a>
+        <a href="#qr-verify" class="mobile-nav-link inline-flex min-h-11 items-center rounded-lg px-3 text-base font-semibold hover:bg-black/5 dark:hover:bg-white/10">QR &amp; Checksum</a>
+        <a href="#releases" class="mobile-nav-link inline-flex min-h-11 items-center rounded-lg px-3 text-base font-semibold hover:bg-black/5 dark:hover:bg-white/10">Releases</a>
+        <a href="https://github.com/Lemondeft/pacer" target="_blank" rel="noopener noreferrer" class="mobile-nav-link pacer-link inline-flex min-h-11 items-center rounded-lg px-3 text-base font-semibold hover:bg-black/5 dark:hover:bg-white/10">GitHub Repository</a>
+      </div>
+    </nav>
+  </header>
+
+  <main id="main-content" class="flex-1">
+    <!-- SECTION 1: Asymmetric Hero & Live GitHub Release Download -->
+    <section id="download" class="mx-auto max-w-6xl px-4 pt-8 pb-12 sm:px-6 sm:pt-12 sm:pb-16 lg:px-8 lg:pt-16 lg:pb-20">
+      <div class="grid grid-cols-1 gap-10 lg:grid-cols-12 lg:items-start lg:gap-12">
+        <!-- Left 7 cols: Download decision block -->
+        <div class="lg:col-span-7 min-w-0">
+          <h1 class="pacer-hero-title font-extrabold tracking-tight">
+            Download Pacer for Android
+          </h1>
+          <p class="pacer-muted mt-4 max-w-[60ch] text-base sm:text-lg">
+            Offline-first GPS tracker for running, jogging, cycling, and walking. Records routes locally to SQLite, syncs with Supabase when online, and ships straight from GitHub Releases.
+          </p>
+
+          <!-- Live GitHub Release Status Panel (reserved min-height prevents CLS) -->
+          <div class="pacer-surface mt-7 rounded-2xl p-5 sm:p-6">
+            <div id="release-status-region" aria-live="polite" class="min-h-[84px]">
+              <!-- Loading state shown immediately before JS resolves -->
+              <div id="state-loading" class="flex items-center gap-3 py-2">
+                <span class="inline-block h-4 w-4 shrink-0 rounded-full border-2 border-pacer-sky-deep dark:border-pacer-lime border-t-transparent animate-spin" aria-hidden="true"></span>
+                <p class="pacer-muted text-sm sm:text-base font-medium">Checking the latest published GitHub release for Lemondeft/pacer...</p>
+              </div>
+
+              <!-- Ready state -->
+              <div id="state-ready" hidden>
+                <div class="flex flex-wrap items-baseline justify-between gap-x-4 gap-y-2">
+                  <div class="flex flex-wrap items-baseline gap-3">
+                    <span id="release-tag" class="pacer-version-display text-pacer-light-ink dark:text-pacer-lime">v0.2.15</span>
+                    <span id="release-date" class="pacer-muted text-sm font-medium"></span>
+                  </div>
+                  <span id="apk-size" class="pacer-surface-subtle rounded-lg px-2.5 py-1 font-mono text-xs font-medium"></span>
+                </div>
+                <p id="release-title" class="mt-2.5 text-sm sm:text-base font-semibold"></p>
+                <p id="apk-filename" class="pacer-muted mt-1 font-mono text-xs break-all"></p>
+              </div>
+
+              <!-- Empty state (release exists without an Android APK asset) -->
+              <div id="state-empty" hidden>
+                <p class="font-semibold text-base">No Android APK is attached to the latest release yet.</p>
+                <p class="pacer-muted mt-1 text-sm">Open GitHub Releases to browse previous builds or source archives.</p>
+              </div>
+
+              <!-- Error / rate-limit state -->
+              <div id="state-error" role="alert" hidden>
+                <p class="font-semibold text-base">Could not fetch live release metadata from GitHub right now.</p>
+                <p id="error-detail" class="pacer-muted mt-1 text-sm">You can still open the latest GitHub release directly using the button below.</p>
+                <button id="retry-fetch-btn" type="button" class="pacer-surface-subtle mt-3 inline-flex min-h-11 items-center rounded-lg px-4 text-sm font-semibold hover:border-pacer-sky-deep dark:hover:border-pacer-lime active:scale-[0.98] transition-colors duration-150">
+                  Retry GitHub check
+                </button>
+              </div>
+            </div>
+
+            <!-- Primary & secondary actions -->
+            <div class="mt-5 flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center">
+              <a id="download-apk-btn" href="https://github.com/Lemondeft/pacer/releases/latest" class="inline-flex min-h-12 items-center justify-center gap-2.5 rounded-xl bg-pacer-lime px-6 py-3 text-base font-bold text-pacer-navy hover:bg-pacer-lime-hover active:scale-[0.99] transition-colors duration-150">
+                <svg class="h-5 w-5 shrink-0" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="square" aria-hidden="true">
+                  <path d="M12 3v12m0 0l-5-5m5 5l5-5M4 20h16"/>
+                </svg>
+                <span id="download-apk-label">Download Android APK</span>
+              </a>
+
+              <a id="release-page-link" href="https://github.com/Lemondeft/pacer/releases" target="_blank" rel="noopener noreferrer" class="pacer-surface-subtle inline-flex min-h-12 items-center justify-center rounded-xl px-5 py-3 text-sm font-semibold hover:border-pacer-sky-deep dark:hover:border-pacer-lime active:scale-[0.99] transition-colors duration-150">
+                All GitHub Releases
+              </a>
+
+              <a id="linux-download-link" href="https://github.com/Lemondeft/pacer/releases" hidden class="pacer-link inline-flex min-h-11 items-center justify-center rounded-lg px-3 text-sm font-semibold underline decoration-current/40 underline-offset-4 hover:decoration-current">
+                Linux x64 archive
+              </a>
+            </div>
+          </div>
+
+          <!-- Real Android installation instructions (progressive disclosure, not generic FAQ) -->
+          <details class="pacer-surface mt-5 rounded-xl px-5 py-3.5">
+            <summary class="flex min-h-11 items-center justify-between gap-3 text-sm sm:text-base font-semibold list-none">
+              <span>How to install the APK on Android</span>
+              <svg class="h-4 w-4 shrink-0 pacer-muted" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" aria-hidden="true">
+                <path d="M6 9l6 6 6-6"/>
+              </svg>
+            </summary>
+            <ol class="pacer-muted mt-3 list-decimal space-y-2 pl-5 pb-1 text-sm max-w-[65ch]">
+              <li>Tap <strong class="text-[var(--ink)]">Download Android APK</strong> above (or scan the QR code below from your phone camera).</li>
+              <li>Open the downloaded <code class="font-mono text-xs">.apk</code> file from your browser downloads and allow <strong class="text-[var(--ink)]">Install unknown apps</strong> for your browser when Android prompts.</li>
+              <li>Launch Pacer. You can sign in, register a new account, or select <strong class="text-[var(--ink)]">Try Demo Account</strong> to test a pre-populated offline SQLite sandbox without signing up.</li>
+            </ol>
+          </details>
+
+          <p class="pacer-muted mt-5 text-sm max-w-[60ch]">
+            Want to test before creating an account? Launch Pacer and tap <strong class="text-[var(--ink)]">Try Demo Account</strong> on the welcome screen for a pre-populated local SQLite sandbox that resets cleanly on logout.
+          </p>
+        </div>
+
+        <!-- Right 5 cols: Real Pacer Mobile Screenshots with Accessible Tab Switcher -->
+        <div class="lg:col-span-5 flex flex-col items-center">
+          <div class="w-full max-w-[310px] sm:max-w-[330px]">
+            <div role="tablist" aria-label="Pacer app screenshots" class="pacer-surface grid grid-cols-3 gap-1 rounded-xl p-1">
+              <button type="button" role="tab" id="tab-dashboard" aria-selected="true" aria-controls="panel-screenshot" data-screen="dashboard" class="screen-tab min-h-11 rounded-lg bg-pacer-lime px-2 text-xs sm:text-sm font-bold text-pacer-navy transition-colors duration-150">
+                Dashboard
+              </button>
+              <button type="button" role="tab" id="tab-tracking" aria-selected="false" aria-controls="panel-screenshot" data-screen="tracking" tabindex="-1" class="screen-tab min-h-11 rounded-lg px-2 text-xs sm:text-sm font-semibold pacer-muted hover:text-[var(--ink)] transition-colors duration-150">
+                Live GPS
+              </button>
+              <button type="button" role="tab" id="tab-themes" aria-selected="false" aria-controls="panel-screenshot" data-screen="themes" tabindex="-1" class="screen-tab min-h-11 rounded-lg px-2 text-xs sm:text-sm font-semibold pacer-muted hover:text-[var(--ink)] transition-colors duration-150">
+                Themes
+              </button>
+            </div>
+
+            <figure id="panel-screenshot" role="tabpanel" aria-labelledby="tab-dashboard" class="mt-4">
+              <div class="rounded-[28px] border-2 border-slate-600/60 bg-pacer-navy p-2.5 shadow-lg shadow-black/25">
+                <img
+                  id="hero-screenshot-img"
+                  src="screenshots/dashboard.png"
+                  alt="Pacer Android dashboard showing active 5-day streak, quick-start sport buttons for Running, Jogging, Cycling, and Walking, weekly distance bar chart, and floating bottom navigation pill."
+                  width="412"
+                  height="915"
+                  fetchpriority="high"
+                  decoding="async"
+                  class="block w-full h-auto rounded-[20px]"
+                >
+              </div>
+              <figcaption id="hero-screenshot-caption" class="pacer-muted mt-3 text-center text-xs sm:text-sm">
+                Home dashboard: 5-day streak card, 4 sport quick-starts, and weekly volume chart.
+              </figcaption>
+            </figure>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Subtle Pacer speed-cut section divider -->
+    <div class="mx-auto max-w-6xl px-4 sm:px-6 lg:px-8" aria-hidden="true">
+      <div class="flex items-center gap-4">
+        <div class="pacer-speed-rule">
+          <span class="w-10 bg-pacer-sky-deep dark:bg-pacer-sky"></span>
+          <span class="w-6 bg-pacer-lime"></span>
+          <span class="w-2.5 bg-pacer-lime/60"></span>
+        </div>
+        <div class="h-px flex-1 bg-slate-500/30"></div>
+      </div>
+    </div>
+
+    <!-- SECTION 2: Split QR Code & Package Integrity Band -->
+    <section id="qr-verify" class="mx-auto max-w-6xl px-4 py-12 sm:px-6 sm:py-16 lg:px-8">
+      <div class="grid grid-cols-1 gap-8 md:grid-cols-12 md:items-start lg:gap-12">
+        <!-- Left 5 cols: Scannable QR Code Block -->
+        <div class="md:col-span-5 min-w-0">
+          <h2 class="text-2xl sm:text-3xl font-extrabold tracking-tight">Scan on your phone</h2>
+          <p class="pacer-muted mt-2 text-sm sm:text-base max-w-[44ch]">
+            Point your Android camera at the code to open this download page (always up to date) or switch to the direct APK link for the current release.
+          </p>
+
+          <div class="pacer-surface mt-5 rounded-2xl p-5">
+            <div class="grid grid-cols-2 gap-1.5 rounded-xl p-1 pacer-surface-subtle" role="group" aria-label="QR code target">
+              <button id="qr-mode-page" type="button" aria-pressed="true" class="min-h-11 rounded-lg bg-pacer-lime px-3 text-xs sm:text-sm font-bold text-pacer-navy transition-colors duration-150">
+                Download Page
+              </button>
+              <button id="qr-mode-apk" type="button" aria-pressed="false" disabled class="min-h-11 rounded-lg px-3 text-xs sm:text-sm font-semibold pacer-muted transition-colors duration-150">
+                Direct APK
+              </button>
+            </div>
+
+            <!-- Always pure white ground for reliable camera scanning in Dark and Light modes -->
+            <div class="mt-4 flex justify-center rounded-xl bg-white p-4">
+              <div id="qr-svg-host" class="w-52 h-52 sm:w-56 sm:h-56">
+                <img src="assets/pacer-download-qr.svg" alt="QR code linking to https://lemondeft.github.io/pacer/" width="224" height="224" class="h-full w-full block">
+              </div>
+            </div>
+
+            <p id="qr-target-caption" class="pacer-muted mt-3 font-mono text-xs break-all text-center">
+              https://lemondeft.github.io/pacer/
+            </p>
+
+            <div class="mt-4 flex flex-wrap items-center justify-center gap-2">
+              <button id="qr-copy-url-btn" type="button" class="pacer-surface-subtle inline-flex min-h-11 items-center rounded-lg px-3.5 text-xs sm:text-sm font-semibold hover:border-pacer-sky-deep dark:hover:border-pacer-lime transition-colors duration-150">
+                Copy link
+              </button>
+              <button id="qr-download-svg-btn" type="button" class="pacer-surface-subtle inline-flex min-h-11 items-center rounded-lg px-3.5 text-xs sm:text-sm font-semibold hover:border-pacer-sky-deep dark:hover:border-pacer-lime transition-colors duration-150">
+                Save SVG
+              </button>
+              <a href="assets/pacer-download-qr.png" download="pacer-download-qr.png" class="pacer-surface-subtle inline-flex min-h-11 items-center rounded-lg px-3.5 text-xs sm:text-sm font-semibold hover:border-pacer-sky-deep dark:hover:border-pacer-lime transition-colors duration-150">
+                Print PNG
+              </a>
+            </div>
+            <p id="qr-action-feedback" aria-live="polite" class="pacer-muted mt-2 min-h-[20px] text-center text-xs font-medium"></p>
+          </div>
+        </div>
+
+        <!-- Right 7 cols: Checksum Verification & Verified Build Specifications -->
+        <div class="md:col-span-7 min-w-0">
+          <h2 class="text-2xl sm:text-3xl font-extrabold tracking-tight">Verify package &amp; capabilities</h2>
+          <p class="pacer-muted mt-2 text-sm sm:text-base max-w-[60ch]">
+            Every release APK is published from the public repository with its SHA-256 digest attached in GitHub Releases metadata.
+          </p>
+
+          <!-- SHA-256 verification card -->
+          <div class="pacer-surface mt-5 rounded-2xl p-5">
+            <div class="flex flex-wrap items-center justify-between gap-3">
+              <h3 class="text-sm font-bold tracking-tight">APK SHA-256 Digest</h3>
+              <button id="copy-sha-btn" type="button" disabled class="pacer-surface-subtle inline-flex min-h-11 items-center rounded-lg px-3.5 text-xs font-semibold hover:border-pacer-sky-deep dark:hover:border-pacer-lime disabled:opacity-50 transition-colors duration-150">
+                Copy SHA-256
+              </button>
+            </div>
+            <p id="sha256-value" class="pacer-surface-subtle mt-3 rounded-lg p-3 font-mono text-xs break-all">
+              Loading digest from GitHub Releases...
+            </p>
+            <p id="sha-feedback" aria-live="polite" class="pacer-muted mt-2 min-h-[18px] text-xs font-medium"></p>
+          </div>
+
+          <!-- Real verified product facts (definition list, no generic icon card grid) -->
+          <dl class="mt-6 divide-y divide-slate-500/25 border-t border-b border-slate-500/25">
+            <div class="grid grid-cols-1 gap-1 py-3.5 sm:grid-cols-12 sm:gap-4">
+              <dt class="text-sm font-bold sm:col-span-4">Supported sports</dt>
+              <dd class="pacer-muted text-sm sm:col-span-8">Outdoor Running, Jogging, Cycling, and Walking with 5-layer anti-cheat classification and screen-off foreground tracking.</dd>
+            </div>
+            <div class="grid grid-cols-1 gap-1 py-3.5 sm:grid-cols-12 sm:gap-4">
+              <dt class="text-sm font-bold sm:col-span-4">Offline architecture</dt>
+              <dd class="pacer-muted text-sm sm:col-span-8">Writes workouts and GPS drafts straight to local SQLite and drains queued mutations to Supabase once connectivity returns.</dd>
+            </div>
+            <div class="grid grid-cols-1 gap-1 py-3.5 sm:grid-cols-12 sm:gap-4">
+              <dt class="text-sm font-bold sm:col-span-4">Maps &amp; clubs</dt>
+              <dd class="pacer-muted text-sm sm:col-span-8">OpenFreeMap vector tiles (Light and Dark styles), invite-code teams, realtime team chat, solo and team challenges, and coach grading boards.</dd>
+            </div>
+            <div class="grid grid-cols-1 gap-1 py-3.5 sm:grid-cols-12 sm:gap-4">
+              <dt class="text-sm font-bold sm:col-span-4">Themes &amp; languages</dt>
+              <dd class="pacer-muted text-sm sm:col-span-8">Dark, Light, and System appearance, 6 desktop-inspired palettes (Argon, KDE Breeze, Mint-Y Cinnamon, GNOME Adwaita, Ubuntu Yaru, Arch Nord), English and Indonesian.</dd>
+            </div>
+            <div class="grid grid-cols-1 gap-1 py-3.5 sm:grid-cols-12 sm:gap-4">
+              <dt class="text-sm font-bold sm:col-span-4">License &amp; source</dt>
+              <dd class="pacer-muted text-sm sm:col-span-8">
+                <p>GNU General Public License v3.0. Full Flutter client and Supabase SQL migrations are public.</p>
+                <div class="mt-1 flex flex-wrap gap-4">
+                  <a href="https://github.com/Lemondeft/pacer/blob/main/LICENSE" target="_blank" rel="noopener noreferrer" class="pacer-link inline-flex min-h-11 items-center font-semibold underline decoration-current/40 underline-offset-4 hover:decoration-current">Read GPL-3.0 License</a>
+                  <a href="https://github.com/Lemondeft/pacer" target="_blank" rel="noopener noreferrer" class="pacer-link inline-flex min-h-11 items-center font-semibold underline decoration-current/40 underline-offset-4 hover:decoration-current">Browse GitHub Source</a>
+                </div>
+              </dd>
+            </div>
+          </dl>
+        </div>
+      </div>
+    </section>
+
+    <!-- SECTION 3: Release Notes & Recent Builds Archive -->
+    <section id="releases" class="mx-auto max-w-6xl px-4 pt-6 pb-16 sm:px-6 sm:pb-20 lg:px-8">
+      <div class="border-t border-slate-500/25 pt-10 sm:pt-12">
+        <div class="flex flex-wrap items-baseline justify-between gap-4">
+          <div>
+            <h2 class="text-2xl sm:text-3xl font-extrabold tracking-tight">What changed in the latest build</h2>
+            <p id="changelog-subtitle" class="pacer-muted mt-1 text-sm">Pulled live from GitHub Releases.</p>
+          </div>
+          <a id="changelog-gh-link" href="https://github.com/Lemondeft/pacer/releases" target="_blank" rel="noopener noreferrer" class="pacer-link inline-flex min-h-11 items-center text-sm font-semibold underline decoration-current/40 underline-offset-4 hover:decoration-current">
+            View full release on GitHub
+          </a>
+        </div>
+
+        <div class="mt-6 grid grid-cols-1 gap-8 lg:grid-cols-12 lg:items-start">
+          <!-- Latest changelog body (<= 72ch measure) -->
+          <article class="pacer-surface rounded-2xl p-6 lg:col-span-7 min-w-0">
+            <div id="changelog-body" class="pacer-changelog max-w-[70ch] text-sm sm:text-base">
+              <p class="pacer-muted">Loading release notes...</p>
+            </div>
+          </article>
+
+          <!-- Recent versions & direct asset archive -->
+          <div class="lg:col-span-5 min-w-0">
+            <h3 class="text-base font-bold">Recent releases</h3>
+            <p class="pacer-muted mt-1 text-sm">Direct links to recent Android APKs and Linux desktop builds.</p>
+            <ul id="recent-releases-list" class="mt-4 space-y-3" aria-live="polite">
+              <li class="pacer-surface rounded-xl p-4 text-sm pacer-muted">Loading release archive...</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </section>
+  </main>
+
+  <footer class="border-t border-slate-500/25 py-8">
+    <div class="mx-auto flex max-w-6xl flex-col gap-4 px-4 sm:flex-row sm:items-center sm:justify-between sm:px-6 lg:px-8">
+      <p class="pacer-muted text-sm">
+        <strong class="text-[var(--ink)]">Pacer</strong> (Lemondeft/pacer), distributed under GPL-3.0.
+      </p>
+      <div class="flex flex-wrap items-center gap-x-5 gap-y-2 text-sm">
+        <a href="https://github.com/Lemondeft/pacer" target="_blank" rel="noopener noreferrer" class="pacer-link inline-flex min-h-11 items-center font-semibold hover:underline underline-offset-4">Repository</a>
+        <a href="https://github.com/Lemondeft/pacer/releases" target="_blank" rel="noopener noreferrer" class="pacer-link inline-flex min-h-11 items-center font-semibold hover:underline underline-offset-4">Releases</a>
+        <a href="https://github.com/Lemondeft/pacer/issues" target="_blank" rel="noopener noreferrer" class="pacer-link inline-flex min-h-11 items-center font-semibold hover:underline underline-offset-4">Report an Issue</a>
+      </div>
+    </div>
+  </footer>
+
+  <script src="qr.js" defer></script>
+  <script src="app.js" defer></script>
+</body>
+</html>
