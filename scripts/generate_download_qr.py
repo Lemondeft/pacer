@@ -14,18 +14,23 @@ from __future__ import annotations
 import argparse
 import json
 import subprocess
+import xml.sax.saxutils as saxutils
 from pathlib import Path
 
-from PIL import Image
+from PIL import Image, ImageDraw, ImageFont
 
 DEFAULT_URL = "https://lemondeft.github.io/pacer/"
 DEFAULT_RELEASES_URL = "https://github.com/Lemondeft/pacer/releases/latest"
 DEFAULT_APK_URL = "https://github.com/Lemondeft/pacer/releases/download/v0.2.15/pacer-v0.2.15-android.apk"
+DEFAULT_DRAWIO_URL = "https://drive.google.com/file/d/1pvcstlqest0KkokgWuvTBxty8P-pdYGk/view?usp=sharing"
+DEFAULT_FIGMA_URL = "https://www.figma.com/design/rN1K7Sh0zLPHRNTUX9ZCOK/Running-App-Design--Community-?node-id=0-1&p=f"
 REPO_ROOT = Path(__file__).resolve().parent.parent
 OUT_SVG = REPO_ROOT / "docs" / "assets" / "pacer-download-qr.svg"
 OUT_PNG = REPO_ROOT / "docs" / "assets" / "pacer-download-qr.png"
 LOCAL_QR_DIR = REPO_ROOT / "qr"
 JS_QR_PATH = REPO_ROOT / "docs" / "qr.js"
+FONT_BOLD = Path("/usr/share/fonts/OpenSans/OpenSans-Bold.ttf")
+FONT_MONO = Path("/usr/share/fonts/adwaita-mono-fonts/AdwaitaMono-Regular.ttf")
 
 # Official ISO/IEC 18004 Level M tables for versions 1..12:
 # (total_codewords, ec_per_block, g1_blocks, g1_data, g2_blocks, g2_data)
@@ -377,7 +382,14 @@ def encode_matrix(text: str) -> tuple[int, int, list[list[int]]]:
     return version, best_mask, best_modules
 
 
-def write_svg(url: str, modules: list[list[int]], out_path: Path, quiet: int = 4) -> None:
+def write_svg(
+    url: str,
+    modules: list[list[int]],
+    out_path: Path,
+    title: str = "",
+    subtitle: str = "",
+    quiet: int = 4,
+) -> None:
     size = len(modules)
     total = size + quiet * 2
     cmds: list[str] = []
@@ -391,25 +403,57 @@ def write_svg(url: str, modules: list[list[int]], out_path: Path, quiet: int = 4
                 cmds.append(f"M{start + quiet},{r + quiet}h{c - start}v1h-{c - start}z")
             else:
                 c += 1
-    safe = (
-        url.replace("&", "&amp;")
-        .replace('"', "&quot;")
-        .replace("<", "&lt;")
-        .replace(">", "&gt;")
-    )
+
+    # Convert module space into a 512px-wide SVG so caption typography scales cleanly
+    qr_px = 512
+    scale = qr_px / total
+    footer_px = 88 if (title or subtitle) else 0
+    height_px = qr_px + footer_px
+    aria = saxutils.escape(f"{title} QR code for {url}".strip() if title else f"QR code for {url}")
+    safe_title = saxutils.escape(title)
+    safe_sub = saxutils.escape(subtitle)
+
+    footer_svg = ""
+    if footer_px:
+        footer_svg = (
+            f'  <line x1="48" y1="{qr_px - 6}" x2="{qr_px - 48}" y2="{qr_px - 6}" stroke="#CBD5E1" stroke-width="1.5"/>\n'
+            f'  <text x="{qr_px / 2}" y="{qr_px + 28}" text-anchor="middle" '
+            f'font-family="\'Outfit\', \'Open Sans\', system-ui, sans-serif" font-size="22" font-weight="800" fill="#0F172A">{safe_title}</text>\n'
+            f'  <text x="{qr_px / 2}" y="{qr_px + 54}" text-anchor="middle" '
+            f'font-family="\'JetBrains Mono\', ui-monospace, monospace" font-size="13" font-weight="500" fill="#475569">{safe_sub}</text>\n'
+        )
+
     svg = (
-        f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {total} {total}" '
-        f'width="512" height="512" role="img" aria-label="QR code for {safe}" '
-        f'shape-rendering="crispEdges">\n'
-        f'  <rect width="{total}" height="{total}" fill="#FFFFFF"/>\n'
-        f'  <path fill="#0F172A" d="{"".join(cmds)}"/>\n'
+        f'<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 {qr_px} {height_px}" '
+        f'width="{qr_px}" height="{height_px}" role="img" aria-label="{aria}">\n'
+        f'  <rect width="{qr_px}" height="{height_px}" fill="#FFFFFF"/>\n'
+        f'  <g transform="scale({scale:.6f})" shape-rendering="crispEdges">\n'
+        f'    <path fill="#0F172A" d="{"".join(cmds)}"/>\n'
+        f'  </g>\n'
+        f'{footer_svg}'
         f"</svg>\n"
     )
     out_path.parent.mkdir(parents=True, exist_ok=True)
     out_path.write_text(svg, encoding="utf-8")
 
 
-def write_png(modules: list[list[int]], out_path: Path, quiet: int = 4, target_px: int = 1024) -> None:
+def _load_font(path: Path, size: int) -> ImageFont.FreeTypeFont | ImageFont.ImageFont:
+    try:
+        if path.exists():
+            return ImageFont.truetype(str(path), size=size)
+    except OSError:
+        pass
+    return ImageFont.load_default()
+
+
+def write_png(
+    modules: list[list[int]],
+    out_path: Path,
+    title: str = "",
+    subtitle: str = "",
+    quiet: int = 4,
+    target_px: int = 1024,
+) -> None:
     size = len(modules)
     total = size + quiet * 2
     img = Image.new("RGB", (total, total), (255, 255, 255))
@@ -422,14 +466,27 @@ def write_png(modules: list[list[int]], out_path: Path, quiet: int = 4, target_p
     scale = max(1, target_px // total)
     final_size = total * scale
     img = img.resize((final_size, final_size), Image.Resampling.NEAREST)
-    # Pad cleanly to exact target_px x target_px white square so quiet zone stays even
-    if final_size < target_px:
-        canvas = Image.new("RGB", (target_px, target_px), (255, 255, 255))
-        offset = (target_px - final_size) // 2
-        canvas.paste(img, (offset, offset))
-        img = canvas
+
+    footer_h = 176 if (title or subtitle) else 0
+    canvas = Image.new("RGB", (target_px, target_px + footer_h), (255, 255, 255))
+    offset = (target_px - final_size) // 2
+    canvas.paste(img, (offset, offset))
+
+    if footer_h:
+        draw = ImageDraw.Draw(canvas)
+        line_y = target_px - 10
+        draw.line([(96, line_y), (target_px - 96, line_y)], fill=(203, 213, 225), width=3)
+
+        title_font = _load_font(FONT_BOLD, 44)
+        sub_font = _load_font(FONT_MONO, 26)
+        cx = target_px // 2
+        if title:
+            draw.text((cx, target_px + 42), title, fill=(15, 23, 42), font=title_font, anchor="mm")
+        if subtitle:
+            draw.text((cx, target_px + 102), subtitle, fill=(71, 85, 105), font=sub_font, anchor="mm")
+
     out_path.parent.mkdir(parents=True, exist_ok=True)
-    img.save(out_path, format="PNG", optimize=True)
+    canvas.save(out_path, format="PNG", optimize=True)
 
 
 def verify_js_parity(urls: list[str]) -> None:
@@ -452,26 +509,58 @@ def verify_js_parity(urls: list[str]) -> None:
 def main() -> None:
     parser = argparse.ArgumentParser(description="Generate Pacer download page and release QR assets.")
     parser.add_argument("--url", default=DEFAULT_URL, help="Target download page URL.")
-    parser.add_argument("--apk-url", default=DEFAULT_APK_URL, help="Direct latest Android APK URL.")
     parser.add_argument("--releases-url", default=DEFAULT_RELEASES_URL, help="GitHub Releases latest URL.")
+    parser.add_argument("--apk-url", default=DEFAULT_APK_URL, help="Direct latest Android APK URL.")
+    parser.add_argument("--drawio-url", default=DEFAULT_DRAWIO_URL, help="Draw.io file URL.")
+    parser.add_argument("--figma-url", default=DEFAULT_FIGMA_URL, help="Figma design URL.")
     parser.add_argument("--verify", action="store_true", help="Verify exact matrix parity against docs/qr.js.")
     args = parser.parse_args()
 
     targets = [
-        (args.url, [(OUT_SVG, OUT_PNG), (LOCAL_QR_DIR / "pacer-download-page-qr.svg", LOCAL_QR_DIR / "pacer-download-page-qr.png")]),
-        (args.apk_url, [(LOCAL_QR_DIR / "pacer-latest-apk-qr.svg", LOCAL_QR_DIR / "pacer-latest-apk-qr.png")]),
-        (args.releases_url, [(LOCAL_QR_DIR / "pacer-releases-qr.svg", LOCAL_QR_DIR / "pacer-releases-qr.png")]),
+        (
+            args.url,
+            "Pacer Download Web",
+            "lemondeft.github.io/pacer",
+            [
+                (OUT_SVG, OUT_PNG),
+                (LOCAL_QR_DIR / "pacer-download-web-qr.svg", LOCAL_QR_DIR / "pacer-download-web-qr.png"),
+            ],
+        ),
+        (
+            args.releases_url,
+            "Pacer Download Latest",
+            "github.com/Lemondeft/pacer/releases/latest",
+            [(LOCAL_QR_DIR / "pacer-download-latest-qr.svg", LOCAL_QR_DIR / "pacer-download-latest-qr.png")],
+        ),
+        (
+            args.apk_url,
+            "Pacer Android APK (v0.2.15)",
+            "pacer-v0.2.15-android.apk",
+            [(LOCAL_QR_DIR / "pacer-latest-apk-qr.svg", LOCAL_QR_DIR / "pacer-latest-apk-qr.png")],
+        ),
+        (
+            args.drawio_url,
+            "Pacer Draw.io Diagrams",
+            "drive.google.com/file/d/1pvcstlqest0Kkokg...",
+            [(LOCAL_QR_DIR / "pacer-drawio-qr.svg", LOCAL_QR_DIR / "pacer-drawio-qr.png")],
+        ),
+        (
+            args.figma_url,
+            "Pacer Figma Design",
+            "figma.com/design/rN1K7Sh0zLPHRNTUX9ZCOK",
+            [(LOCAL_QR_DIR / "pacer-figma-qr.svg", LOCAL_QR_DIR / "pacer-figma-qr.png")],
+        ),
     ]
 
-    for url, pairs in targets:
+    for url, title, subtitle, pairs in targets:
         version, mask, modules = encode_matrix(url)
         for svg_path, png_path in pairs:
-            write_svg(url, modules, svg_path)
-            write_png(modules, png_path)
+            write_svg(url, modules, svg_path, title=title, subtitle=subtitle)
+            write_png(modules, png_path, title=title, subtitle=subtitle)
             print(f"Generated {svg_path.relative_to(REPO_ROOT)} & {png_path.relative_to(REPO_ROOT)} (QR v{version}, mask {mask}, {len(modules)}x{len(modules)} modules)")
 
     if args.verify:
-        verify_js_parity([args.url, args.apk_url, args.releases_url])
+        verify_js_parity([args.url, args.releases_url, args.apk_url, args.drawio_url, args.figma_url])
 
 
 if __name__ == "__main__":

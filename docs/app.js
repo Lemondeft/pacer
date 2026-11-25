@@ -103,6 +103,8 @@
       specLicenseDesc: 'GNU General Public License v3.0. Seluruh kode aplikasi Flutter dan migrasi SQL Supabase terbuka untuk publik.',
       readLicenseLink: 'Baca Lisensi GPL-3.0',
       browseSourceLink: 'Lihat Kode di GitHub',
+      drawioLink: 'Diagram Draw.io',
+      figmaLink: 'Desain Figma',
       changelogTitle: 'Pembaruan pada rilis terbaru',
       changelogSubtitleDefault: 'Diambil langsung dari GitHub Releases.',
       changelogPublishedWord: ' diterbitkan ',
@@ -210,6 +212,8 @@
       specLicenseDesc: 'GNU General Public License v3.0. Full Flutter client and Supabase SQL migrations are public.',
       readLicenseLink: 'Read GPL-3.0 License',
       browseSourceLink: 'Browse GitHub Source',
+      drawioLink: 'Draw.io Diagrams',
+      figmaLink: 'Figma Design',
       changelogTitle: 'What changed in the latest build',
       changelogSubtitleDefault: 'Pulled live from GitHub Releases.',
       changelogPublishedWord: ' published ',
@@ -1053,18 +1057,74 @@
       });
     }
 
+    function escapeXml(str) {
+      return String(str)
+        .replace(/&/g, '&amp;')
+        .replace(/"/g, '&quot;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;');
+    }
+
+    function getQrExportLabels() {
+      if (state.qrMode === 'apk' && state.latestApkUrl) {
+        var tag = state.latestTag || 'latest';
+        return {
+          url: state.latestApkUrl,
+          title: 'Pacer Android APK (' + tag + ')',
+          subtitle: 'pacer-' + tag + '-android.apk',
+        };
+      }
+      return {
+        url: DOWNLOAD_PAGE_URL,
+        title: 'Pacer Download Web',
+        subtitle: 'lemondeft.github.io/pacer',
+      };
+    }
+
+    function buildLabeledExportSvg(meta) {
+      var encoded = window.PacerQR.encodeMatrix(meta.url);
+      var quiet = 4;
+      var total = encoded.size + quiet * 2;
+      var cmds = [];
+      for (var r = 0; r < encoded.size; r++) {
+        var c = 0;
+        while (c < encoded.size) {
+          if (encoded.modules[r][c]) {
+            var start = c;
+            while (c < encoded.size && encoded.modules[r][c]) c++;
+            cmds.push('M' + (start + quiet) + ',' + (r + quiet) + 'h' + (c - start) + 'v1h-' + (c - start) + 'z');
+          } else {
+            c++;
+          }
+        }
+      }
+      var qrPx = 512;
+      var scale = (qrPx / total).toFixed(6);
+      var heightPx = qrPx + 88;
+      return [
+        '<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ' + qrPx + ' ' + heightPx + '" width="' + qrPx + '" height="' + heightPx + '" role="img" aria-label="' + escapeXml(meta.title + ' QR code') + '">',
+        '  <rect width="' + qrPx + '" height="' + heightPx + '" fill="#FFFFFF"/>',
+        '  <g transform="scale(' + scale + ')" shape-rendering="crispEdges"><path fill="#0F172A" d="' + cmds.join('') + '"/></g>',
+        '  <line x1="48" y1="506" x2="464" y2="506" stroke="#CBD5E1" stroke-width="1.5"/>',
+        '  <text x="256" y="540" text-anchor="middle" font-family="system-ui, sans-serif" font-size="22" font-weight="800" fill="#0F172A">' + escapeXml(meta.title) + '</text>',
+        '  <text x="256" y="566" text-anchor="middle" font-family="ui-monospace, monospace" font-size="13" font-weight="500" fill="#475569">' + escapeXml(meta.subtitle) + '</text>',
+        '</svg>',
+      ].join('\n');
+    }
+
     var saveSvgBtn = $('qr-download-svg-btn');
     if (saveSvgBtn) {
       saveSvgBtn.addEventListener('click', function () {
-        if (!state.currentQrSvg) renderQr(state.qrMode);
-        if (!state.currentQrSvg) return;
-        var blob = new Blob([state.currentQrSvg], { type: 'image/svg+xml;charset=utf-8' });
+        if (!window.PacerQR) return;
+        var meta = getQrExportLabels();
+        var svgText = buildLabeledExportSvg(meta);
+        var blob = new Blob([svgText], { type: 'image/svg+xml;charset=utf-8' });
         var url = URL.createObjectURL(blob);
         var a = document.createElement('a');
         a.href = url;
         a.download = state.qrMode === 'apk'
           ? 'pacer-' + (state.latestTag || 'latest') + '-apk-qr.svg'
-          : 'pacer-download-page-qr.svg';
+          : 'pacer-download-web-qr.svg';
         document.body.appendChild(a);
         a.click();
         document.body.removeChild(a);
@@ -1080,20 +1140,22 @@
       savePngLink.addEventListener('click', function (e) {
         if (state.qrMode !== 'apk' || !state.latestApkUrl || !window.PacerQR) return;
         e.preventDefault();
-        var encoded = window.PacerQR.encodeMatrix(state.latestApkUrl);
+        var meta = getQrExportLabels();
+        var encoded = window.PacerQR.encodeMatrix(meta.url);
         var quiet = 4;
         var total = encoded.size + quiet * 2;
         var targetPx = 1024;
+        var footerH = 176;
         var scale = Math.max(1, Math.floor(targetPx / total));
         var finalSize = total * scale;
         var offset = Math.floor((targetPx - finalSize) / 2);
         var canvas = document.createElement('canvas');
         canvas.width = targetPx;
-        canvas.height = targetPx;
+        canvas.height = targetPx + footerH;
         var ctx = canvas.getContext('2d');
         if (!ctx) return;
         ctx.fillStyle = '#FFFFFF';
-        ctx.fillRect(0, 0, targetPx, targetPx);
+        ctx.fillRect(0, 0, targetPx, targetPx + footerH);
         ctx.fillStyle = '#0F172A';
         for (var r = 0; r < encoded.size; r++) {
           for (var c = 0; c < encoded.size; c++) {
@@ -1102,6 +1164,22 @@
             }
           }
         }
+        ctx.strokeStyle = '#CBD5E1';
+        ctx.lineWidth = 3;
+        ctx.beginPath();
+        ctx.moveTo(96, targetPx - 10);
+        ctx.lineTo(targetPx - 96, targetPx - 10);
+        ctx.stroke();
+
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillStyle = '#0F172A';
+        ctx.font = '800 44px "Outfit", system-ui, sans-serif';
+        ctx.fillText(meta.title, targetPx / 2, targetPx + 42);
+        ctx.fillStyle = '#475569';
+        ctx.font = '500 26px "JetBrains Mono", monospace';
+        ctx.fillText(meta.subtitle, targetPx / 2, targetPx + 102);
+
         var filename = 'pacer-' + (state.latestTag || 'latest') + '-apk-qr.png';
         var pngUrl = canvas.toDataURL('image/png');
         var a = document.createElement('a');
