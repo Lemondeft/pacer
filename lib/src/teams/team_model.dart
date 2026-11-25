@@ -21,6 +21,10 @@ class Team {
   final DateTime? createdAt;
   final int? memberCount;
 
+  /// Non-null while waiting for a 2nd member to join within 72 hours of creation.
+  /// Permanently flipped to null once the team graduates (memberCount >= 2).
+  final DateTime? expiresAt;
+
   const Team({
     required this.id,
     required this.nama,
@@ -30,7 +34,19 @@ class Team {
     this.inviteCode,
     this.createdAt,
     this.memberCount,
+    this.expiresAt,
   });
+
+  /// True once the 72-hour graduation deadline has passed with no 2nd member.
+  bool get isExpired =>
+      expiresAt != null && !expiresAt!.toUtc().isAfter(DateTime.now().toUtc());
+
+  /// True while the team is still within its 72-hour graduation window.
+  bool get isPendingActivation => expiresAt != null && !isExpired;
+
+  /// Remaining time before automatic expiration, or null if graduated.
+  Duration? get timeUntilExpiry =>
+      expiresAt?.toUtc().difference(DateTime.now().toUtc());
 
   Team copyWith({
     String? id,
@@ -41,6 +57,8 @@ class Team {
     String? inviteCode,
     DateTime? createdAt,
     int? memberCount,
+    DateTime? expiresAt,
+    bool clearExpiresAt = false,
   }) => Team(
     id: id ?? this.id,
     nama: nama ?? this.nama,
@@ -50,6 +68,7 @@ class Team {
     inviteCode: inviteCode ?? this.inviteCode,
     createdAt: createdAt ?? this.createdAt,
     memberCount: memberCount ?? this.memberCount,
+    expiresAt: clearExpiresAt ? null : (expiresAt ?? this.expiresAt),
   );
 
   factory Team.fromJson(Map<String, dynamic> json) => Team(
@@ -61,6 +80,7 @@ class Team {
     inviteCode: json['invite_code'] as String?,
     createdAt: _parseDate(json['created_at']),
     memberCount: _jsonToInt(json['member_count']),
+    expiresAt: _parseDate(json['expires_at']),
   );
 
   Map<String, dynamic> toJson() => {
@@ -72,6 +92,7 @@ class Team {
     'invite_code': inviteCode,
     'created_at': createdAt?.toIso8601String(),
     if (memberCount != null) 'member_count': memberCount,
+    if (expiresAt != null) 'expires_at': expiresAt?.toIso8601String(),
   };
 }
 
@@ -90,6 +111,10 @@ class TeamRosterMember {
     required this.appPeran,
     this.joinedAt,
   });
+
+  bool get isCoach => peran == 'coach';
+  bool get isKetua => peran == 'ketua';
+  bool get isTeamLeader => isCoach || isKetua;
 
   factory TeamRosterMember.fromJson(Map<String, dynamic> json) =>
       TeamRosterMember(

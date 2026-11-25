@@ -5,7 +5,6 @@ import 'package:flutter/services.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:latlong2/latlong.dart' hide Path;
 import 'package:pacer/core/responsive/responsive.dart';
-import 'package:pacer/src/admin/admin_repository.dart';
 import 'package:pacer/src/admin/ui/admin_console_screen.dart';
 import 'package:pacer/src/aktivitas/activity_model.dart';
 import 'package:pacer/src/aktivitas/activity_repository.dart';
@@ -2645,11 +2644,25 @@ class _TeamsScreenState extends State<TeamsScreen> {
           final controller = ctrls.first;
           return AlertDialog(
             title: Text(S.joinByCode),
-            content: TextField(
-              controller: controller,
-              autofocus: true,
-              textCapitalization: TextCapitalization.characters,
-              decoration: InputDecoration(hintText: S.teamCodeLabel),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                TextField(
+                  controller: controller,
+                  autofocus: true,
+                  textCapitalization: TextCapitalization.characters,
+                  decoration: InputDecoration(hintText: S.teamCodeLabel),
+                ),
+                const SizedBox(height: 10),
+                Text(
+                  S.joinTeamPrivacyNote,
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: PacerScheme.of(context).muted,
+                  ),
+                ),
+              ],
             ),
             actions: [
               TextButton(
@@ -2686,9 +2699,10 @@ class _TeamsScreenState extends State<TeamsScreen> {
       if (!mounted) return;
       _reload(forceRefresh: true);
       messenger.showSnackBar(SnackBar(content: Text(S.join)));
-    } on PostgrestException {
+    } on PostgrestException catch (e) {
+      final isExpired = e.message.toLowerCase().contains('expired');
       messenger.showSnackBar(
-        SnackBar(content: Text(S.invalidTeamCode)),
+        SnackBar(content: Text(isExpired ? S.errTeamExpired : S.invalidTeamCode)),
       );
     } catch (e) {
       messenger.showSnackBar(
@@ -3085,8 +3099,13 @@ class _TeamDashboardScreenState extends State<TeamDashboardScreen> {
         final stats = PacerDummyData.getTeamDashboardStats(widget.teamId);
         final roster = PacerDummyData.getTeamRoster(widget.teamId);
         final code = PacerDummyData.getDemoInviteCode(widget.teamId);
-        final isKetua =
+        final isTeamCoach =
             team?.dibuatOleh == 'demo-user-me' ||
+            roster.any(
+              (m) => m.userId == 'demo-user-me' && m.peran == 'coach',
+            );
+        final isKetua =
+            isTeamCoach ||
             roster.any(
               (m) => m.userId == 'demo-user-me' && m.peran == 'ketua',
             );
@@ -3102,7 +3121,7 @@ class _TeamDashboardScreenState extends State<TeamDashboardScreen> {
           _loading = false;
           _isDemo = true;
           _uid = 'demo-user-me';
-          _isCoach = false;
+          _isCoach = isTeamCoach;
           _isKetua = isKetua;
           _team = team;
           _stats = stats;
@@ -3199,10 +3218,14 @@ class _TeamDashboardScreenState extends State<TeamDashboardScreen> {
       final joined = stats?.isMember ?? roster.any((m) => m.userId == uid);
       final isPrivate = team?.isPrivate ?? true;
       final inTeam = joined || team?.dibuatOleh == uid;
+      final isCoach =
+          peran == 'admin' ||
+          (roster.isNotEmpty
+              ? roster.any((m) => m.userId == uid && m.peran == 'coach')
+              : team?.dibuatOleh == uid);
       final isKetua =
-          team?.dibuatOleh == uid ||
+          isCoach ||
           roster.any((m) => m.userId == uid && m.peran == 'ketua');
-      final isCoach = peran == 'admin' || (peran == 'coach' && inTeam);
       // Strict client-side defense-in-depth matching SQL: private team codes
       // are shown ONLY when the signed-in user is creator or in the team.
       final canViewCode = code != null &&
@@ -3240,6 +3263,37 @@ class _TeamDashboardScreenState extends State<TeamDashboardScreen> {
   Future<void> _toggleJoin() async {
     final displayName = _team?.nama ?? widget.teamName ?? '';
     if (_joined == true) {
+      final roster = _roster ?? const <TeamRosterMember>[];
+      final meIsCoach = roster.any(
+        (m) => m.userId == _uid && m.peran == 'coach',
+      );
+      final coachCount = roster.where((m) => m.peran == 'coach').length;
+      if (meIsCoach && coachCount <= 1) {
+        final shouldDelete = await showDialog<bool>(
+          context: context,
+          builder: (context) => AlertDialog(
+            title: Text(S.soleCoachLeaveTitle),
+            content: Text(S.soleCoachLeaveBody),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(false),
+                child: Text(S.cancelLabel),
+              ),
+              TextButton(
+                onPressed: () => Navigator.of(context).pop(true),
+                style: TextButton.styleFrom(
+                  foregroundColor: PacerScheme.of(context).error,
+                ),
+                child: Text(S.deleteLabel),
+              ),
+            ],
+          ),
+        );
+        if (shouldDelete == true && mounted) {
+          await _deleteTeam();
+        }
+        return;
+      }
       final confirm = await showDialog<bool>(
         context: context,
         builder: (context) => AlertDialog(
@@ -3309,10 +3363,13 @@ class _TeamDashboardScreenState extends State<TeamDashboardScreen> {
       _code.clear();
       _changed = true;
       await _refresh(forceRefresh: true);
-    } on PostgrestException {
+    } on PostgrestException catch (e) {
       if (mounted) {
+        final isExpired = e.message.toLowerCase().contains('expired');
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text(S.invalidTeamCode)),
+          SnackBar(
+            content: Text(isExpired ? S.errTeamExpired : S.invalidTeamCode),
+          ),
         );
       }
     } catch (e) {
@@ -3378,7 +3435,9 @@ class _TeamDashboardScreenState extends State<TeamDashboardScreen> {
       _changed = true;
       await _refresh(forceRefresh: true);
       if (mounted) {
-        final roleLabel = peran == 'ketua' ? S.roleKetua : S.roleAnggota;
+        final roleLabel = peran == 'coach'
+            ? S.roleCoach
+            : (peran == 'ketua' ? S.roleKetua : S.roleAnggota);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(content: Text(S.roleUpdatedMsg(m.nama, roleLabel))),
         );
@@ -3920,6 +3979,11 @@ class _TeamDashboardScreenState extends State<TeamDashboardScreen> {
             S.join,
             onPressed: (_busy || _joined == null) ? null : _toggleJoin,
           ),
+          const SizedBox(height: 8),
+          Text(
+            S.joinTeamPrivacyNote,
+            style: TextStyle(fontSize: 12, color: scheme.muted),
+          ),
         ] else ...[
           LimeActionBar(
             S.teamChat,
@@ -3976,7 +4040,11 @@ class _TeamDashboardScreenState extends State<TeamDashboardScreen> {
               Expanded(
                 child: OutlinedButton(
                   onPressed: () => Navigator.of(context).push(
-                    MaterialPageRoute(builder: (_) => const CoachBoardScreen()),
+                    MaterialPageRoute(
+                      builder: (_) => CoachBoardScreen(
+                        initialTeamId: widget.teamId,
+                      ),
+                    ),
                   ),
                   child: Text(S.coachBoardTitle),
                 ),
@@ -4083,6 +4151,7 @@ class _TeamDashboardScreenState extends State<TeamDashboardScreen> {
   Widget _memberTile(BuildContext context, TeamRosterMember m) {
     final scheme = PacerScheme.of(context);
     final isMe = m.userId == _uid;
+    final isTeamCoach = m.peran == 'coach';
     final isCaptain = m.peran == 'ketua';
     final joinedStr = m.joinedAt == null ? '' : fmtDate(m.joinedAt);
 
@@ -4115,36 +4184,44 @@ class _TeamDashboardScreenState extends State<TeamDashboardScreen> {
                         vertical: 2,
                       ),
                       decoration: BoxDecoration(
-                        color: isCaptain
-                            ? scheme.brandAccent.withValues(alpha: 0.25)
-                            : scheme.searchBg,
+                        color: isTeamCoach
+                            ? scheme.brandAccent
+                            : (isCaptain
+                                  ? scheme.brandAccent.withValues(alpha: 0.25)
+                                  : scheme.searchBg),
                         borderRadius: BorderRadius.circular(999),
                       ),
                       child: Text(
-                        isCaptain ? S.captainRole : S.memberRole,
+                        isTeamCoach
+                            ? S.roleCoach.toUpperCase()
+                            : (isCaptain ? S.captainRole : S.memberRole),
                         style: TextStyle(
                           fontSize: 10,
-                          fontWeight: FontWeight.w700,
-                          color: scheme.ink,
+                          fontWeight: isTeamCoach
+                              ? FontWeight.w800
+                              : FontWeight.w700,
+                          color: isTeamCoach
+                              ? scheme.onBrandAccent
+                              : scheme.ink,
                         ),
                       ),
                     ),
-                    if (m.appPeran == 'coach' || m.appPeran == 'admin')
+                    if (m.appPeran == 'admin')
                       Container(
                         padding: const EdgeInsets.symmetric(
                           horizontal: 7,
                           vertical: 2,
                         ),
                         decoration: BoxDecoration(
-                          color: scheme.brandAccent,
+                          color: scheme.accent.withValues(alpha: 0.2),
                           borderRadius: BorderRadius.circular(999),
                         ),
                         child: Text(
-                          m.appPeran.toUpperCase(),
+                          'ADMIN',
                           style: TextStyle(
                             fontSize: 10,
                             fontWeight: FontWeight.w800,
-                            color: scheme.onBrandAccent,
+                            color: scheme.ink,
                           ),
                         ),
                       ),
@@ -4165,21 +4242,34 @@ class _TeamDashboardScreenState extends State<TeamDashboardScreen> {
               enabled: !_busy,
               icon: Icon(Icons.more_vert, color: scheme.muted),
               onSelected: (value) {
-                if (value == 'promote') {
+                if (value == 'coach') {
+                  _setMemberRole(m, 'coach');
+                } else if (value == 'ketua') {
                   _setMemberRole(m, 'ketua');
-                } else if (value == 'demote') {
+                } else if (value == 'anggota') {
                   _setMemberRole(m, 'anggota');
                 } else if (value == 'kick') {
                   _kick(m.userId, m.nama);
                 }
               },
               itemBuilder: (_) => [
-                PopupMenuItem<String>(
-                  value: isCaptain ? 'demote' : 'promote',
-                  child: Text(
-                    isCaptain ? S.demoteToAnggota : S.promoteToKetua,
+                if (!isTeamCoach)
+                  PopupMenuItem<String>(
+                    value: 'coach',
+                    child: Text(S.promoteToCoach),
                   ),
-                ),
+                if (!isCaptain)
+                  PopupMenuItem<String>(
+                    value: 'ketua',
+                    child: Text(S.promoteToKetua),
+                  ),
+                if (isTeamCoach || isCaptain)
+                  PopupMenuItem<String>(
+                    value: 'anggota',
+                    child: Text(
+                      isTeamCoach ? S.demoteFromCoach : S.demoteToAnggota,
+                    ),
+                  ),
                 PopupMenuItem<String>(
                   value: 'kick',
                   child: Text(
@@ -4382,6 +4472,61 @@ class _TeamDashboardScreenState extends State<TeamDashboardScreen> {
     );
   }
 
+  Widget _buildPendingActivationBanner(BuildContext context) {
+    final scheme = PacerScheme.of(context);
+    final remaining = _team?.timeUntilExpiry ?? const Duration(hours: 72);
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final accent = isDark ? PacerColors.streakAmber : const Color(0xFFB45309);
+    return PacerSurface(
+      radius: PacerRadii.md,
+      padding: const EdgeInsets.all(14),
+      borderColor: accent.withValues(alpha: 0.45),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(Icons.schedule_outlined, color: accent, size: 20),
+          const SizedBox(width: 10),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  S.teamPendingActivationTitle,
+                  style: TextStyle(
+                    fontSize: 13.5,
+                    fontWeight: FontWeight.w700,
+                    color: scheme.ink,
+                  ),
+                ),
+                const SizedBox(height: 3),
+                Text(
+                  S.teamPendingActivationBody(remaining),
+                  style: TextStyle(fontSize: 12.5, color: scheme.muted),
+                ),
+                if (_canViewCode && _inviteCode != null) ...[
+                  const SizedBox(height: 8),
+                  TextButton.icon(
+                    onPressed: _copyInviteCode,
+                    style: TextButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 4,
+                      ),
+                      minimumSize: const Size(0, 36),
+                      tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                    ),
+                    icon: const Icon(Icons.copy_outlined, size: 15),
+                    label: Text('${S.copyCode} ($_inviteCode)'),
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final scheme = PacerScheme.of(context);
@@ -4407,6 +4552,10 @@ class _TeamDashboardScreenState extends State<TeamDashboardScreen> {
                   const PacerLoading()
                 else ...[
                   _buildHeroCard(context),
+                  if (_team?.isPendingActivation == true) ...[
+                    const SizedBox(height: 14),
+                    _buildPendingActivationBanner(context),
+                  ],
                   const SizedBox(height: 16),
                   _buildOverviewCard(context),
                   const SizedBox(height: 16),
@@ -6271,56 +6420,6 @@ class _AccountScreenState extends State<AccountScreen> {
     }
   }
 
-  Future<void> _promptRedeemCoachCode(BuildContext context) async {
-    final code = await showDialog<String>(
-      context: context,
-      builder: (ctx) => DialogTextControllers(
-        initialTexts: const [''],
-        builder: (ctx, ctrls) {
-          final ctrl = ctrls.first;
-          return AlertDialog(
-            title: Text(S.redeemCoachCode),
-            content: TextField(
-              controller: ctrl,
-              autofocus: true,
-              textCapitalization: TextCapitalization.characters,
-              decoration: InputDecoration(
-                hintText: S.redeemCoachCodeHint,
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
-              ),
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.of(ctx).pop(),
-                child: Text(MaterialLocalizations.of(ctx).cancelButtonLabel),
-              ),
-              FilledButton(
-                onPressed: () => Navigator.of(ctx).pop(ctrl.text.trim()),
-                child: Text(S.redeemCoachSubmit),
-              ),
-            ],
-          );
-        },
-      ),
-    );
-    if (code == null || code.isEmpty || !context.mounted) return;
-    try {
-      await AdminRepository().claimCoachInvite(code);
-      await _refreshProfile();
-      if (!context.mounted) return;
-      ScaffoldMessenger.of(context)
-        ..hideCurrentSnackBar()
-        ..showSnackBar(SnackBar(content: Text(S.redeemCoachSuccess)));
-    } catch (e) {
-      if (!context.mounted) return;
-      ScaffoldMessenger.of(context)
-        ..hideCurrentSnackBar()
-        ..showSnackBar(SnackBar(content: Text(e.toString())));
-    }
-  }
-
   Future<void> _checkForUpdates(BuildContext context) async {
     if (_checkingUpdates) return;
     _checkingUpdates = true;
@@ -6492,13 +6591,6 @@ class _AccountScreenState extends State<AccountScreen> {
                           builder: (_) => const AdminConsoleScreen(),
                         ),
                       ),
-                    ),
-                  if (!_isDemo && _peran == 'user')
-                    _menuRow(
-                      context,
-                      icon: Icons.vpn_key_outlined,
-                      label: S.redeemCoachCode,
-                      onTap: () => _promptRedeemCoachCode(context),
                     ),
                   _menuRow(
                     context,
@@ -7678,8 +7770,9 @@ class PersyaratanScreen extends StatelessWidget {
   }
 }
 
-/// Figma buat club form. Creates the team server-side (coach/admin only —
-/// regular users get a "coach only" message); demo mode pops with a demo note.
+/// Create a Team / Club. Any signed-in user can create a team and becomes its
+/// team-scoped Coach (`team_members.peran = 'coach'`). Newly created teams
+/// expire after 72 hours unless at least one other member joins.
 class CreateClubScreen extends StatefulWidget {
   const CreateClubScreen({super.key});
 
@@ -7725,8 +7818,11 @@ class _CreateClubScreenState extends State<CreateClubScreen> {
         Navigator.of(context).pop(true);
       }
     } on PostgrestException catch (e) {
+      final msg = e.message.toLowerCase();
       setState(
-        () => _error = e.code == '42501' ? S.coachOnly : S.errSaveFailed,
+        () => _error = msg.contains('pending team limit')
+            ? S.errPendingTeamLimit
+            : (e.code == '42501' ? S.coachOnly : S.errSaveFailed),
       );
     } catch (e) {
       setState(() => _error = offlineActionErrorMessage(e));
@@ -7749,26 +7845,12 @@ class _CreateClubScreenState extends State<CreateClubScreen> {
               const PageHeader(),
               const SizedBox(height: 16),
               Text(S.createTeam, style: PacerText.pageTitleOf(context)),
-              const SizedBox(height: 12),
-              Container(
-                width: 80,
-                height: 80,
-                alignment: Alignment.center,
-                decoration: BoxDecoration(
-                  color: scheme.formField,
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: scheme.formEdge, width: 2),
-                ),
-                child: Text(
-                  S.addLogo,
-                  textAlign: TextAlign.center,
-                  style: TextStyle(fontSize: 11, fontWeight: FontWeight.w700),
-                ),
-              ),
-              const SizedBox(height: 12),
+              const SizedBox(height: 16),
               Text(S.teamName),
+              const SizedBox(height: 6),
               TextField(
                 controller: _name,
+                textCapitalization: TextCapitalization.words,
                 decoration: InputDecoration(
                   filled: true,
                   fillColor: scheme.formField,
@@ -7783,29 +7865,6 @@ class _CreateClubScreenState extends State<CreateClubScreen> {
                 AuthErrorText(_error!),
               ],
               const SizedBox(height: 16),
-              Text(S.clubFocus),
-              const Wrap(
-                spacing: 8,
-                runSpacing: 8,
-                children: [
-                  Chip(label: Text('Road Run')),
-                  Chip(label: Text('Trail')),
-                  Chip(label: Text('Fun Run')),
-                ],
-              ),
-              const SizedBox(height: 12),
-              Text(S.cityHQ),
-              TextField(
-                decoration: InputDecoration(
-                  filled: true,
-                  fillColor: scheme.formField,
-                  border: OutlineInputBorder(
-                    borderRadius: BorderRadius.circular(12),
-                    borderSide: BorderSide.none,
-                  ),
-                ),
-              ),
-              const SizedBox(height: 12),
               Text(S.communityPrivacy),
               Wrap(
                 spacing: 8,
@@ -7832,7 +7891,29 @@ class _CreateClubScreenState extends State<CreateClubScreen> {
                   color: PacerScheme.of(context).soft,
                 ),
               ),
-              const SizedBox(height: 24),
+              const SizedBox(height: 16),
+              PacerSurface(
+                radius: PacerRadii.md,
+                padding: const EdgeInsets.all(12),
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Icon(
+                      Icons.info_outline_rounded,
+                      size: 18,
+                      color: scheme.accent,
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        S.teamCreateRoleAndExpiryHint,
+                        style: TextStyle(fontSize: 12.5, color: scheme.muted),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 20),
               LimeActionBar(S.createTeam, onPressed: _busy ? null : _submit),
               Center(
                 child: TextButton(
@@ -7904,7 +7985,7 @@ class _CreateChallengeScreenState extends State<CreateChallengeScreen> {
               t.dibuatOleh == 'demo-user-me' ||
               PacerDummyData.getTeamRoster(
                 t.id,
-              ).any((m) => m.userId == 'demo-user-me' && m.peran == 'ketua');
+              ).any((m) => m.userId == 'demo-user-me' && m.isTeamLeader);
           if (isLeader || t.id == widget.initialTeamId) {
             teams.add(t);
           }
@@ -7915,27 +7996,23 @@ class _CreateChallengeScreenState extends State<CreateChallengeScreen> {
         final uid = await auth.resolveUserId();
         final profile = await auth.getProfile();
         final isAdmin = profile?.peran == 'admin';
-        final isCoach = profile?.peran == 'coach';
         if (isAdmin) {
           final all = await repo.listTeams();
           teams.addAll(all.isNotEmpty ? all : await repo.myTeams());
         } else if (uid != null) {
-          // Coaches and team leaders only create challenges for teams they belong to.
+          // Team coaches and captains (ketua) only create challenges for teams they lead.
           final mine = await repo.myTeams();
-          final rosters = isCoach
-              ? const <List<TeamRosterMember>>[]
-              : await Future.wait([
-                  for (final t in mine)
-                    repo
-                        .teamRoster(t.id)
-                        .catchError((_) => const <TeamRosterMember>[]),
-                ]);
+          final rosters = await Future.wait([
+            for (final t in mine)
+              repo
+                  .teamRoster(t.id)
+                  .catchError((_) => const <TeamRosterMember>[]),
+          ]);
           for (var i = 0; i < mine.length; i++) {
             final t = mine[i];
             final isLeader =
-                isCoach ||
                 t.dibuatOleh == uid ||
-                rosters[i].any((m) => m.userId == uid && m.peran == 'ketua');
+                rosters[i].any((m) => m.userId == uid && m.isTeamLeader);
             if (isLeader) {
               teams.add(t);
             }
@@ -8064,8 +8141,11 @@ class _CreateChallengeScreenState extends State<CreateChallengeScreen> {
       );
       Navigator.of(context).pop(true);
     } on PostgrestException catch (e) {
+      final msg = e.message.toLowerCase();
       setState(
-        () => _error = e.code == '42501' ? S.coachOnly : S.errSaveFailed,
+        () => _error = msg.contains('expired')
+            ? S.errTeamExpired
+            : (e.code == '42501' ? S.coachOnly : S.errSaveFailed),
       );
     } catch (e) {
       if (mounted) setState(() => _error = offlineActionErrorMessage(e));

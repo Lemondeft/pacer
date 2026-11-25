@@ -17,13 +17,15 @@ import 'format.dart';
 import 'pacer_glass.dart' show PacerSquircleBorder;
 import 'widgets.dart';
 
-/// Coach class board (PE grading): pick a team and see every member's
+/// Coach class board (PE grading): pick a coached team and see every member's
 /// current-week sessions + distance, streak, and optional challenge progress.
 ///
-/// Coach-gated twice: the screen refuses non-coach roles, and the tables are
-/// additionally RLS-gated server-side (coach-read policies + owner policies).
+/// Scoped to teams where the signed-in user holds `team_members.peran = 'coach'`
+/// (or all active teams for platform `'admin'`), reinforced server-side by RLS.
 class CoachBoardScreen extends StatefulWidget {
-  const CoachBoardScreen({super.key});
+  final String? initialTeamId;
+
+  const CoachBoardScreen({super.key, this.initialTeamId});
 
   @override
   State<CoachBoardScreen> createState() => _CoachBoardScreenState();
@@ -58,18 +60,25 @@ class _CoachBoardScreenState extends State<CoachBoardScreen> {
   @override
   void initState() {
     super.initState();
+    _teamId = widget.initialTeamId;
     _gate = _checkCoach();
   }
 
-  /// Null when non-coach (with a reason string); Demo Mode when signed out.
+  /// Grants access when the user coaches at least one active team (or is admin).
   Future<_Gate> _checkCoach() async {
     if (await isDemoAccount()) {
       _isDemo = true;
+      final demoTeams = PacerDummyData.demoTeams;
+      final initialId =
+          widget.initialTeamId != null &&
+              demoTeams.any((t) => t.id == widget.initialTeamId)
+          ? widget.initialTeamId
+          : (demoTeams.isEmpty ? null : demoTeams.first.id);
       if (mounted) {
         setState(() {
-          _teams = PacerDummyData.demoTeams;
+          _teams = demoTeams;
           _challenges = PacerDummyData.demoChallenges;
-          _teamId ??= PacerDummyData.demoTeams.first.id;
+          _teamId = initialId;
         });
       }
       _refresh();
@@ -78,23 +87,27 @@ class _CoachBoardScreenState extends State<CoachBoardScreen> {
     _isDemo = false;
     try {
       final profile = await AuthRepository().getProfile();
-      final peran = profile?.peran ?? 'user';
-      if (peran == 'coach' || peran == 'admin') {
-        final teams = peran == 'admin'
-            ? await TeamRepository().listTeams()
-            : await TeamRepository().myTeams();
+      final isAdmin = profile?.peran == 'admin';
+      final teams = isAdmin
+          ? await TeamRepository().listTeams()
+          : await TeamRepository().myCoachedTeams();
+      if (isAdmin || teams.isNotEmpty) {
         final challenges = await ChallengeRepository().listChallenges();
+        final resolvedTeamId =
+            _teamId != null && teams.any((t) => t.id == _teamId)
+            ? _teamId
+            : (teams.isEmpty ? null : teams.first.id);
         if (mounted) {
           setState(() {
             _teams = teams;
             _challenges = challenges;
-            _teamId ??= (_teams.isEmpty ? null : _teams.first.id);
+            _teamId = resolvedTeamId;
           });
         }
         _refresh();
         return (coach: true, reason: '');
       }
-      return (coach: false, reason: '');
+      return (coach: false, reason: 'no-coached-teams');
     } catch (_) {
       return (coach: false, reason: '');
     }
@@ -294,6 +307,7 @@ class _CoachBoardScreenState extends State<CoachBoardScreen> {
     final msg = switch (reason) {
       'signed-out' => S.errLoginFailed,
       'offline' => S.errSaveFailed,
+      'no-coached-teams' => S.coachBoardNoTeamsHint,
       _ => S.coachOnly,
     };
     return PacerEmptyState(msg, icon: Icons.lock_outline);

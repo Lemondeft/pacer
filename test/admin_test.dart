@@ -209,7 +209,7 @@ void main() {
   });
 
   group('Super Admin Role-Gating & Console UI', () {
-    testWidgets('AccountScreen shows Admin Console only for admin, and Redeem Coach Code only for user', (tester) async {
+    testWidgets('AccountScreen shows Admin Console only for admin and omits retired Redeem Coach Code', (tester) async {
       SharedPreferences.setMockInitialValues({});
       PacerCache.instance.clear();
       langNotifier.value = Lang.en;
@@ -219,7 +219,7 @@ void main() {
         PacerCache.instance.clear();
       });
 
-      // Regular user: sees Redeem Coach Code, NOT Super Admin Console
+      // Regular user: sees neither Super Admin Console nor retired Redeem Coach Code
       final userStore = MemoryLocalStore();
       await userStore.setLastUserId('u-1');
       await userStore.upsertProfile(
@@ -236,9 +236,9 @@ void main() {
       await tester.pumpAndSettle();
 
       expect(find.text(S.adminConsole), findsNothing);
-      expect(find.text(S.redeemCoachCode), findsOneWidget);
+      expect(find.text(S.redeemCoachCode), findsNothing);
 
-      // Coach: sees neither Super Admin Console nor Redeem Coach Code
+      // Legacy global coach: also sees neither Super Admin Console nor Redeem Coach Code
       PacerCache.instance.clear();
       await userStore.upsertProfile(
         const UserProfile(id: 'u-1', nama: 'Coach', peran: 'coach'),
@@ -269,7 +269,7 @@ void main() {
       expect(find.text(S.redeemCoachCode), findsNothing);
     });
 
-    testWidgets('AdminConsoleScreen supports KPI overview, user role promotion, coach invites, flagged activity review, and audit logs', (tester) async {
+    testWidgets('AdminConsoleScreen supports KPI overview, user role promotion, flagged activity review, and audit logs', (tester) async {
       langNotifier.value = Lang.en;
       final store = MemoryLocalStore();
       final gw = _FakeAdminGateway();
@@ -286,14 +286,12 @@ void main() {
       expect(find.text('12'), findsOneWidget); // total users
       expect(find.text('48'.toString()), findsNothing);
 
-      // Switch to Users tab -> promote Budi Runner to COACH and generate code
+      // Switch to Users tab -> coach invite card is retired; role promotion works
       await tester.tap(find.text(S.adminUsersTab).first);
       await tester.pumpAndSettle();
 
       expect(find.text('Budi Runner'), findsOneWidget);
-      await tester.tap(find.text(S.adminGenerateCodeCta));
-      await tester.pumpAndSettle();
-      expect(find.textContaining('COACH-1234ABCD'), findsWidgets);
+      expect(find.text(S.adminGenerateCodeCta), findsNothing);
 
       await tester.tap(find.text('USER').last);
       await tester.pumpAndSettle();

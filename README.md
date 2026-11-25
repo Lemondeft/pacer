@@ -4,7 +4,7 @@
 
 Offline-first running and multi-sport tracker built with Flutter and Supabase.
 
-[![Release](https://img.shields.io/badge/release-v0.2.15-00CDFA?style=flat-square)](https://github.com/Lemondeft/pacer/releases)
+[![Release](https://img.shields.io/badge/release-v0.2.16-00CDFA?style=flat-square)](https://github.com/Lemondeft/pacer/releases)
 [![License: GPL v3](https://img.shields.io/badge/license-GPLv3-blue?style=flat-square)](LICENSE)
 
 <img src="docs/screenshots/dashboard.png" alt="Dashboard" width="210" /> <img src="docs/screenshots/tracking.png" alt="Live Tracking" width="210" /> <img src="docs/screenshots/themes.png" alt="Themes" width="210" />

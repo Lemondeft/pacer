@@ -629,7 +629,10 @@ class MemoryLocalStore implements LocalStore {
         ? null
         : (currentCount + memberCountDelta).clamp(0, 1000000);
     _teams[userId]![teamId] = (
-      team: existing.team.copyWith(memberCount: nextCount),
+      team: existing.team.copyWith(
+        memberCount: nextCount,
+        clearExpiresAt: nextCount != null && nextCount >= 2,
+      ),
       isMine: isMine ?? existing.isMine,
     );
   }

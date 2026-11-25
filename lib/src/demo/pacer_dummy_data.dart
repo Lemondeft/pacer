@@ -230,12 +230,17 @@ class PacerDummyData {
     final combined = [..._customDemoTeams, ...teams];
     return [
       for (final t in combined)
-        t.copyWith(
-          inviteCode: _demoInviteOverrides[t.id] ?? t.inviteCode,
-          memberCount: ((t.memberCount ?? 0) + (_demoCountOffsets[t.id] ?? 0))
-              .clamp(0, 1000000),
-        ),
-    ];
+        () {
+          final nextCount =
+              ((t.memberCount ?? 0) + (_demoCountOffsets[t.id] ?? 0))
+                  .clamp(0, 1000000);
+          return t.copyWith(
+            inviteCode: _demoInviteOverrides[t.id] ?? t.inviteCode,
+            memberCount: nextCount,
+            clearExpiresAt: nextCount >= 2,
+          );
+        }(),
+    ].where((t) => !t.isExpired).toList();
   }
 
   static List<Team> get demoMyTeams =>
@@ -290,6 +295,7 @@ class PacerDummyData {
     final id = 'demo-team-${DateTime.now().microsecondsSinceEpoch}';
     final cleaned = id.replaceAll(RegExp('[^A-Za-z0-9]'), '').toUpperCase();
     final code = cleaned.padRight(8, 'X').substring(0, 8);
+    final nowUtc = DateTime.now().toUtc();
     final team = Team(
       id: id,
       nama: nama,
@@ -297,8 +303,9 @@ class PacerDummyData {
       dibuatOleh: 'demo-user-me',
       isPrivate: isPrivate,
       inviteCode: code,
-      createdAt: DateTime.now(),
+      createdAt: nowUtc,
       memberCount: 1,
+      expiresAt: nowUtc.add(const Duration(hours: 72)),
     );
     _customDemoTeams.insert(0, team);
     _demoJoinedIds.add(id);
@@ -349,7 +356,7 @@ class PacerDummyData {
         TeamRosterMember(
           userId: 'demo-user-me',
           nama: 'andi_wijaya',
-          peran: 'ketua',
+          peran: _demoMemberRoleOverrides['${teamId}_demo-user-me'] ?? 'coach',
           appPeran: 'user',
           joinedAt: team.createdAt,
         ),
@@ -360,8 +367,8 @@ class PacerDummyData {
       TeamRosterMember(
         userId: 'demo-coach',
         nama: 'coach_hendra',
-        peran: 'ketua',
-        appPeran: 'coach',
+        peran: 'coach',
+        appPeran: 'user',
         joinedAt: _now.subtract(const Duration(days: 28)),
       ),
       TeamRosterMember(
@@ -420,7 +427,7 @@ class PacerDummyData {
           nama: 'andi_wijaya',
           peran:
               _demoMemberRoleOverrides['${teamId}_demo-user-me'] ??
-              (team.dibuatOleh == 'demo-user-me' ? 'ketua' : 'anggota'),
+              (team.dibuatOleh == 'demo-user-me' ? 'coach' : 'anggota'),
           appPeran: 'user',
           joinedAt: _now.subtract(const Duration(days: 12)),
         ),
@@ -444,9 +451,11 @@ class PacerDummyData {
           userId: 'demo-user-me',
           type: 'role_updated',
           title: 'Peran Tim Diperbarui',
-          body: peran == 'ketua'
-              ? 'Kamu diangkat menjadi Ketua di ${team?.nama ?? 'tim'}'
-              : 'Peranmu di ${team?.nama ?? 'tim'} menjadi Anggota',
+          body: peran == 'coach'
+              ? 'Kamu diangkat menjadi Coach di ${team?.nama ?? 'tim'}'
+              : peran == 'ketua'
+                  ? 'Kamu diangkat menjadi Ketua di ${team?.nama ?? 'tim'}'
+                  : 'Peranmu di ${team?.nama ?? 'tim'} menjadi Anggota',
           teamId: teamId,
           createdAt: DateTime.now().toUtc(),
         ),
@@ -468,9 +477,11 @@ class PacerDummyData {
     final joined = _demoJoinedIds.contains(teamId);
     final count = team?.memberCount ?? getTeamRoster(teamId).length;
     final canView = joined || team?.dibuatOleh == 'demo-user-me';
+    final roleOverride = _demoMemberRoleOverrides['${teamId}_demo-user-me'];
     final canManage =
         team?.dibuatOleh == 'demo-user-me' ||
-        (_demoMemberRoleOverrides['${teamId}_demo-user-me'] == 'ketua');
+        roleOverride == 'coach' ||
+        roleOverride == 'ketua';
     return TeamDashboardStats(
       memberCount: count,
       activeMembersWeek: count == 0 ? 0 : (count * 0.65).round().clamp(1, count),

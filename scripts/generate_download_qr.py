@@ -21,7 +21,7 @@ from PIL import Image, ImageDraw, ImageFont
 
 DEFAULT_URL = "https://lemondeft.github.io/pacer/"
 DEFAULT_RELEASES_URL = "https://github.com/Lemondeft/pacer/releases/latest"
-DEFAULT_APK_URL = "https://github.com/Lemondeft/pacer/releases/download/v0.2.15/pacer-v0.2.15-android.apk"
+DEFAULT_APK_URL = "https://github.com/Lemondeft/pacer/releases/download/v0.2.16/pacer-v0.2.16-android.apk"
 DEFAULT_DRAWIO_URL = "https://drive.google.com/file/d/1pvcstlqest0KkokgWuvTBxty8P-pdYGk/view?usp=sharing"
 DEFAULT_FIGMA_URL = "https://www.figma.com/design/rN1K7Sh0zLPHRNTUX9ZCOK/Running-App-Design--Community-?node-id=0-1&p=f"
 REPO_ROOT = Path(__file__).resolve().parent.parent
@@ -534,8 +534,8 @@ def main() -> None:
         ),
         (
             args.apk_url,
-            "Pacer Android APK (v0.2.15)",
-            "pacer-v0.2.15-android.apk",
+            "Pacer Android APK (v0.2.16)",
+            "pacer-v0.2.16-android.apk",
             [(LOCAL_QR_DIR / "pacer-latest-apk-qr.svg", LOCAL_QR_DIR / "pacer-latest-apk-qr.png")],
         ),
         (

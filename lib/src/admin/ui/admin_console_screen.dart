@@ -1,7 +1,4 @@
-import 'dart:async' show unawaited;
-
 import 'package:flutter/material.dart';
-import 'package:flutter/services.dart';
 import 'package:pacer/src/ui/app_strings.dart';
 import 'package:pacer/src/ui/app_theme.dart';
 import 'package:pacer/src/ui/format.dart';
@@ -10,7 +7,7 @@ import 'package:pacer/src/ui/widgets.dart';
 import '../admin_models.dart';
 import '../admin_repository.dart';
 
-/// Role-gated Super Admin workspace for role management, Coach Invite Codes,
+/// Role-gated Super Admin workspace for user governance,
 /// summary-only anti-cheat review (no raw GPS tracks), and audit logs.
 class AdminConsoleScreen extends StatefulWidget {
   final AdminRepository? repository;
@@ -40,7 +37,6 @@ class _AdminConsoleScreenState extends State<AdminConsoleScreen> {
 
   AdminOverviewStats _stats = const AdminOverviewStats();
   List<AdminUserEntry> _users = const [];
-  List<CoachInvite> _invites = const [];
   List<AdminFlaggedActivity> _flagged = const [];
   List<AdminAuditEntry> _auditLogs = const [];
 
@@ -65,7 +61,6 @@ class _AdminConsoleScreenState extends State<AdminConsoleScreen> {
       final results = await Future.wait([
         _repo.getOverviewStats(),
         _repo.listUsers(query: _searchCtrl.text, role: _roleFilter),
-        _repo.listCoachInvites(),
         _repo.listFlaggedActivities(),
         _repo.listAuditLogs(),
       ]);
@@ -73,9 +68,8 @@ class _AdminConsoleScreenState extends State<AdminConsoleScreen> {
       setState(() {
         _stats = results[0] as AdminOverviewStats;
         _users = results[1] as List<AdminUserEntry>;
-        _invites = results[2] as List<CoachInvite>;
-        _flagged = results[3] as List<AdminFlaggedActivity>;
-        _auditLogs = results[4] as List<AdminAuditEntry>;
+        _flagged = results[2] as List<AdminFlaggedActivity>;
+        _auditLogs = results[3] as List<AdminAuditEntry>;
         _loading = false;
       });
     } catch (e) {
@@ -151,28 +145,6 @@ class _AdminConsoleScreenState extends State<AdminConsoleScreen> {
         ..hideCurrentSnackBar()
         ..showSnackBar(SnackBar(content: Text(S.adminRoleUpdatedNotice)));
       await _loadAll();
-    } catch (e) {
-      _showError(e);
-    } finally {
-      if (mounted) setState(() => _mutating = false);
-    }
-  }
-
-  Future<void> _generateCoachInvite() async {
-    if (_mutating) return;
-    setState(() => _mutating = true);
-    try {
-      final created = await _repo.createCoachInvite();
-      await _loadAll();
-      unawaited(
-        Clipboard.setData(ClipboardData(text: created.code)).catchError((_) {}),
-      );
-      if (!mounted) return;
-      ScaffoldMessenger.of(context)
-        ..hideCurrentSnackBar()
-        ..showSnackBar(
-          SnackBar(content: Text('${S.adminCodeCopied}: ${created.code}')),
-        );
     } catch (e) {
       _showError(e);
     } finally {
@@ -260,85 +232,6 @@ class _AdminConsoleScreenState extends State<AdminConsoleScreen> {
       child: ListView(
         padding: const EdgeInsets.all(16),
         children: [
-          PacerSurface(
-            radius: PacerRadii.lg,
-            padding: const EdgeInsets.all(14),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Row(
-                  children: [
-                    Expanded(
-                      child: Text(
-                        S.adminCoachInvitesTitle,
-                        style: TextStyle(
-                          fontSize: 15,
-                          fontWeight: FontWeight.w700,
-                          color: scheme.ink,
-                        ),
-                      ),
-                    ),
-                    FilledButton.icon(
-                      onPressed: _mutating ? null : _generateCoachInvite,
-                      icon: const Icon(Icons.vpn_key_outlined, size: 16),
-                      label: Text(S.adminGenerateCodeCta),
-                    ),
-                  ],
-                ),
-                if (_invites.isNotEmpty) const SizedBox(height: 10),
-                for (final inv in _invites.take(5))
-                  Padding(
-                    padding: const EdgeInsets.only(top: 6),
-                    child: Row(
-                      children: [
-                        Expanded(
-                          child: Text(
-                            '${inv.code}  (${inv.usesCount}/${inv.maxUses})',
-                            style: TextStyle(
-                              fontSize: 12.5,
-                              fontWeight: FontWeight.w600,
-                              color: inv.isUsable ? scheme.ink : scheme.muted,
-                            ),
-                          ),
-                        ),
-                        IconButton(
-                          tooltip: 'Copy',
-                          icon: const Icon(Icons.copy_rounded, size: 17),
-                          onPressed: () async {
-                            await Clipboard.setData(
-                              ClipboardData(text: inv.code),
-                            );
-                            if (context.mounted) {
-                              ScaffoldMessenger.of(context)
-                                ..hideCurrentSnackBar()
-                                ..showSnackBar(
-                                  SnackBar(content: Text(S.adminCodeCopied)),
-                                );
-                            }
-                          },
-                        ),
-                        if (inv.isUsable)
-                          IconButton(
-                            tooltip: 'Revoke',
-                            icon: Icon(
-                              Icons.block_rounded,
-                              size: 17,
-                              color: PacerColors.errorRed,
-                            ),
-                            onPressed: _mutating
-                                ? null
-                                : () async {
-                                    await _repo.revokeCoachInvite(inv.id);
-                                    await _loadAll();
-                                  },
-                          ),
-                      ],
-                    ),
-                  ),
-              ],
-            ),
-          ),
-          const SizedBox(height: 14),
           TextField(
             controller: _searchCtrl,
             onSubmitted: (_) => _reloadUsers(),

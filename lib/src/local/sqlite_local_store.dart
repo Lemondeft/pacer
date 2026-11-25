@@ -22,7 +22,7 @@ class SqliteLocalStore implements LocalStore {
 
   SqliteLocalStore._(this._db);
 
-  static const int schemaVersion = 5;
+  static const int schemaVersion = 6;
 
   /// Opens or creates the offline SQLite database at [path] (or
   /// `inMemoryDatabasePath` in tests) using the supplied [factory].
@@ -90,6 +90,9 @@ class SqliteLocalStore implements LocalStore {
               'os_motion_summary_json',
               'TEXT',
             );
+          }
+          if (oldVersion < 6) {
+            await _addColumnIfMissing(db, 'teams', 'expires_at', 'TEXT');
           }
         },
       ),
@@ -192,6 +195,7 @@ class SqliteLocalStore implements LocalStore {
         invite_code TEXT,
         member_count INTEGER,
         created_at TEXT,
+        expires_at TEXT,
         is_mine INTEGER NOT NULL DEFAULT 0,
         updated_at TEXT NOT NULL,
         PRIMARY KEY (user_id, id)
@@ -1262,6 +1266,7 @@ class SqliteLocalStore implements LocalStore {
           'invite_code': t.inviteCode,
           'member_count': t.memberCount ?? prevCounts[t.id],
           'created_at': t.createdAt?.toUtc().toIso8601String(),
+          'expires_at': t.expiresAt?.toUtc().toIso8601String(),
           'is_mine': (isMine || (prevMine[t.id] ?? false)) ? 1 : 0,
           'updated_at': now,
         }, conflictAlgorithm: ConflictAlgorithm.replace);
@@ -1334,6 +1339,7 @@ class SqliteLocalStore implements LocalStore {
         {
           if (isMine != null) 'is_mine': isMine ? 1 : 0,
           if (cur != null) 'member_count': nextCount,
+          if (nextCount != null && nextCount >= 2) 'expires_at': null,
           'updated_at': _nowIso(),
         },
         where: 'user_id = ? AND id = ?',

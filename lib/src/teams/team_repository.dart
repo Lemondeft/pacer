@@ -88,6 +88,7 @@ class TeamRepository {
           .toUpperCase()
           .padRight(8, 'X')
           .substring(0, 8);
+      final nowUtc = DateTime.now().toUtc();
       final team = Team(
         id: id,
         nama: nama,
@@ -95,16 +96,18 @@ class TeamRepository {
         dibuatOleh: demoUid,
         isPrivate: isPrivate,
         inviteCode: code,
-        createdAt: DateTime.now().toUtc(),
+        createdAt: nowUtc,
         memberCount: 1,
+        expiresAt: nowUtc.add(const Duration(hours: 72)),
       );
       final prof = await _store.getProfile(demoUid);
-      await _store.saveTeams(demoUid, [team], isMine: true);
+      final existingMine = await _store.getTeams(demoUid, mineOnly: true);
+      await _store.saveTeams(demoUid, [team, ...existingMine], isMine: true);
       await _store.saveTeamRoster(demoUid, team.id, [
         TeamRosterMember(
           userId: demoUid,
           nama: prof?.nama ?? 'andi_wijaya',
-          peran: 'ketua',
+          peran: 'coach',
           appPeran: prof?.peran ?? 'user',
           joinedAt: team.createdAt,
         ),
@@ -124,7 +127,18 @@ class TeamRepository {
     final team = Team.fromJson(
       Map<String, dynamic>.from(row),
     ).copyWith(memberCount: 1);
-    await _store.saveTeams(userId, [team], isMine: true);
+    final existingMine = await _store.getTeams(userId, mineOnly: true);
+    await _store.saveTeams(userId, [team, ...existingMine], isMine: true);
+    final prof = await _store.getProfile(userId);
+    await _store.saveTeamRoster(userId, team.id, [
+      TeamRosterMember(
+        userId: userId,
+        nama: prof?.nama ?? userId.substring(0, userId.length.clamp(0, 8)),
+        peran: 'coach',
+        appPeran: prof?.peran ?? 'user',
+        joinedAt: team.createdAt ?? DateTime.now().toUtc(),
+      ),
+    ]);
     await _expireTeamSyncMeta(userId, teamId: team.id);
     PacerCache.instance.invalidatePrefix('teams_');
     return team;
@@ -205,7 +219,8 @@ class TeamRepository {
       forceRefresh: forceRefresh,
       hasBackend: c != null && c.auth.currentUser != null,
       staleAfter: const Duration(minutes: 3),
-      readLocal: () => _store.getTeams(userId),
+      readLocal: () async =>
+          (await _store.getTeams(userId)).where((t) => !t.isExpired).toList(),
       fetchRemote: () async {
         final countsFuture = _fetchMemberCounts();
         final rows = await c!
@@ -215,7 +230,7 @@ class TeamRepository {
         final counts = await countsFuture;
         final list = _mergeCounts([
           for (final row in rows) Team.fromJson(Map<String, dynamic>.from(row)),
-        ], counts);
+        ], counts).where((t) => !t.isExpired).toList();
         await _store.saveTeams(userId, list, isMine: false, replaceAll: true);
         return list;
       },
@@ -235,13 +250,17 @@ class TeamRepository {
       forceRefresh: forceRefresh,
       hasBackend: c != null && c.auth.currentUser != null,
       staleAfter: const Duration(minutes: 3),
-      readLocal: () => _store.getTeam(userId, id),
+      readLocal: () async {
+        final local = await _store.getTeam(userId, id);
+        return local != null && !local.isExpired ? local : null;
+      },
       fetchRemote: () async {
         final countsFuture = _fetchMemberCounts();
         final row = await c!.from('teams').select().eq('id', id).maybeSingle();
         final counts = await countsFuture;
         if (row == null) return null;
         var team = Team.fromJson(Map<String, dynamic>.from(row));
+        if (team.isExpired) return null;
         if (counts.containsKey(team.id)) {
           team = team.copyWith(memberCount: counts[team.id]);
         }
@@ -270,7 +289,7 @@ class TeamRepository {
         TeamRosterMember(
           userId: uid,
           nama: prof?.nama ?? 'andi_wijaya',
-          peran: team.dibuatOleh == uid ? 'ketua' : 'anggota',
+          peran: team.dibuatOleh == uid ? 'coach' : 'anggota',
           appPeran: prof?.peran ?? 'user',
           joinedAt: DateTime.now().toUtc(),
         ),
@@ -286,6 +305,7 @@ class TeamRepository {
     if (demoUid != null) {
       final team = await _store.getTeam(demoUid, teamId);
       if (team == null) throw StateError('Team not found.');
+      if (team.isExpired) throw StateError('Team expired.');
       if (team.isPrivate &&
           code.trim().toUpperCase() !=
               (team.inviteCode ?? '').trim().toUpperCase()) {
@@ -321,6 +341,7 @@ class TeamRepository {
       for (final t in all) {
         if ((t.inviteCode ?? '').trim().toUpperCase() == normalized &&
             normalized.isNotEmpty) {
+          if (t.isExpired) throw StateError('Team expired.');
           await _demoJoinLocal(demoUid, t);
           return t.id;
         }
@@ -474,7 +495,10 @@ class TeamRepository {
       forceRefresh: forceRefresh,
       hasBackend: c != null && c.auth.currentUser != null,
       staleAfter: const Duration(minutes: 3),
-      readLocal: () => _store.getTeams(userId, mineOnly: true),
+      readLocal: () async => (await _store.getTeams(
+        userId,
+        mineOnly: true,
+      )).where((t) => !t.isExpired).toList(),
       fetchRemote: () async {
         final countsFuture = _fetchMemberCounts();
         final memberRows = await c!
@@ -494,13 +518,66 @@ class TeamRepository {
         final counts = await countsFuture;
         final list = _mergeCounts([
           for (final row in rows) Team.fromJson(Map<String, dynamic>.from(row)),
-        ], counts);
+        ], counts).where((t) => !t.isExpired).toList();
         await _store.saveTeams(userId, list, isMine: true);
         return list;
       },
       writeLocal: (_) async {},
       isEmpty: (list) => list.isEmpty,
     );
+  }
+
+  /// Active teams where the caller holds team-scoped `peran = 'coach'`
+  /// (or all active teams when the caller is platform `'admin'`).
+  Future<List<Team>> myCoachedTeams({bool forceRefresh = false}) async {
+    final userId = await resolveActiveUserId(client: _client, store: _store);
+    if (userId == null) throw StateError('No signed-in user.');
+    final profile = await _store.getProfile(userId);
+    if (profile?.peran == 'admin') {
+      return listTeams(forceRefresh: forceRefresh);
+    }
+    final c = _client;
+    if (c != null && c.auth.currentUser != null) {
+      try {
+        final countsFuture = _fetchMemberCounts();
+        final memberRows = await c
+            .from('team_members')
+            .select('team_id')
+            .eq('user_id', userId)
+            .eq('peran', 'coach');
+        final teamIds = [
+          for (final row in memberRows) row['team_id'] as String,
+        ];
+        if (teamIds.isEmpty) return const <Team>[];
+        final rows = await c
+            .from('teams')
+            .select()
+            .inFilter('id', teamIds)
+            .order('created_at', ascending: false);
+        final counts = await countsFuture;
+        final list = _mergeCounts([
+          for (final row in rows) Team.fromJson(Map<String, dynamic>.from(row)),
+        ], counts).where((t) => !t.isExpired).toList();
+        return list;
+      } catch (_) {
+        // Fall through to offline local cache below.
+      }
+    }
+    final mine = (await _store.getTeams(
+      userId,
+      mineOnly: true,
+    )).where((t) => !t.isExpired).toList();
+    final coached = <Team>[];
+    for (final t in mine) {
+      final roster = await _store.getTeamRoster(userId, t.id);
+      final isCoachInRoster = roster.any(
+        (m) => m.userId == userId && m.peran == 'coach',
+      );
+      if (isCoachInRoster || (roster.isEmpty && t.dibuatOleh == userId)) {
+        coached.add(t);
+      }
+    }
+    return coached;
   }
 
   /// Roster with display names, roles, and join date (offline-first SWR).
@@ -604,7 +681,7 @@ class TeamRepository {
       );
       final count = team?.memberCount ?? roster.length;
       final canManage =
-          team?.dibuatOleh == demoUid || me?.peran == 'ketua';
+          team?.dibuatOleh == demoUid || (me?.isTeamLeader ?? false);
       return TeamDashboardStats(
         memberCount: count,
         activeMembersWeek:
@@ -638,7 +715,7 @@ class TeamRepository {
     }
   }
 
-  /// Promotes or demotes a team member between `'ketua'` and `'anggota'`.
+  /// Promotes or demotes a team member among `'coach'`, `'ketua'`, and `'anggota'`.
   Future<void> setMemberRole({
     required String teamId,
     required String userId,
@@ -670,9 +747,11 @@ class TeamRepository {
             userId: demoUid,
             type: 'team_role_changed',
             title: team?.nama ?? 'Tim Pacer',
-            body: peran == 'ketua'
-                ? 'Anda ditunjuk menjadi Ketua Tim.'
-                : 'Peran Anda di tim diperbarui menjadi Anggota.',
+            body: peran == 'coach'
+                ? 'Anda ditunjuk menjadi Coach Tim.'
+                : peran == 'ketua'
+                    ? 'Anda ditunjuk menjadi Ketua Tim.'
+                    : 'Peran Anda di tim diperbarui menjadi Anggota.',
             teamId: teamId,
             createdAt: DateTime.now().toUtc(),
           ),

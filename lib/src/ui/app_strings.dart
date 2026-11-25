@@ -493,9 +493,12 @@ class S {
   static String get activeCaptain => _en ? 'Active Captain' : 'Kapten Aktif';
   static String get activeCaptainDesc =>
       _en ? 'Club needs an active captain' : 'Klub butuh kapten yang aktif';
-  static String get min3Members => _en ? 'Min. 3 Members' : 'Min. 3 Anggota';
-  static String get min3MembersDesc =>
-      _en ? 'Invite at least 3 runners' : 'Ajak minimal 3 pelari';
+  static String get min3Members => _en
+      ? 'Activate Within 72 Hours'
+      : 'Aktifkan Dalam 72 Jam';
+  static String get min3MembersDesc => _en
+      ? 'Invite at least 1 member within 72 hours to keep the team active'
+      : 'Undang minimal 1 anggota dalam 72 jam agar tim tetap aktif';
   static String get routineGroupRun =>
       _en ? 'Routine Group Run' : 'Group Run Rutin';
   static String get routineGroupRunDesc =>
@@ -1009,4 +1012,49 @@ class S {
   static String get deleteAccountConfirmWord => 'DELETE';
   static String get accountDeletedNotice =>
       _en ? 'Account deleted' : 'Akun berhasil dihapus';
+
+  // Team-Scoped Coach Roles & 72-Hour Pending Team Expiration
+  static String get roleCoach => 'Coach';
+  static String get promoteToCoach =>
+      _en ? 'Promote to Coach' : 'Jadikan Coach';
+  static String get demoteFromCoach =>
+      _en ? 'Change to Member' : 'Ubah jadi Anggota';
+  static String get teamCreateRoleAndExpiryHint => _en
+      ? 'You become Coach for this team only. Invite at least 1 member within 72 hours to keep it active permanently.'
+      : 'Anda menjadi Coach khusus untuk tim ini. Undang minimal 1 anggota dalam 72 jam agar tim aktif permanen.';
+  static String get teamPendingActivationTitle => _en
+      ? 'Waiting for first member'
+      : 'Menunggu anggota pertama';
+  static String teamPendingActivationBody(Duration remaining) {
+    final totalHours = remaining.inHours.clamp(0, 72);
+    final days = totalHours ~/ 24;
+    final hours = totalHours % 24;
+    final leftText = _en
+        ? (days > 0
+            ? '${days}d ${hours}h'
+            : '${remaining.inHours > 0 ? remaining.inHours : 1}h')
+        : (days > 0
+            ? '$days hari $hours jam'
+            : '${remaining.inHours > 0 ? remaining.inHours : 1} jam');
+    return _en
+        ? 'Invite at least 1 member within $leftText to keep this team active. Empty teams expire automatically after 72 hours.'
+        : 'Undang minimal 1 anggota dalam $leftText agar tim ini tetap aktif. Tim kosong otomatis terhapus setelah 72 jam.';
+  }
+  static String get joinTeamPrivacyNote => _en
+      ? 'Joining shares your workout totals and streak with this team\'s coach. GPS map routes stay private; leave anytime to revoke.'
+      : 'Bergabung membagikan ringkasan latihan dan streak Anda kepada coach tim ini. Rute peta GPS tetap privat; keluar kapan saja untuk mencabut akses.';
+  static String get errPendingTeamLimit => _en
+      ? 'You already have 3 teams waiting for members. Invite someone to one of them or delete one first.'
+      : 'Anda sudah memiliki 3 tim yang menunggu anggota. Undang seseorang ke salah satunya atau hapus satu tim terlebih dahulu.';
+  static String get errTeamExpired => _en
+      ? 'This team expired because no other member joined within 72 hours.'
+      : 'Tim ini sudah kedaluwarsa karena belum ada anggota lain yang bergabung dalam 72 jam.';
+  static String get soleCoachLeaveTitle =>
+      _en ? 'You are the only Coach' : 'Anda satu-satunya Coach';
+  static String get soleCoachLeaveBody => _en
+      ? 'Promote another member to Coach before leaving, or delete this team instead.'
+      : 'Angkat anggota lain menjadi Coach sebelum keluar, atau hapus tim ini.';
+  static String get coachBoardNoTeamsHint => _en
+      ? 'Create a team (or be appointed Coach of a team) to review your members here.'
+      : 'Buat tim (atau ditunjuk menjadi Coach di suatu tim) untuk memantau progres anggota di sini.';
 }
